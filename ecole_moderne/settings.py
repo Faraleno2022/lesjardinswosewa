@@ -71,6 +71,9 @@ else:
         'myschoolgn.space',
         'www.myschoolgn.space',
         'myschool-rn3d.onrender.com',
+        # Groupe Scolaire Privé Les Jardins Wosewa
+        'lesjardinswosewa.com',
+        'www.lesjardinswosewa.com',
     ] + _env_list('DJANGO_ALLOWED_HOSTS')
     if RENDER_EXTERNAL_HOSTNAME:
         ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
@@ -81,6 +84,9 @@ else:
         'https://myschoolgn.space',
         'https://www.myschoolgn.space',
         'https://myschool-rn3d.onrender.com',
+        # Groupe Scolaire Privé Les Jardins Wosewa
+        'https://lesjardinswosewa.com',
+        'https://www.lesjardinswosewa.com',
     ] + _env_list('DJANGO_CSRF_TRUSTED_ORIGINS')
     if RENDER_EXTERNAL_HOSTNAME:
         CSRF_TRUSTED_ORIGINS.append(f'https://{RENDER_EXTERNAL_HOSTNAME}')
