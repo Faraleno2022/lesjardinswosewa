@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Bulletin Maternelle - {{ eleve.nom }} {{ eleve.prenom }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 5mm;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            font-size: 9pt;
+            line-height: 1.2;
+            color: #333;
+        }
+        
+        .bulletin-container {
+            width: 200mm;
+            max-height: 287mm;
+            margin: 0 auto;
+            padding: 4mm;
+            border: 1px solid #2c3e50;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* En-tête */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 6px;
+            border-bottom: 1px solid #3498db;
+            padding-bottom: 4px;
+        }
+        
+        .logo-section {
+            width: 50px;
+            text-align: center;
+        }
+        
+        .logo-section img {
+            width: 45px;
+            height: 45px;
+            object-fit: contain;
+        }
+        
+        .header-center {
+            flex: 1;
+            text-align: center;
+            padding: 0 8px;
+        }
+        
+        .republique {
+            font-size: 10pt;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 1px;
+        }
+        
+        .devise {
+            font-size: 8pt;
+            margin-bottom: 2px;
+        }
+        .devise-rouge { color: #CE1126; }
+        .devise-jaune { color: #FCD116; }
+        .devise-vert { color: #009460; }
+        
+        .ecole-nom {
+            font-size: 10pt;
+            font-weight: bold;
+            color: #2c3e50;
+            text-transform: uppercase;
+            margin-bottom: 2px;
+        }
+        
+        .bulletin-titre {
+            font-size: 11pt;
+            font-weight: bold;
+            color: #e74c3c;
+            margin-top: 2px;
+        }
+        
+        .photo-section {
+            width: 55px;
+            text-align: center;
+        }
+        
+        .photo-section img {
+            width: 50px;
+            height: 60px;
+            object-fit: cover;
+            border: 1px solid #ccc;
+        }
+        
+        .photo-placeholder {
+            width: 50px;
+            height: 60px;
+            border: 1px dashed #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16pt;
+            color: #ccc;
+            background: #f9f9f9;
+        }
+        
+        /* Infos élève */
+        .eleve-info {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin-bottom: 6px;
+            border-left: 3px solid #3498db;
+        }
+        
+        .eleve-info table {
+            width: 100%;
+        }
+        
+        .eleve-info td {
+            padding: 1px 5px;
+            font-size: 8pt;
+        }
+        
+        .eleve-info .label {
+            font-weight: bold;
+            color: #555;
+            width: 30%;
+        }
+        
+        .eleve-info .value {
+            color: #2c3e50;
+        }
+        
+        /* Tableau des notes */
+        .notes-section {
+            margin-bottom: 6px;
+        }
+        
+        .section-title {
+            background: linear-gradient(90deg, #2c3e50, #34495e);
+            color: white;
+            padding: 4px 8px;
+            font-size: 9pt;
+            font-weight: bold;
+            border-radius: 3px 3px 0 0;
+        }
+        
+        .notes-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 0;
+        }
+        
+        .notes-table th,
+        .notes-table td {
+            border: 1px solid #bdc3c7;
+            padding: 2px 4px;
+            text-align: center;
+            font-size: 8pt;
+        }
+        
+        .notes-table thead th {
+            background: #ecf0f1;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        
+        .notes-table tbody td:first-child {
+            text-align: left;
+            font-weight: 500;
+        }
+        
+        .notes-table tfoot {
+            background: #f8f9fa;
+            font-weight: bold;
+        }
+        
+        /* Badges de lettres */
+        .lettre-badge {
+            display: inline-block;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-weight: bold;
+            font-size: 8pt;
+        }
+        
+        .lettre-A-plus, .lettre-A { background: #27ae60; color: white; }
+        .lettre-B-plus, .lettre-B { background: #3498db; color: white; }
+        .lettre-B-minus, .lettre-C { background: #f39c12; color: white; }
+        .lettre-D { background: #e74c3c; color: white; }
+        
+        /* Section analyse */
+        .analyse-section, .recommandations-section {
+            margin-bottom: 5px;
+        }
+        
+        .section-content {
+            border: 1px solid #bdc3c7;
+            border-top: none;
+            padding: 4px 8px;
+            border-radius: 0 0 3px 3px;
+            background: #fff;
+        }
+        
+        .analyse-title {
+            background: linear-gradient(90deg, #17a2b8, #138496);
+        }
+        
+        .recommandations-title {
+            background: linear-gradient(90deg, #ffc107, #e0a800);
+            color: #333;
+        }
+        
+        .item-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .item-list li {
+            padding: 1px 0;
+            padding-left: 15px;
+            position: relative;
+            font-size: 8pt;
+        }
+        
+        .item-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #27ae60;
+            font-weight: bold;
+        }
+        
+        .recommandations-section .item-list li:before {
+            content: "→";
+            color: #f39c12;
+        }
+        
+        .commentaire-box {
+            background: #f8f9fa;
+            padding: 4px;
+            border-radius: 3px;
+            margin-top: 4px;
+            font-style: italic;
+            font-size: 9pt;
+            border-left: 2px solid #3498db;
+        }
+        
+        /* Résultat général */
+        .resultat-general {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 8px;
+            border-radius: 5px;
+            text-align: center;
+            margin-bottom: 6px;
+        }
+        
+        .resultat-general h3 {
+            font-size: 9pt;
+            margin-bottom: 5px;
+        }
+        
+        .moyenne-box {
+            display: inline-block;
+            background: white;
+            color: #2c3e50;
+            padding: 4px 15px;
+            border-radius: 5px;
+            margin: 2px;
+        }
+        
+        .moyenne-value {
+            font-size: 14pt;
+            font-weight: bold;
+        }
+        
+        .moyenne-label {
+            font-size: 9pt;
+            color: #7f8c8d;
+        }
+        
+        .mention-badge {
+            display: inline-block;
+            padding: 4px 15px;
+            border-radius: 15px;
+            font-size: 10pt;
+            font-weight: bold;
+            margin-top: 4px;
+        }
+        
+        .mention-excellent { background: #27ae60; }
+        .mention-tresbien { background: #2ecc71; }
+        .mention-bien { background: #3498db; }
+        .mention-assezbien { background: #17a2b8; }
+        .mention-moyen { background: #f39c12; }
+        .mention-passable { background: #e67e22; }
+        .mention-difficultes { background: #e74c3c; }
+        
+        /* Signatures */
+        .signatures {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            padding-top: 6px;
+            border-top: 1px dashed #bdc3c7;
+        }
+        
+        .signature-box {
+            text-align: center;
+            width: 30%;
+        }
+        
+        .signature-label {
+            font-size: 8pt;
+            color: #555;
+            margin-bottom: 18px;
+        }
+        
+        .signature-line {
+            border-top: 1px solid #333;
+            padding-top: 3px;
+            font-size: 9pt;
+        }
+        
+        /* Barème */
+        .bareme {
+            background: #f8f9fa;
+            padding: 3px;
+            border-radius: 3px;
+            margin-bottom: 5px;
+            font-size: 9pt;
+            text-align: center;
+        }
+        
+        .bareme span {
+            margin: 0 4px;
+        }
+        
+        /* Footer */
+        .footer {
+            margin-top: 5px;
+            text-align: center;
+            font-size: 9pt;
+            color: #7f8c8d;
+            border-top: 1px solid #ecf0f1;
+            padding-top: 3px;
+        }
+        
+        /* Filigrane logo */
+        .watermark-logo {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            opacity: 0.08;
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .watermark-logo img {
+            width: 200px;
+            height: 200px;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body>
+    <div class="bulletin-container">
+        <!-- Filigrane logo -->
+        {% if logo_base64 %}
+        <div class="watermark-logo">
+            <img src="data:image/png;base64,{{ logo_base64 }}" alt="">
+        </div>
+        {% endif %}
+        
+        <!-- En-tête -->
+        <div class="header">
+            <div class="logo-section">
+                {% if logo_base64 %}
+                <img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo">
+                {% else %}
+                <div style="width:60px;height:60px;background:#f0f0f0;border-radius:50%;display:flex;align-items:center;justify-content:center;">
+                    <span style="font-size:24px;">🏫</span>
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="header-center">
+                <div class="republique">RÉPUBLIQUE DE GUINÉE</div>
+                <div class="devise">
+                    <span class="devise-rouge">Travail</span> - 
+                    <span class="devise-jaune">Justice</span> - 
+                    <span class="devise-vert">Solidarité</span>
+                </div>
+                <div class="ecole-nom">{{ ecole.nom }}</div>
+                <div style="font-size:9pt;color:#666;">{{ ecole.adresse }}</div>
+                <div class="bulletin-titre">BULLETIN SCOLAIRE - MATERNELLE</div>
+                <div style="font-size:10pt;margin-top:3px;">{{ evaluation.get_trimestre_display }} - Année {{ evaluation.annee_scolaire }}</div>
+            </div>
+            
+            <div class="photo-section">
+                {% if photo_base64 %}
+                <img src="data:image/png;base64,{{ photo_base64 }}" alt="Photo élève">
+                {% else %}
+                <div class="photo-placeholder">
+                    {{ eleve.prenom|slice:":1" }}{{ eleve.nom|slice:":1" }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Informations élève -->
+        <div class="eleve-info">
+            <table>
+                <tr>
+                    <td class="label">Nom & Prénom:</td>
+                    <td class="value"><strong>{{ eleve.nom }} {{ eleve.prenom }}</strong></td>
+                    <td class="label">Matricule:</td>
+                    <td class="value">{{ eleve.matricule }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Classe:</td>
+                    <td class="value">{{ classe.nom }}</td>
+                    <td class="label">Date de naissance:</td>
+                    <td class="value">{{ eleve.date_naissance|date:"d/m/Y"|default:"-" }}</td>
+                </tr>
+            </table>
+        </div>
+        
+        <!-- Barème -->
+        <div class="bareme">
+            <strong>Barème d'appréciation:</strong>
+            <span><strong>A+</strong> Excellent</span>
+            <span><strong>A</strong> Très bien</span>
+            <span><strong>B+</strong> Bien</span>
+            <span><strong>B</strong> Assez bien</span>
+            <span><strong>B-</strong> Moyen</span>
+            <span><strong>C</strong> Passable</span>
+            <span><strong>D</strong> Difficultés</span>
+        </div>
+        
+        <!-- Tableau des appréciations -->
+        <div class="notes-section">
+            <div class="section-title">📚 Résultats par activité</div>
+            <table class="notes-table">
+                <thead>
+                    <tr>
+                        <th style="width:35%">Activité</th>
+                        <th style="width:9%;text-align:center;font-size:9pt;">A+</th>
+                        <th style="width:9%;text-align:center;font-size:9pt;">A</th>
+                        <th style="width:9%;text-align:center;font-size:9pt;">B+</th>
+                        <th style="width:9%;text-align:center;font-size:9pt;">B</th>
+                        <th style="width:9%;text-align:center;font-size:9pt;">B-</th>
+                        <th style="width:9%;text-align:center;font-size:9pt;">C</th>
+                        <th style="width:9%;text-align:center;font-size:9pt;">D</th>
+                    </tr>
+                    <tr>
+                        <th style="font-size:8pt;color:#666;"></th>
+                        <th style="font-size:7pt;color:#666;">Excellent</th>
+                        <th style="font-size:7pt;color:#666;">Très bien</th>
+                        <th style="font-size:7pt;color:#666;">Bien</th>
+                        <th style="font-size:7pt;color:#666;">Assez bien</th>
+                        <th style="font-size:7pt;color:#666;">Moyen</th>
+                        <th style="font-size:7pt;color:#666;">Passable</th>
+                        <th style="font-size:7pt;color:#666;">Difficultés</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for note in notes %}
+                    <tr>
+                        <td style="font-weight:500;">{{ note.matiere.nom }}</td>
+                        <td style="text-align:center;">
+                            {% if note.lettre == 'A+' %}
+                            <span style="display:inline-block;width:12px;height:12px;border:2px solid #27ae60;background:#27ae60;"></span>
+                            {% else %}
+                            <span style="display:inline-block;width:12px;height:12px;border:1px solid #ccc;"></span>
+                            {% endif %}
+                        </td>
+                        <td style="text-align:center;">
+                            {% if note.lettre == 'A' %}
+                            <span style="display:inline-block;width:12px;height:12px;border:2px solid #2ecc71;background:#2ecc71;"></span>
+                            {% else %}
+                            <span style="display:inline-block;width:12px;height:12px;border:1px solid #ccc;"></span>
+                            {% endif %}
+                        </td>
+                        <td style="text-align:center;">
+                            {% if note.lettre == 'B+' %}
+                            <span style="display:inline-block;width:12px;height:12px;border:2px solid #3498db;background:#3498db;"></span>
+                            {% else %}
+                            <span style="display:inline-block;width:12px;height:12px;border:1px solid #ccc;"></span>
+                            {% endif %}
+                        </td>
+                        <td style="text-align:center;">
+                            {% if note.lettre == 'B' %}
+                            <span style="display:inline-block;width:12px;height:12px;border:2px solid #17a2b8;background:#17a2b8;"></span>
+                            {% else %}
+                            <span style="display:inline-block;width:12px;height:12px;border:1px solid #ccc;"></span>
+                            {% endif %}
+                        </td>
+                        <td style="text-align:center;">
+                            {% if note.lettre == 'B-' %}
+                            <span style="display:inline-block;width:12px;height:12px;border:2px solid #f39c12;background:#f39c12;"></span>
+                            {% else %}
+                            <span style="display:inline-block;width:12px;height:12px;border:1px solid #ccc;"></span>
+                            {% endif %}
+                        </td>
+                        <td style="text-align:center;">
+                            {% if note.lettre == 'C' %}
+                            <span style="display:inline-block;width:12px;height:12px;border:2px solid #e67e22;background:#e67e22;"></span>
+                            {% else %}
+                            <span style="display:inline-block;width:12px;height:12px;border:1px solid #ccc;"></span>
+                            {% endif %}
+                        </td>
+                        <td style="text-align:center;">
+                            {% if note.lettre == 'D' %}
+                            <span style="display:inline-block;width:12px;height:12px;border:2px solid #e74c3c;background:#e74c3c;"></span>
+                            {% else %}
+                            <span style="display:inline-block;width:12px;height:12px;border:1px solid #ccc;"></span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" style="text-align:center;color:#999;font-size:7pt;">Aucune appréciation saisie</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td><strong>TOTAL</strong></td>
+                        <td colspan="7" style="text-align:center;font-weight:bold;font-size:10pt;">
+                            {{ lettre_generale|default:"" }}
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        
+        <!-- Profil de l'enfant -->
+        <div class="resultat-general">
+            <h3>PROFIL DE L'ENFANT</h3>
+            <div style="width:100%;padding:10px;">
+                <div style="border-bottom: 1px dashed #999; height: 20px; margin-bottom: 8px;"></div>
+                <div style="border-bottom: 1px dashed #999; height: 20px; margin-bottom: 8px;"></div>
+                <div style="border-bottom: 1px dashed #999; height: 20px;"></div>
+            </div>
+        </div>
+        
+        <!-- Analyse du travail -->
+        {% if analyses_selectionnees %}
+        <div class="analyse-section">
+            <div class="section-title analyse-title">📋 Analyse du travail de l'enfant</div>
+            <div class="section-content">
+                <ul class="item-list">
+                    {% for item in analyses_selectionnees %}
+                    <li>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+                {% if analyse.commentaire %}
+                <div class="commentaire-box">
+                    <strong>Observation:</strong> {{ analyse.commentaire }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Recommandations -->
+        {% if recommandations_selectionnees %}
+        <div class="recommandations-section">
+            <div class="section-title recommandations-title">💡 Recommandations de la coordinatrice</div>
+            <div class="section-content">
+                <ul class="item-list">
+                    {% for item in recommandations_selectionnees %}
+                    <li>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+                {% if recommandations.commentaire %}
+                <div class="commentaire-box">
+                    <strong>Note:</strong> {{ recommandations.commentaire }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Signatures -->
+        <div class="signatures" style="justify-content: space-between;">
+            <div class="signature-box" style="width: 45%;">
+                <div class="signature-label">La Coordinatrice</div>
+                <div class="signature-line">Signature</div>
+            </div>
+            <div class="signature-box" style="width: 45%;">
+                <div class="signature-label">Le Directeur/La Directrice</div>
+                <div class="signature-line">Signature et cachet</div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            Document généré le {{ date_impression|date:"d/m/Y à H:i" }} | {{ ecole.nom }} - {{ ecole.tous_telephones|default:"" }}
+        </div>
+    </div>
+    
+    <!-- PAGE 2: Fiche d'analyse et recommandations à cocher -->
+    <div class="bulletin-container" style="page-break-before: always;">
+        <!-- Filigrane logo page 2 -->
+        {% if logo_base64 %}
+        <div class="watermark-logo">
+            <img src="data:image/png;base64,{{ logo_base64 }}" alt="">
+        </div>
+        {% endif %}
+        
+        <!-- En-tête complet comme page 1 -->
+        <div class="header">
+            <div class="logo-section">
+                {% if logo_base64 %}
+                <img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo">
+                {% else %}
+                <div style="width:45px;height:45px;background:#f0f0f0;border-radius:50%;display:flex;align-items:center;justify-content:center;">
+                    <span style="font-size:18px;">🏫</span>
+                </div>
+                {% endif %}
+            </div>
+            
+            <div class="header-center">
+                <div class="republique">RÉPUBLIQUE DE GUINÉE</div>
+                <div class="devise">
+                    <span class="devise-rouge">Travail</span> - 
+                    <span class="devise-jaune">Justice</span> - 
+                    <span class="devise-vert">Solidarité</span>
+                </div>
+                <div class="ecole-nom">{{ ecole.nom }}</div>
+                <div style="font-size:8pt;color:#666;">{{ ecole.adresse }}</div>
+                <div class="bulletin-titre">FICHE D'ÉVALUATION - MATERNELLE</div>
+                <div style="font-size:9pt;margin-top:2px;">{{ evaluation.get_trimestre_display }} - Année {{ evaluation.annee_scolaire }}</div>
+            </div>
+            
+            <div class="photo-section">
+                {% if photo_base64 %}
+                <img src="data:image/png;base64,{{ photo_base64 }}" alt="Photo élève">
+                {% else %}
+                <div class="photo-placeholder">
+                    {{ eleve.prenom|slice:":1" }}{{ eleve.nom|slice:":1" }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Informations élève -->
+        <div class="eleve-info">
+            <table>
+                <tr>
+                    <td class="label">Nom & Prénom:</td>
+                    <td class="value"><strong>{{ eleve.nom }} {{ eleve.prenom }}</strong></td>
+                    <td class="label">Matricule:</td>
+                    <td class="value">{{ eleve.matricule }}</td>
+                </tr>
+                <tr>
+                    <td class="label">Classe:</td>
+                    <td class="value">{{ classe.nom }}</td>
+                    <td class="label">Date de naissance:</td>
+                    <td class="value">{{ eleve.date_naissance|date:"d/m/Y"|default:"-" }}</td>
+                </tr>
+            </table>
+        </div>
+        
+        <!-- Section Analyse du travail de l'enfant -->
+        <div style="margin-bottom: 20px;">
+            <div style="background: linear-gradient(90deg, #17a2b8, #138496); color: white; padding: 8px 15px; font-size: 12pt; font-weight: bold; border-radius: 5px 5px 0 0;">
+                📋 ANALYSE DU TRAVAIL DE L'ENFANT
+            </div>
+            <div style="border: 1px solid #17a2b8; border-top: none; padding: 15px; border-radius: 0 0 5px 5px;">
+                <table style="width: 100%; font-size: 10pt;">
+                    <tr>
+                        <td style="padding: 6px 0; width: 50%;">
+                            <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #333; margin-right: 8px; vertical-align: middle;">{% if 'comprend' in analyses_selectionnees|join:'' %}✓{% endif %}</span>
+                            L'enfant comprend ce qu'on lui demande
+                        </td>
+                        <td style="padding: 6px 0;">
+                            <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #333; margin-right: 8px; vertical-align: middle;">{% if 'ne comprend pas' in analyses_selectionnees|join:'' %}✓{% endif %}</span>
+                            L'enfant ne comprend pas ce qu'on lui demande
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 6px 0;">
+                            <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #333; margin-right: 8px; vertical-align: middle;">{% if 'trop jeune' in analyses_selectionnees|join:'' %}✓{% endif %}</span>
+                            L'enfant est trop jeune pour cette classe
+                        </td>
+                        <td style="padding: 6px 0;">
+                            <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #333; margin-right: 8px; vertical-align: middle;">{% if 'fixe son attention' in analyses_selectionnees|join:'' %}✓{% endif %}</span>
+                            L'enfant fixe son attention
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 6px 0;">
+                            <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #333; margin-right: 8px; vertical-align: middle;">{% if 'ne fixe pas' in analyses_selectionnees|join:'' %}✓{% endif %}</span>
+                            L'enfant ne fixe pas son attention
+                        </td>
+                        <td style="padding: 6px 0;">
+                            <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #333; margin-right: 8px; vertical-align: middle;">{% if 'timide' in analyses_selectionnees|join:'' %}✓{% endif %}</span>
+                            L'enfant est timide
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 6px 0;">
+                            <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #333; margin-right: 8px; vertical-align: middle;">{% if 'turbulent' in analyses_selectionnees|join:'' %}✓{% endif %}</span>
+                            L'enfant est turbulent
+                        </td>
+                        <td style="padding: 6px 0;">
+                            <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #333; margin-right: 8px; vertical-align: middle;">{% if 'sociable' in analyses_selectionnees|join:'' %}✓{% endif %}</span>
+                            L'enfant est sociable
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Section Recommandations de la coordinatrice -->
+        <div style="margin-bottom: 20px;">
+            <div style="background: linear-gradient(90deg, #ffc107, #e0a800); color: #333; padding: 8px 15px; font-size: 12pt; font-weight: bold; border-radius: 5px 5px 0 0;">
+                💡 RECOMMANDATIONS DE LA COORDINATRICE
+            </div>
+            <div style="border: 1px solid #ffc107; border-top: none; padding: 15px; border-radius: 0 0 5px 5px;">
+                <table style="width: 100%; font-size: 10pt;">
+                    <tr>
+                        <td style="padding: 6px 0; width: 50%;">
+                            <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #333; margin-right: 8px; vertical-align: middle;">{% if 'encourager' in recommandations_selectionnees|join:'' %}✓{% endif %}</span>
+                            Enfant à encourager et à féliciter
+                        </td>
+                        <td style="padding: 6px 0;">
+                            <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #333; margin-right: 8px; vertical-align: middle;">{% if 'suivre à domicile' in recommandations_selectionnees|join:'' %}✓{% endif %}</span>
+                            Enfant à suivre à domicile
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 6px 0;">
+                            <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #333; margin-right: 8px; vertical-align: middle;">{% if 'goûter' in recommandations_selectionnees|join:'' %}✓{% endif %}</span>
+                            Mettre le goûter dans le sac de l'enfant
+                        </td>
+                        <td style="padding: 6px 0;">
+                            <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #333; margin-right: 8px; vertical-align: middle;">{% if 'aide et d\'encouragement' in recommandations_selectionnees|join:'' %}✓{% endif %}</span>
+                            L'enfant a besoin d'aide et d'encouragement des parents
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 6px 0;">
+                            <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #333; margin-right: 8px; vertical-align: middle;">{% if 'amour maternel' in recommandations_selectionnees|join:'' %}✓{% endif %}</span>
+                            L'enfant a besoin de l'amour maternel et paternel
+                        </td>
+                        <td style="padding: 6px 0;">
+                            <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #333; margin-right: 8px; vertical-align: middle;">{% if 'épanoui' in recommandations_selectionnees|join:'' %}✓{% endif %}</span>
+                            L'enfant a besoin d'être épanoui
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 6px 0;">
+                            <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #333; margin-right: 8px; vertical-align: middle;">{% if 'sorties éducatives' in recommandations_selectionnees|join:'' %}✓{% endif %}</span>
+                            L'enfant a besoin de sorties éducatives et récréatives
+                        </td>
+                        <td style="padding: 6px 0;">
+                            <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #333; margin-right: 8px; vertical-align: middle;">{% if 'facultés intellectuelles' in recommandations_selectionnees|join:'' %}✓{% endif %}</span>
+                            L'enfant a besoin d'aide pour développer ses facultés intellectuelles
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 6px 0;">
+                            <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #333; margin-right: 8px; vertical-align: middle;">{% if 'douceur et de patience' in recommandations_selectionnees|join:'' %}✓{% endif %}</span>
+                            L'enfant doit être pris avec beaucoup de douceur et de patience
+                        </td>
+                        <td style="padding: 6px 0;">
+                            <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #333; margin-right: 8px; vertical-align: middle;">{% if 'fermeté' in recommandations_selectionnees|join:'' %}✓{% endif %}</span>
+                            L'enfant a besoin de fermeté
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 6px 0;">
+                            <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #333; margin-right: 8px; vertical-align: middle;">{% if 'infériorité' in recommandations_selectionnees|join:'' %}✓{% endif %}</span>
+                            L'enfant a un esprit d'infériorité
+                        </td>
+                        <td style="padding: 6px 0;">
+                            <span style="display: inline-block; width: 14px; height: 14px; border: 2px solid #333; margin-right: 8px; vertical-align: middle;">{% if 'attention particulière' in recommandations_selectionnees|join:'' %}✓{% endif %}</span>
+                            L'enfant a besoin d'une attention particulière des parents
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Observations complémentaires -->
+        <div style="margin-bottom: 20px;">
+            <div style="background: linear-gradient(90deg, #6c757d, #5a6268); color: white; padding: 8px 15px; font-size: 12pt; font-weight: bold; border-radius: 5px 5px 0 0;">
+                📝 OBSERVATIONS COMPLÉMENTAIRES
+            </div>
+            <div style="border: 1px solid #6c757d; border-top: none; padding: 15px; border-radius: 0 0 5px 5px; min-height: 60px;">
+                <div style="border-bottom: 1px dashed #ccc; height: 25px; margin-bottom: 5px;"></div>
+                <div style="border-bottom: 1px dashed #ccc; height: 25px; margin-bottom: 5px;"></div>
+                <div style="border-bottom: 1px dashed #ccc; height: 25px;"></div>
+            </div>
+        </div>
+        
+        <!-- Signatures -->
+        <div class="signatures" style="margin-top: 30px;">
+            <div class="signature-box">
+                <div class="signature-label">La Coordinatrice</div>
+                <div class="signature-line">Signature</div>
+            </div>
+            <div class="signature-box">
+                <div class="signature-label">Le Directeur/La Directrice</div>
+                <div class="signature-line">Signature et cachet</div>
+            </div>
+            <div class="signature-box">
+                <div class="signature-label">Parent/Tuteur</div>
+                <div class="signature-line">Signature</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

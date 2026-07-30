@@ -1,0 +1,98 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+.Python
+.env
+.venv
+venv/
+ENV/
+.env.*
+
+# Django
+*.log
+*.pot
+*.pyc
+*.sqlite3
+*.db
+media/
+staticfiles/
+static_collected/
+
+# VSCode / IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Migrations (cache only)
+*/migrations/__pycache__/
+
+# Fichiers de test PDF
+carte_test*.pdf
+
+# Reports/PDF outputs
+reports/
+*.pdf
+
+# Test/coverage artifacts
+.pytest_cache/
+.coverage*
+coverage.xml
+htmlcov/
+
+# Type checker / linters caches
+.mypy_cache/
+.ruff_cache/
+
+# SQLite sidecar files
+*.sqlite3-shm
+*.sqlite3-wal
+
+# Fichiers temporaires
+0.6
+1
+9
+=2.9.0
+
+# Fichiers de cache Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Bases de données temporaires
+*.db.bak
+
+# Build Windows / installateurs locaux
+build/
+dist/
+dist_nuitka/
+Output/
+MySchoolGN_Output/
+*.exe
+*.rar
+*.spec
+.codex-tools/
+
+# Licences générées localement
+license.dat
+license_*.lic
+licence_*.lic
+licenses_emises.json
+
+# Fichiers temporaires locaux
+.trial_start
+~WRL*.tmp
+.claude/worktrees/
+tmp/
+
+# Journaux de build locaux
+build_log*.txt
+iscc_log*.txt

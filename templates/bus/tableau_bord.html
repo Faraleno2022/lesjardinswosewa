@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block title %}Bus scolaire - Tableau de bord{% endblock %}
+{% block breadcrumb_items %}
+<li class="breadcrumb-item active" aria-current="page">Bus scolaire</li>
+{% endblock %}
+{% block page_header %}{% endblock %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-md-4">
+    <div class="card card-stats">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="fw-bold">Total abonnements</div>
+            <div class="display-6">{{ total }}</div>
+          </div>
+          <i class="fas fa-bus fa-2x text-primary"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card card-stats warning">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="fw-bold">Proches expiration</div>
+            <div class="display-6">{{ proche }}</div>
+          </div>
+          <i class="fas fa-hourglass-half fa-2x text-warning"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card card-stats danger">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="fw-bold">Expirés</div>
+            <div class="display-6">{{ exp }}</div>
+          </div>
+          <i class="fas fa-ban fa-2x text-danger"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mt-4">
+  <a class="btn btn-primary" href="{% url 'bus:liste' %}"><i class="fas fa-list me-1"></i>Voir les abonnements</a>
+  <a class="btn btn-outline-warning" href="{% url 'bus:relances' %}"><i class="fas fa-bell me-1"></i>Relances</a>
+  <a class="btn btn-success" href="{% url 'bus:nouveau' %}"><i class="fas fa-plus me-1"></i>Nouvel abonnement</a>
+</div>
+{% endblock %}

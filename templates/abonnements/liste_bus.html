@@ -1,0 +1,231 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Abonnements Bus{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stats-card {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        border-radius: 15px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 15px rgba(0, 123, 255, 0.2);
+    }
+    
+    .table-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    .badge-actif {
+        background: #28a745;
+        color: white;
+        padding: 0.4rem 0.8rem;
+        border-radius: 20px;
+    }
+    
+    .badge-suspendu {
+        background: #ffc107;
+        color: #333;
+        padding: 0.4rem 0.8rem;
+        border-radius: 20px;
+    }
+    
+    .badge-expire {
+        background: #dc3545;
+        color: white;
+        padding: 0.4rem 0.8rem;
+        border-radius: 20px;
+    }
+    
+    .btn-nouveau {
+        background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+        color: white;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        font-weight: 600;
+    }
+    
+    .btn-nouveau:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+        color: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-bus"></i> Abonnements Bus Scolaire</h2>
+        <a href="{% url 'abonnements:creer_bus' %}" class="btn btn-nouveau">
+            <i class="fas fa-plus"></i> Nouvel Abonnement
+        </a>
+    </div>
+    
+    <div class="table-card">
+        <!-- Filtres -->
+        <form method="get" class="row g-3 mb-4">
+            <div class="col-md-3">
+                <label class="form-label">Itinéraire</label>
+                <select name="itineraire" class="form-select">
+                    <option value="">Tous les itinéraires</option>
+                    {% for itin in itineraires %}
+                    <option value="{{ itin.id }}" {% if itineraire_selectionne == itin.id|stringformat:"s" %}selected{% endif %}>
+                        {{ itin.nom }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="col-md-3">
+                <label class="form-label">Statut</label>
+                <select name="statut" class="form-select">
+                    <option value="">Tous les statuts</option>
+                    <option value="ACTIF" {% if statut_selectionne == "ACTIF" %}selected{% endif %}>Actif</option>
+                    <option value="SUSPENDU" {% if statut_selectionne == "SUSPENDU" %}selected{% endif %}>Suspendu</option>
+                    <option value="EXPIRE" {% if statut_selectionne == "EXPIRE" %}selected{% endif %}>Expiré</option>
+                    <option value="RESILIE" {% if statut_selectionne == "RESILIE" %}selected{% endif %}>Résilié</option>
+                </select>
+            </div>
+            
+            <div class="col-md-4">
+                <label class="form-label">Rechercher</label>
+                <input type="text" name="search" class="form-control" 
+                       placeholder="Nom, prénom ou matricule..." 
+                       value="{{ search }}">
+            </div>
+            
+            <div class="col-md-2">
+                <label class="form-label">&nbsp;</label>
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="fas fa-search"></i> Filtrer
+                </button>
+            </div>
+        </form>
+        
+        <!-- Tableau -->
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Élève</th>
+                        <th>Classe</th>
+                        <th>Itinéraire</th>
+                        <th>Point Montée</th>
+                        <th>Point Descente</th>
+                        <th>Durée</th>
+                        <th>Date Fin</th>
+                        <th>Montant</th>
+                        <th>Statut</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for abo in abonnements %}
+                    <tr>
+                        <td>
+                            <strong>{{ abo.eleve.nom_complet }}</strong><br>
+                            <small class="text-muted">{{ abo.eleve.matricule }}</small>
+                        </td>
+                        <td>{{ abo.eleve.classe }}</td>
+                        <td>
+                            <i class="fas fa-route text-primary"></i> {{ abo.itineraire.nom }}<br>
+                            <small class="text-muted">
+                                {{ abo.itineraire.heure_depart_matin }} - {{ abo.itineraire.heure_retour_soir }}
+                            </small>
+                        </td>
+                        <td>
+                            <i class="fas fa-map-marker-alt text-success"></i> {{ abo.point_montee }}
+                        </td>
+                        <td>
+                            <i class="fas fa-map-marker-alt text-danger"></i> {{ abo.point_descente }}
+                        </td>
+                        <td>{{ abo.get_duree_display }}</td>
+                        <td>{{ abo.date_fin|date:"d/m/Y" }}</td>
+                        <td>
+                            <strong>{{ abo.montant|floatformat:0 }} GNF</strong>
+                        </td>
+                        <td>
+                            {% if abo.statut == 'ACTIF' %}
+                                <span class="badge-actif">
+                                    <i class="fas fa-check-circle"></i> Actif
+                                </span>
+                            {% elif abo.statut == 'SUSPENDU' %}
+                                <span class="badge-suspendu">
+                                    <i class="fas fa-pause-circle"></i> Suspendu
+                                </span>
+                            {% elif abo.statut == 'EXPIRE' %}
+                                <span class="badge-expire">
+                                    <i class="fas fa-times-circle"></i> Expiré
+                                </span>
+                            {% else %}
+                                <span class="badge bg-secondary">
+                                    <i class="fas fa-ban"></i> Résilié
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-info" 
+                                    onclick="voirDetails({{ abo.id }})" 
+                                    title="Détails">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="10" class="text-center py-4">
+                            <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">Aucun abonnement bus trouvé</p>
+                            <a href="{% url 'abonnements:creer_bus' %}" class="btn btn-primary">
+                                <i class="fas fa-plus"></i> Créer le premier abonnement
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        {% if abonnements %}
+        <div class="mt-3">
+            <p class="text-muted">
+                <strong>{{ abonnements|length }}</strong> abonnement(s) trouvé(s)
+            </p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Modal Détails -->
+<div class="modal fade" id="detailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-bus"></i> Détails de l'Abonnement
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="detailsContent">
+                <!-- Contenu chargé dynamiquement -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function voirDetails(abonnementId) {
+    // Pour l'instant, afficher un message
+    alert('Détails de l\'abonnement #' + abonnementId + '\n\nFonctionnalité à implémenter');
+}
+</script>
+{% endblock %}

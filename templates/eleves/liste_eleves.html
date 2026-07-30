@@ -1,0 +1,380 @@
+{% extends 'base.html' %}
+
+{% block title %}Liste des Élèves - {{ block.super }}{% endblock %}
+
+{% block breadcrumb_items %}
+    <li class="breadcrumb-item active">Élèves</li>
+{% endblock %}
+
+{% block page_actions %}
+    <div>
+        <a href="{% url 'eleves:ajouter_eleve' %}" class="btn btn-primary">
+            <i class="fas fa-plus me-1"></i>Ajouter un élève
+        </a>
+        <a href="{% url 'eleves:importer_eleves' %}" class="btn btn-success">
+            <i class="fas fa-file-upload me-1"></i>Importer Excel
+        </a>
+        <a href="{% url 'eleves:statistiques_eleves' %}" class="btn btn-outline-info">
+            <i class="fas fa-chart-pie me-1"></i>Statistiques
+        </a>
+    </div>
+{% endblock %}
+
+{% block content %}
+    <!-- Zone dynamique: stats + résultats -->
+    <div id="zone-eleves">
+        {% include 'eleves/partials/_liste_eleves_zone.html' %}
+    </div>
+
+    <!-- Formulaire de recherche -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-search me-2"></i>Rechercher des élèves
+            </h5>
+        </div>
+        <div class="card-body">
+            <form id="recherche-eleves-form" method="get" class="row g-3">
+                {{ form_recherche.as_p }}
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search me-1"></i>Rechercher
+                    </button>
+                    <a id="btn-effacer" href="{% url 'eleves:liste_eleves' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-times me-1"></i>Effacer
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {# La zone ci-dessus contient aussi les résultats; rien à dupliquer ici #}
+
+    <!-- Modals de confirmation de suppression -->
+    {# Modals sont inclus dans le partial via l'include #}
+
+    <script>
+    (function() {
+        const input = document.querySelector('input[name="recherche"]');
+        const form = document.getElementById('recherche-eleves-form');
+        const zone = document.getElementById('zone-eleves');
+        const btnEffacer = document.getElementById('btn-effacer');
+
+        if (!input || !form || !zone) return;
+
+        // Nouvelle gestion d'export
+        window.initElevesExportToolbar = function() {
+            const select = zone.querySelector('#export-classe-select');
+            const btnPdf = zone.querySelector('#btn-export-pdf');
+            const btnExcel = zone.querySelector('#btn-export-excel');
+            
+            if (!select || !btnPdf || !btnExcel) return;
+
+            function showMessage(message, type = 'success') {
+                const alertClass = type === 'error' ? 'alert-danger' : 'alert-success';
+                const icon = type === 'error' ? 'fas fa-exclamation-triangle' : 'fas fa-check-circle';
+                
+                const existingAlert = zone.querySelector('.export-alert');
+                if (existingAlert) existingAlert.remove();
+                
+                const alert = document.createElement('div');
+                alert.className = `alert ${alertClass} export-alert d-flex align-items-center mb-3`;
+                alert.innerHTML = `<i class="${icon} me-2"></i>${message}`;
+                
+                const exportCard = zone.querySelector('.card');
+                exportCard.parentNode.insertBefore(alert, exportCard.nextSibling);
+                
+                setTimeout(() => alert.remove(), 4000);
+            }
+
+            function exportData(format) {
+                const classeId = select.value;
+                let url;
+                
+                if (classeId) {
+                    // Export par classe
+                    if (format === 'pdf') {
+                        url = `{% url 'eleves:export_eleves_classe_pdf' 0 %}`.replace('0', classeId);
+                    } else {
+                        url = `{% url 'eleves:export_eleves_classe_excel' 0 %}`.replace('0', classeId);
+                    }
+                } else {
+                    // Export de tous les élèves
+                    if (format === 'pdf') {
+                        url = '{% url "eleves:export_tous_eleves_pdf" %}';
+                    } else {
+                        url = '{% url "eleves:export_tous_eleves_excel" %}';
+                    }
+                }
+                
+                showMessage(`Génération du fichier ${format.toUpperCase()} en cours...`);
+                
+                // Créer un lien temporaire pour déclencher le téléchargement
+                const link = document.createElement('a');
+                link.href = url;
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                setTimeout(() => {
+                    showMessage(`Fichier ${format.toUpperCase()} téléchargé avec succès !`);
+                }, 1000);
+            }
+
+            // Éviter les doublons d'événements
+            const newBtnPdf = btnPdf.cloneNode(true);
+            const newBtnExcel = btnExcel.cloneNode(true);
+            btnPdf.parentNode.replaceChild(newBtnPdf, btnPdf);
+            btnExcel.parentNode.replaceChild(newBtnExcel, btnExcel);
+
+            newBtnPdf.addEventListener('click', () => exportData('pdf'));
+            newBtnExcel.addEventListener('click', () => exportData('excel'));
+            
+            // Gestion du bouton Cartes Scolaires
+            const btnCartes = zone.querySelector('#btn-cartes-scolaires');
+            if (btnCartes) {
+                const newBtnCartes = btnCartes.cloneNode(true);
+                btnCartes.parentNode.replaceChild(newBtnCartes, btnCartes);
+                
+                newBtnCartes.addEventListener('click', () => {
+                    const classeId = select.value;
+                    if (!classeId) {
+                        showMessage('Veuillez sélectionner une classe pour générer les cartes scolaires.', 'error');
+                        return;
+                    }
+                    
+                    // Générer les cartes scolaires
+                    window.location.href = `/eleves/classe/${classeId}/cartes-scolaires-pdf/`;
+                });
+            }
+            
+            // Gestion du bouton Tickets Retrait en masse
+            const btnTicketsRetraitMasse = zone.querySelector('#btn-tickets-retrait-masse');
+            if (btnTicketsRetraitMasse) {
+                const newBtn = btnTicketsRetraitMasse.cloneNode(true);
+                btnTicketsRetraitMasse.parentNode.replaceChild(newBtn, btnTicketsRetraitMasse);
+                
+                newBtn.addEventListener('click', () => {
+                    const classeId = select.value;
+                    if (!classeId) {
+                        showMessage('Veuillez sélectionner une classe pour générer les tickets de retrait.', 'error');
+                        return;
+                    }
+                    
+                    showMessage('Génération du PDF en cours...', 'info');
+                    const url = `{% url 'eleves:tickets_retrait_classe_pdf' 0 %}`.replace('0', classeId);
+                    window.open(url, '_blank');
+                    setTimeout(() => showMessage('PDF généré avec succès !'), 1000);
+                });
+            }
+            
+            // Gestion du bouton Tickets Bus en masse
+            const btnTicketsBusMasse = zone.querySelector('#btn-tickets-bus-masse');
+            if (btnTicketsBusMasse) {
+                const newBtn = btnTicketsBusMasse.cloneNode(true);
+                btnTicketsBusMasse.parentNode.replaceChild(newBtn, btnTicketsBusMasse);
+                
+                newBtn.addEventListener('click', () => {
+                    const classeId = select.value;
+                    if (!classeId) {
+                        showMessage('Veuillez sélectionner une classe pour générer les tickets bus.', 'error');
+                        return;
+                    }
+                    
+                    showMessage('Génération du PDF en cours...', 'info');
+                    const url = `{% url 'eleves:tickets_bus_classe_pdf' 0 %}`.replace('0', classeId);
+                    window.open(url, '_blank');
+                    setTimeout(() => showMessage('PDF généré avec succès !'), 1000);
+                });
+            }
+        }
+
+        const debounce = (fn, delay = 300) => {
+            let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
+        };
+
+        function buildUrl(baseHref) {
+            const url = new URL(baseHref || window.location.href, window.location.origin);
+            url.searchParams.set('partial', '1');
+            const q = (input.value || '').trim();
+            if (q) url.searchParams.set('recherche', q); else url.searchParams.delete('recherche');
+            // Ajouter le filtre classe si sélectionné
+            const selectInZone = zone.querySelector('#export-classe-select');
+            const classeId = selectInZone ? (selectInZone.value || '') : '';
+            if (classeId) url.searchParams.set('classe_id', classeId); else url.searchParams.delete('classe_id');
+            return url.toString();
+        }
+
+        async function fetchResults(targetUrl) {
+            const url = targetUrl || buildUrl();
+            const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const html = await resp.text();
+            zone.innerHTML = html;
+            // Ré-initialiser la barre d'export après injection
+            if (window.initElevesExportToolbar) window.initElevesExportToolbar();
+            // Re-lier le changement de classe après injection du partial
+            if (typeof bindClasseChange === 'function') bindClasseChange();
+        }
+
+        const onInput = debounce(() => fetchResults(), 300);
+        input.addEventListener('input', onInput);
+
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            fetchResults();
+        });
+
+        if (btnEffacer) {
+            btnEffacer.addEventListener('click', function(e) {
+                e.preventDefault();
+                input.value = '';
+                fetchResults(buildUrl(this.href));
+                history.replaceState({}, '', this.href);
+            });
+        }
+
+        // Pagination dynamique via délégation
+        zone.addEventListener('click', function(e) {
+            const link = e.target.closest('a.page-link');
+            if (!link) return;
+            e.preventDefault();
+            // Conserver recherche et classe lors de la pagination
+            fetchResults(buildUrl(link.href));
+        });
+
+        // Initialiser la barre d'export
+        if (window.initElevesExportToolbar) window.initElevesExportToolbar();
+
+        // Réagir au changement de classe (filtre)
+        function bindClasseChange() {
+            const select = zone.querySelector('#export-classe-select');
+            if (!select) return;
+            // Éviter les doublons
+            const newSelect = select.cloneNode(true);
+            select.parentNode.replaceChild(newSelect, select);
+            newSelect.addEventListener('change', function() {
+                // Mettre à jour les résultats avec le filtre classe
+                fetchResults();
+                // Mettre à jour l'URL visible (sans partial)
+                const fullUrl = new URL(window.location.href);
+                if (this.value) fullUrl.searchParams.set('classe_id', this.value); else fullUrl.searchParams.delete('classe_id');
+                const q = (input.value || '').trim();
+                if (q) fullUrl.searchParams.set('recherche', q); else fullUrl.searchParams.delete('recherche');
+                history.replaceState({}, '', fullUrl.toString());
+            });
+        }
+        bindClasseChange();
+    })();
+
+    // Fonction pour imprimer la carte scolaire
+    function imprimerCarte(matricule) {
+        window.location.href = `/eleves/${matricule}/carte-scolaire-pdf/`;
+        return;
+        
+        // Créer un iframe invisible pour télécharger et imprimer
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        // iframe.src = url;
+        
+        // Ajouter l'iframe au document
+        document.body.appendChild(iframe);
+        
+        // Supprimer l'iframe après un délai
+        setTimeout(() => {
+            document.body.removeChild(iframe);
+        }, 3000);
+        
+        // Optionnel: afficher un message de confirmation
+        showMessage('Génération de la carte scolaire en cours...', 'info');
+    }
+
+    // ===== ÉDITION INLINE DU TÉLÉPHONE DU RESPONSABLE =====
+    document.addEventListener('click', function(e) {
+        // Bouton éditer
+        const btnEdit = e.target.closest('.btn-edit-tel');
+        if (btnEdit) {
+            const eleveId = btnEdit.dataset.eleveId;
+            document.getElementById('tel-display-' + eleveId).style.display = 'none';
+            document.getElementById('tel-edit-' + eleveId).style.display = 'block';
+            const input = document.querySelector('#tel-edit-' + eleveId + ' .input-tel-edit');
+            if (input) { input.focus(); input.select(); }
+            return;
+        }
+
+        // Bouton annuler
+        const btnCancel = e.target.closest('.btn-cancel-tel');
+        if (btnCancel) {
+            const eleveId = btnCancel.dataset.eleveId;
+            document.getElementById('tel-display-' + eleveId).style.display = '';
+            document.getElementById('tel-edit-' + eleveId).style.display = 'none';
+            return;
+        }
+
+        // Bouton sauvegarder
+        const btnSave = e.target.closest('.btn-save-tel');
+        if (btnSave) {
+            const eleveId = btnSave.dataset.eleveId;
+            const input = document.querySelector('#tel-edit-' + eleveId + ' .input-tel-edit');
+            const tel = (input.value || '').trim();
+
+            if (!/^\+224\d{8,9}$/.test(tel)) {
+                alert('Format invalide. Utilisez +224XXXXXXXXX');
+                input.focus();
+                return;
+            }
+
+            btnSave.disabled = true;
+            btnSave.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+            fetch("{% url 'eleves:ajax_modifier_telephone_responsable' %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value
+                        || '{{ csrf_token }}'
+                },
+                body: JSON.stringify({ eleve_id: eleveId, telephone: tel })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    // Mettre à jour l'affichage
+                    const telText = document.querySelector('#tel-display-' + eleveId + ' .tel-text');
+                    if (telText) telText.textContent = data.telephone;
+                    // Mettre à jour le data-tel-actuel
+                    const btnEditOrig = document.querySelector('#tel-display-' + eleveId + ' .btn-edit-tel');
+                    if (btnEditOrig) btnEditOrig.dataset.telActuel = data.telephone;
+                    document.getElementById('tel-display-' + eleveId).style.display = '';
+                    document.getElementById('tel-edit-' + eleveId).style.display = 'none';
+                    if (typeof showMessage === 'function') showMessage(data.message, 'success');
+                } else {
+                    alert(data.error || 'Erreur lors de la mise à jour');
+                }
+            })
+            .catch(() => alert('Erreur réseau'))
+            .finally(() => {
+                btnSave.disabled = false;
+                btnSave.innerHTML = '<i class="fas fa-check"></i>';
+            });
+            return;
+        }
+    });
+
+    // Sauvegarder avec Entrée
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && e.target.classList.contains('input-tel-edit')) {
+            e.preventDefault();
+            const eleveId = e.target.dataset.eleveId;
+            const btnSave = document.querySelector('.btn-save-tel[data-eleve-id="' + eleveId + '"]');
+            if (btnSave) btnSave.click();
+        }
+        if (e.key === 'Escape' && e.target.classList.contains('input-tel-edit')) {
+            const eleveId = e.target.dataset.eleveId;
+            const btnCancel = document.querySelector('.btn-cancel-tel[data-eleve-id="' + eleveId + '"]');
+            if (btnCancel) btnCancel.click();
+        }
+    });
+    </script>
+{% endblock %}
+

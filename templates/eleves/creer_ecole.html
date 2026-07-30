@@ -1,0 +1,273 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white d-flex align-items-center justify-content-between">
+          <h5 class="mb-0">{{ titre_page|default:'Créer une École' }}</h5>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-info d-flex align-items-start" role="alert">
+            <div class="me-2"><i class="fas fa-info-circle"></i></div>
+            <div>
+              Votre demande sera examinée par un administrateur. Après validation, les échéances seront configurées et vous serez notifié.
+            </div>
+          </div>
+          <form method="post" enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
+            {% if signup_form %}
+            <div class="card shadow-sm mb-4">
+              <div class="card-header bg-secondary text-white d-flex align-items-center justify-content-between">
+                <h6 class="mb-0">Créer mon compte</h6>
+              </div>
+              <div class="card-body">
+                <div class="alert alert-secondary" role="alert">
+                  Créez d'abord votre compte pour pouvoir soumettre la création de votre école.
+                </div>
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <label class="form-label">Nom d'utilisateur</label>
+                    {{ signup_form.username }}
+                    {% if signup_form.username.errors %}<div class="text-danger small">{{ signup_form.username.errors }}</div>{% endif %}
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">Email (optionnel)</label>
+                    {{ signup_form.email }}
+                    {% if signup_form.email.errors %}<div class="text-danger small">{{ signup_form.email.errors }}</div>{% endif %}
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">Mot de passe</label>
+                    {{ signup_form.password1 }}
+                    {% if signup_form.password1.errors %}<div class="text-danger small">{{ signup_form.password1.errors }}</div>{% endif %}
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">Confirmer le mot de passe</label>
+                    {{ signup_form.password2 }}
+                    {% if signup_form.password2.errors %}<div class="text-danger small">{{ signup_form.password2.errors }}</div>{% endif %}
+                  </div>
+                </div>
+                {{ signup_form.website }}
+              </div>
+            </div>
+            {% endif %}
+
+            <div class="mb-3">
+              <label class="form-label">Nom de l'école</label>
+              {{ form.nom }}
+              {% if form.nom.errors %}<div class="text-danger small">{{ form.nom.errors }}</div>{% endif %}
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Adresse</label>
+              {{ form.adresse }}
+              {% if form.adresse.errors %}<div class="text-danger small">{{ form.adresse.errors }}</div>{% endif %}
+            </div>
+
+            <div class="row">
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Téléphone</label>
+                {{ form.telephone }}
+                <div class="form-text">Format: +224XXXXXXXXX</div>
+                {% if form.telephone.errors %}<div class="text-danger small">{{ form.telephone.errors }}</div>{% endif %}
+              </div>
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Email (optionnel)</label>
+                {{ form.email }}
+                {% if form.email.errors %}<div class="text-danger small">{{ form.email.errors }}</div>{% endif %}
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Directeur</label>
+              {{ form.directeur }}
+              {% if form.directeur.errors %}<div class="text-danger small">{{ form.directeur.errors }}</div>{% endif %}
+            </div>
+
+            <div class="row">
+              <div class="col-md-4 mb-3">
+                <label class="form-label">IRE</label>
+                {{ form.ire }}
+                {% if form.ire.errors %}<div class="text-danger small">{{ form.ire.errors }}</div>{% endif %}
+              </div>
+              <div class="col-md-4 mb-3">
+                <label class="form-label">DPE</label>
+                {{ form.dpe }}
+                {% if form.dpe.errors %}<div class="text-danger small">{{ form.dpe.errors }}</div>{% endif %}
+              </div>
+              <div class="col-md-4 mb-3">
+                <label class="form-label">DESEE</label>
+                {{ form.desee }}
+                {% if form.desee.errors %}<div class="text-danger small">{{ form.desee.errors }}</div>{% endif %}
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Logo de l'école</label>
+              {{ form.logo }}
+              <div class="form-text">Le logo sera utilisé en filigrane et dans les en-têtes des PDFs.</div>
+              {% if form.logo.errors %}<div class="text-danger small">{{ form.logo.errors }}</div>{% endif %}
+            </div>
+
+            <div class="card border-0 shadow-sm mb-4">
+              <div class="card-header bg-light d-flex align-items-center justify-content-between">
+                <h6 class="mb-0"><i class="fas fa-layer-group me-2"></i>Classes de l'école</h6>
+                <button type="button" class="btn btn-sm btn-primary" onclick="addClasseRow()"><i class="fas fa-plus"></i> Ajouter une classe</button>
+              </div>
+              <div class="card-body">
+                <div id="classesContainer" class="d-grid gap-3"></div>
+                <div class="form-text">Ajoutez vos classes pour l'année scolaire. Vous pourrez en ajouter d'autres plus tard.</div>
+              </div>
+            </div>
+
+            <div class="card border-0 shadow-sm mb-4">
+              <div class="card-header bg-light d-flex align-items-center justify-content-between">
+                <h6 class="mb-0"><i class="fas fa-coins me-2"></i>Grilles tarifaires (inscription et réinscription)</h6>
+                <button type="button" class="btn btn-sm btn-success" onclick="addGrilleRow()"><i class="fas fa-plus"></i> Ajouter une grille</button>
+              </div>
+              <div class="card-body">
+                <div id="grillesContainer" class="d-grid gap-3"></div>
+                <div class="form-text">Saisissez les montants d'inscription et de réinscription, ainsi que les tranches de scolarité.</div>
+              </div>
+            </div>
+
+            <div class="d-flex justify-content-between">
+              <a href="{% url 'eleves:liste_eleves' %}" class="btn btn-outline-secondary">Annuler</a>
+              <button type="submit" class="btn btn-primary">Envoyer la demande</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const niveauxOptions = `
+    <option value="">-- Niveau --</option>
+    <option value="GARDERIE">Garderie</option>
+    <option value="MATERNELLE">Maternelle</option>
+    <option value="PRIMAIRE_1">Primaire 1ère</option>
+    <option value="PRIMAIRE_2">Primaire 2ème</option>
+    <option value="PRIMAIRE_3">Primaire 3ème</option>
+    <option value="PRIMAIRE_4">Primaire 4ème</option>
+    <option value="PRIMAIRE_5">Primaire 5ème</option>
+    <option value="PRIMAIRE_6">Primaire 6ème</option>
+    <option value="COLLEGE_7">Collège 7ème</option>
+    <option value="COLLEGE_8">Collège 8ème</option>
+    <option value="COLLEGE_9">Collège 9ème</option>
+    <option value="COLLEGE_10">Collège 10ème</option>
+    <option value="LYCEE_11">Lycée 11ème</option>
+    <option value="LYCEE_12">Lycée 12ème</option>
+    <option value="TERMINALE">Terminale</option>
+  `;
+
+  function addClasseRow() {
+    const container = document.getElementById('classesContainer');
+    const row = document.createElement('div');
+    row.className = 'row g-2 align-items-end border rounded p-2';
+    row.innerHTML = `
+      <div class="col-md-4">
+        <label class="form-label">Nom de la classe</label>
+        <input name="classe_nom[]" type="text" class="form-control" placeholder="Ex: 6ème A" />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Niveau</label>
+        <select name="classe_niveau[]" class="form-select">${niveauxOptions}</select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Année scolaire</label>
+        <input name="classe_annee[]" type="text" class="form-control" placeholder="2025-2026" pattern="^\\d{4}-\\d{4}$" />
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Capacité</label>
+        <input name="classe_capacite[]" type="number" class="form-control" min="1" max="60" value="30" />
+      </div>
+      <div class="col-12 text-end mt-2">
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.row').remove()"><i class="fas fa-trash"></i></button>
+      </div>
+    `;
+    container.appendChild(row);
+  }
+
+  function addGrilleRow() {
+    const container = document.getElementById('grillesContainer');
+    const row = document.createElement('div');
+    row.className = 'row g-2 align-items-end border rounded p-2';
+    row.innerHTML = `
+      <div class="col-md-3">
+        <label class="form-label">Niveau</label>
+        <select name="grille_niveau[]" class="form-select">${niveauxOptions}</select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Année</label>
+        <input name="grille_annee[]" type="text" class="form-control" placeholder="2025-2026" pattern="^\\d{4}-\\d{4}$" />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Inscription (GNF)</label>
+        <input name="grille_inscription[]" type="text" class="form-control montant-input" inputmode="numeric" placeholder="300 000" />
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Réinscription (GNF)</label>
+        <input name="grille_reinscription[]" type="text" class="form-control montant-input" inputmode="numeric" placeholder="200 000" />
+      </div>
+      <div class="col-12"></div>
+      <div class="col-md-4">
+        <label class="form-label fw-bold">T1 (1ère tranche)</label>
+        <input name="grille_t1[]" type="text" class="form-control montant-input" inputmode="numeric" placeholder="Ex: 600 000" />
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-bold">T2 (2ème tranche)</label>
+        <input name="grille_t2[]" type="text" class="form-control montant-input" inputmode="numeric" placeholder="Ex: 600 000" />
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-bold">T3 (3ème tranche)</label>
+        <input name="grille_t3[]" type="text" class="form-control montant-input" inputmode="numeric" placeholder="Ex: 600 000" />
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Période 1</label>
+        <input name="grille_p1[]" type="text" class="form-control" placeholder="À l'inscription" />
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Période 2</label>
+        <input name="grille_p2[]" type="text" class="form-control" placeholder="Début janvier" />
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Période 3</label>
+        <input name="grille_p3[]" type="text" class="form-control" placeholder="Début mars" />
+      </div>
+      <div class="col-12 text-end mt-2">
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.row').remove()"><i class="fas fa-trash"></i></button>
+      </div>
+    `;
+    container.appendChild(row);
+  }
+
+  // Pré-remplir avec une rangée par défaut pour guider l'utilisateur
+  window.addEventListener('DOMContentLoaded', () => {
+    addClasseRow();
+    addGrilleRow();
+    // Nettoyage des montants au submit (retire espaces et caractères non numériques)
+    const form = document.querySelector('form');
+    if (form) {
+      form.addEventListener('submit', () => {
+        document.querySelectorAll('.montant-input').forEach((el) => {
+          el.value = (el.value || '').replace(/\D+/g, '');
+        });
+      });
+    }
+  });
+</script>
+<style>
+  .montant-input {
+    font-size: 1.15rem;
+    height: 48px;
+    padding: 0.5rem 0.75rem;
+  }
+  @media (max-width: 768px) {
+    .montant-input { height: 44px; font-size: 1.05rem; }
+  }
+</style>
+{% endblock %}

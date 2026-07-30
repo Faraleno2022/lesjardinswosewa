@@ -1,0 +1,175 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Modifier la Matière{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        max-width: 800px;
+        margin: 2rem auto;
+    }
+    
+    .form-header {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 10px;
+        margin-bottom: 2rem;
+        text-align: center;
+    }
+    
+    .form-header h2 {
+        margin: 0;
+        font-size: 1.8rem;
+        font-weight: 700;
+    }
+    
+    .form-header p {
+        margin: 0.5rem 0 0 0;
+        opacity: 0.9;
+    }
+    
+    .form-control {
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 0.75rem;
+        transition: all 0.3s;
+    }
+    
+    .form-control:focus {
+        border-color: #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+    
+    .btn-save {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        border: none;
+        padding: 0.75rem 2rem;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.3s;
+    }
+    
+    .btn-save:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+        color: white;
+    }
+    
+    .btn-cancel {
+        background: #6c757d;
+        color: white;
+        border: none;
+        padding: 0.75rem 2rem;
+        border-radius: 8px;
+        font-weight: 600;
+    }
+    
+    .info-box {
+        background: #cfe2ff;
+        border-left: 4px solid #007bff;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+    }
+    
+    .info-box i {
+        color: #007bff;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="form-card">
+        <div class="form-header">
+            <h2><i class="fas fa-edit"></i> Modifier la Matière</h2>
+            <p>{{ matiere.nom }} ({{ matiere.code }})</p>
+        </div>
+        
+        <div class="info-box">
+            <i class="fas fa-info-circle me-2"></i>
+            <strong>Information:</strong> Modifiez les informations de la matière ci-dessous.
+        </div>
+        
+        <form method="post">
+            {% csrf_token %}
+            
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="{{ form.nom.id_for_label }}" class="form-label">
+                        <i class="fas fa-book me-1"></i> Nom de la matière *
+                    </label>
+                    {{ form.nom }}
+                    {% if form.nom.errors %}
+                        <div class="text-danger small mt-1">{{ form.nom.errors }}</div>
+                    {% endif %}
+                </div>
+                
+                <div class="col-md-6 mb-3">
+                    <label for="{{ form.code.id_for_label }}" class="form-label">
+                        <i class="fas fa-tag me-1"></i> Code *
+                    </label>
+                    {{ form.code }}
+                    {% if form.code.errors %}
+                        <div class="text-danger small mt-1">{{ form.code.errors }}</div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="row">
+                {% if matiere.classe.niveau_enseignement != 'MATERNELLE' and matiere.classe.niveau_enseignement != 'PRIMAIRE' and 'PRIMAIRE' not in matiere.classe.niveau %}
+                <div class="col-md-6 mb-3">
+                    <label for="{{ form.coefficient.id_for_label }}" class="form-label">
+                        <i class="fas fa-weight me-1"></i> Coefficient
+                    </label>
+                    {{ form.coefficient }}
+                    {% if form.coefficient.errors %}
+                        <div class="text-danger small mt-1">{{ form.coefficient.errors }}</div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                
+                <div class="col-md-{% if matiere.classe.niveau_enseignement == 'MATERNELLE' or matiere.classe.niveau_enseignement == 'PRIMAIRE' or 'PRIMAIRE' in matiere.classe.niveau %}12{% else %}6{% endif %} mb-3">
+                    <label class="form-label d-block">
+                        <i class="fas fa-toggle-on me-1"></i> Statut
+                    </label>
+                    <div class="form-check form-switch">
+                        {{ form.actif }}
+                        <label class="form-check-label" for="{{ form.actif.id_for_label }}">
+                            Matière active
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="{{ form.description.id_for_label }}" class="form-label">
+                    <i class="fas fa-align-left me-1"></i> Description
+                </label>
+                {{ form.description }}
+                {% if form.description.errors %}
+                    <div class="text-danger small mt-1">{{ form.description.errors }}</div>
+                {% endif %}
+            </div>
+            
+            <hr class="my-4">
+            
+            <div class="d-flex justify-content-between">
+                <a href="{% url 'notes:gerer_matieres' %}?classe_id={{ classe_id }}" class="btn btn-cancel">
+                    <i class="fas fa-times me-2"></i>Annuler
+                </a>
+                <button type="submit" class="btn btn-save">
+                    <i class="fas fa-save me-2"></i>Enregistrer les modifications
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

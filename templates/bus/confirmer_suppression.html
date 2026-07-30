@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-6 offset-md-3">
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-exclamation-triangle"></i> {{ titre_page }}
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>Attention !</strong> Cette action est irréversible.
+                    </div>
+
+                    <h5 class="mb-3">Êtes-vous sûr de vouloir supprimer définitivement cet abonnement bus ?</h5>
+
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <dl class="row mb-0">
+                                <dt class="col-sm-4">Élève :</dt>
+                                <dd class="col-sm-8"><strong>{{ abonnement.eleve }}</strong></dd>
+
+                                <dt class="col-sm-4">Classe :</dt>
+                                <dd class="col-sm-8">{{ abonnement.eleve.classe.nom|default:"-" }}</dd>
+
+                                <dt class="col-sm-4">Périodicité :</dt>
+                                <dd class="col-sm-8">{{ abonnement.get_periodicite_display }}</dd>
+
+                                <dt class="col-sm-4">Montant :</dt>
+                                <dd class="col-sm-8">{{ abonnement.montant|floatformat:0 }} GNF</dd>
+
+                                <dt class="col-sm-4">Date d'Expiration :</dt>
+                                <dd class="col-sm-8">{{ abonnement.date_expiration|date:"d/m/Y" }}</dd>
+
+                                <dt class="col-sm-4">Statut :</dt>
+                                <dd class="col-sm-8">
+                                    <span class="badge 
+                                        {% if abonnement.statut == 'ACTIF' %}bg-success
+                                        {% elif abonnement.statut == 'EXPIRE' %}bg-danger
+                                        {% else %}bg-secondary{% endif %}">
+                                        {{ abonnement.get_statut_display }}
+                                    </span>
+                                </dd>
+
+                                {% if abonnement.zone %}
+                                <dt class="col-sm-4">Zone :</dt>
+                                <dd class="col-sm-8">{{ abonnement.zone }}</dd>
+                                {% endif %}
+
+                                {% if abonnement.point_arret %}
+                                <dt class="col-sm-4">Point d'arrêt :</dt>
+                                <dd class="col-sm-8 mb-0">{{ abonnement.point_arret }}</dd>
+                                {% endif %}
+                            </dl>
+                        </div>
+                    </div>
+
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'bus:liste' %}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Annuler
+                            </a>
+                            <button type="submit" class="btn btn-danger">
+                                <i class="fas fa-trash"></i> Confirmer la Suppression Définitive
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

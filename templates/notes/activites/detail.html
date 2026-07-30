@@ -1,0 +1,243 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ activite.titre }} - Vie scolaire{% endblock %}
+
+{% block extra_css %}
+<style>
+    .detail-header {
+        background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+    }
+    .detail-card {
+        background: #fff;
+        border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,.1);
+        padding: 2rem;
+        margin-bottom: 1.5rem;
+    }
+    .info-row {
+        display: flex;
+        align-items: center;
+        padding: .6rem 0;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    .info-row:last-child { border-bottom: none; }
+    .info-label {
+        font-weight: 600;
+        color: #555;
+        min-width: 160px;
+    }
+    .gallery {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 1rem;
+    }
+    .gallery-item {
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,.1);
+        transition: transform .2s;
+    }
+    .gallery-item:hover { transform: scale(1.03); }
+    .gallery-item img {
+        width: 100%;
+        height: 200px;
+        object-fit: cover;
+        cursor: pointer;
+    }
+    .gallery-item .caption {
+        padding: .5rem;
+        font-size: .85rem;
+        background: #fafafa;
+        text-align: center;
+    }
+    .file-item {
+        display: flex;
+        align-items: center;
+        gap: .8rem;
+        padding: .7rem 1rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+        margin-bottom: .5rem;
+    }
+    .badge-type {
+        font-size: .9rem;
+        padding: .4rem .8rem;
+    }
+
+    /* Lightbox */
+    .lightbox-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,.85);
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+    }
+    .lightbox-overlay.active { display: flex; }
+    .lightbox-overlay img {
+        max-width: 90%;
+        max-height: 90%;
+        border-radius: 8px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+
+    <div class="detail-header">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <h2 class="mb-1"><i class="fas fa-calendar-day me-2"></i>{{ activite.titre }}</h2>
+                <p class="mb-0 opacity-75">
+                    {{ activite.eleve.nom }} {{ activite.eleve.prenom }} &mdash; {{ activite.classe.nom }}
+                </p>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{% url 'notes:modifier_activite' activite.pk %}" class="btn btn-light">
+                    <i class="fas fa-edit me-1"></i> Modifier
+                </a>
+                <a href="{% url 'notes:liste_activites' %}" class="btn btn-outline-light">
+                    <i class="fas fa-arrow-left me-1"></i> Retour
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Informations -->
+    <div class="detail-card">
+        <h5 class="fw-bold mb-3"><i class="fas fa-info-circle me-1 text-primary"></i> Informations</h5>
+
+        <div class="info-row">
+            <span class="info-label"><i class="fas fa-tag me-2"></i>Type</span>
+            <span class="badge badge-type
+                {% if activite.type_activite == 'ABSENCE' %}bg-danger
+                {% elif activite.type_activite == 'RETARD' %}bg-warning text-dark
+                {% elif activite.type_activite == 'DISCIPLINE' %}bg-dark
+                {% elif activite.type_activite == 'CONVOCATION' %}bg-info text-dark
+                {% elif activite.type_activite == 'EVALUATION' %}bg-primary
+                {% elif activite.type_activite == 'SPORTIVE' %}bg-success
+                {% elif activite.type_activite == 'CULTURELLE' %}bg-warning text-dark
+                {% elif activite.type_activite == 'ARTISTIQUE' %}bg-purple
+                {% elif activite.type_activite == 'SORTIE' %}bg-info
+                {% else %}bg-secondary{% endif %}">
+                {{ activite.get_type_activite_display }}
+            </span>
+        </div>
+
+        <div class="info-row">
+            <span class="info-label"><i class="fas fa-calendar me-2"></i>Date</span>
+            <span>{{ activite.date|date:"l d F Y" }}</span>
+        </div>
+
+        <div class="info-row">
+            <span class="info-label"><i class="fas fa-user-graduate me-2"></i>Élève</span>
+            <span>{{ activite.eleve.nom }} {{ activite.eleve.prenom }}
+                {% if activite.eleve.matricule %}
+                <small class="text-muted">({{ activite.eleve.matricule }})</small>
+                {% endif %}
+            </span>
+        </div>
+
+        <div class="info-row">
+            <span class="info-label"><i class="fas fa-school me-2"></i>Classe</span>
+            <span>{{ activite.classe.nom }}</span>
+        </div>
+
+        {% if activite.appreciation %}
+        <div class="info-row">
+            <span class="info-label"><i class="fas fa-star me-2"></i>Appréciation</span>
+            <span class="badge bg-info text-dark badge-type">{{ activite.appreciation }}</span>
+        </div>
+        {% endif %}
+
+        {% if activite.description %}
+        <div class="info-row">
+            <span class="info-label"><i class="fas fa-align-left me-2"></i>Description</span>
+            <span>{{ activite.description|linebreaksbr }}</span>
+        </div>
+        {% endif %}
+
+        <div class="info-row">
+            <span class="info-label"><i class="fas fa-user me-2"></i>Ajouté par</span>
+            <span>{{ activite.cree_par|default:"—" }} <small class="text-muted">le {{ activite.date_creation|date:"d/m/Y H:i" }}</small></span>
+        </div>
+    </div>
+
+    <!-- Pièces jointes -->
+    {% if activite.pieces_jointes.count > 0 %}
+    <div class="detail-card">
+        <h5 class="fw-bold mb-3">
+            <i class="fas fa-paperclip me-1 text-secondary"></i>
+            Pièces jointes ({{ activite.pieces_jointes.count }})
+        </h5>
+
+        <!-- Images -->
+        {% with images=activite.pieces_jointes.all %}
+        <div class="gallery mb-3">
+            {% for pj in images %}
+            {% if pj.is_image %}
+            <div class="gallery-item">
+                <img src="{{ pj.fichier.url }}" alt="{{ pj.legende }}" onclick="openLightbox(this.src)">
+                <div class="caption">{{ pj.legende|truncatechars:30 }}</div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+
+        <!-- Autres fichiers -->
+        {% for pj in images %}
+        {% if not pj.is_image %}
+        <div class="file-item">
+            <i class="fas fa-file fa-2x text-muted"></i>
+            <div>
+                <a href="{{ pj.fichier.url }}" target="_blank" class="fw-bold">{{ pj.legende }}</a>
+                <br><small class="text-muted">Télécharger</small>
+            </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+        {% endwith %}
+    </div>
+    {% endif %}
+
+    <!-- Actions -->
+    <div class="d-flex justify-content-between">
+        <a href="{% url 'notes:liste_activites' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Retour à la liste
+        </a>
+        <form method="post" action="{% url 'notes:supprimer_activite' activite.pk %}"
+              onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer cette observation ?')">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-danger">
+                <i class="fas fa-trash me-1"></i> Supprimer
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox-overlay" id="lightbox" onclick="closeLightbox()">
+    <img id="lightbox-img" src="" alt="Image agrandie">
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function openLightbox(src) {
+    document.getElementById('lightbox-img').src = src;
+    document.getElementById('lightbox').classList.add('active');
+}
+function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('active');
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+</script>
+{% endblock %}

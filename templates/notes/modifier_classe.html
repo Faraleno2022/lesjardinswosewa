@@ -1,0 +1,237 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Modifier la Classe{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        max-width: 800px;
+        margin: 2rem auto;
+    }
+    
+    .form-header {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 10px;
+        margin-bottom: 2rem;
+        text-align: center;
+    }
+    
+    .form-header h2 {
+        margin: 0;
+        font-size: 1.8rem;
+        font-weight: 700;
+    }
+    
+    .form-header p {
+        margin: 0.5rem 0 0 0;
+        opacity: 0.9;
+    }
+    
+    .form-group label {
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 0.5rem;
+    }
+    
+    .form-control {
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 0.75rem;
+        transition: all 0.3s;
+    }
+    
+    .form-control:focus {
+        border-color: #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+    
+    .btn-save {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        border: none;
+        padding: 0.75rem 2rem;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.3s;
+    }
+    
+    .btn-save:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+        color: white;
+    }
+    
+    .btn-cancel {
+        background: #6c757d;
+        color: white;
+        border: none;
+        padding: 0.75rem 2rem;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.3s;
+    }
+    
+    .btn-cancel:hover {
+        background: #5a6268;
+        color: white;
+    }
+    
+    .info-box {
+        background: #cfe2ff;
+        border-left: 4px solid #007bff;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+    }
+    
+    .info-box i {
+        color: #007bff;
+        margin-right: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="form-card">
+        <div class="form-header">
+            <h2><i class="fas fa-edit"></i> Modifier la Classe</h2>
+            <p>{{ classe.nom }} - {{ classe.niveau_enseignement }}</p>
+        </div>
+        
+        <div class="info-box">
+            <i class="fas fa-info-circle"></i>
+            <strong>Information:</strong> Modifiez les informations de la classe ci-dessous.
+        </div>
+        
+        <form method="post" id="modifierClasseForm">
+            {% csrf_token %}
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="{{ form.nom.id_for_label }}">
+                            <i class="fas fa-tag"></i> Nom de la classe *
+                        </label>
+                        {{ form.nom }}
+                        {% if form.nom.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ form.nom.errors }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="{{ form.niveau.id_for_label }}">
+                            <i class="fas fa-layer-group"></i> Niveau *
+                        </label>
+                        {{ form.niveau }}
+                        {% if form.niveau.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ form.niveau.errors }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="{{ form.annee_scolaire.id_for_label }}">
+                            <i class="fas fa-calendar-alt"></i> Année scolaire *
+                        </label>
+                        {{ form.annee_scolaire }}
+                        {% if form.annee_scolaire.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ form.annee_scolaire.errors }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="{{ form.effectif.id_for_label }}">
+                            <i class="fas fa-users"></i> Effectif
+                        </label>
+                        {{ form.effectif }}
+                        {% if form.effectif.errors %}
+                            <div class="text-danger small mt-1">
+                                {{ form.effectif.errors }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.description.id_for_label }}">
+                    <i class="fas fa-align-left"></i> Description
+                </label>
+                {{ form.description }}
+                {% if form.description.errors %}
+                    <div class="text-danger small mt-1">
+                        {{ form.description.errors }}
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                <div class="form-check form-switch">
+                    {{ form.actif }}
+                    <label class="form-check-label" for="{{ form.actif.id_for_label }}">
+                        <i class="fas fa-check-circle"></i> Classe active
+                    </label>
+                </div>
+            </div>
+            
+            <hr class="my-4">
+            
+            <div class="d-flex justify-content-between">
+                <a href="{% url 'notes:gerer_classes' %}" class="btn btn-cancel">
+                    <i class="fas fa-times"></i> Annuler
+                </a>
+                <button type="submit" class="btn btn-save">
+                    <i class="fas fa-save"></i> Enregistrer les modifications
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Ajouter les classes Bootstrap aux champs du formulaire
+    const formControls = document.querySelectorAll('input[type="text"], input[type="number"], select, textarea');
+    formControls.forEach(control => {
+        control.classList.add('form-control');
+    });
+    
+    // Gérer le switch actif
+    const switchActif = document.querySelector('input[type="checkbox"]');
+    if (switchActif) {
+        switchActif.classList.add('custom-control-input');
+    }
+    
+    // Confirmation avant soumission
+    document.getElementById('modifierClasseForm').addEventListener('submit', function(e) {
+        const nom = document.querySelector('input[name="nom"]').value;
+        if (!confirm(`Êtes-vous sûr de vouloir modifier la classe "${nom}" ?`)) {
+            e.preventDefault();
+        }
+    });
+});
+</script>
+{% endblock %}

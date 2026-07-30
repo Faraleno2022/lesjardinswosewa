@@ -1,0 +1,398 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Importer des Notes{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="mb-0">
+                <i class="fas fa-file-upload text-primary"></i>
+                Importer des Notes
+            </h2>
+            <p class="text-muted">Importez des notes depuis un fichier Excel ou CSV</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Formulaire d'importation -->
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        Formulaire d'Importation
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" enctype="multipart/form-data" id="importForm">
+                        {% csrf_token %}
+                        
+                        <!-- Type d'import -->
+                        <div class="mb-3">
+                            <label for="type_import" class="form-label">
+                                <i class="fas fa-list"></i> Type de Notes
+                                <span class="text-danger">*</span>
+                            </label>
+                            <select class="form-select" id="type_import" name="type_import" required>
+                                <option value="">-- Sélectionner --</option>
+                                {% for value, label in types_import %}
+                                    <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Classe -->
+                        <div class="mb-3">
+                            <label for="classe" class="form-label">
+                                <i class="fas fa-school"></i> Classe
+                                <span class="text-danger">*</span>
+                            </label>
+                            <select class="form-select" id="classe" name="classe" required>
+                                <option value="">-- Sélectionner une classe --</option>
+                                {% for classe in classes %}
+                                    <option value="{{ classe.id }}">
+                                        {{ classe.nom }} - {{ classe.get_niveau_display }} ({{ classe.annee_scolaire }})
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Matière -->
+                        <div class="mb-3">
+                            <label for="matiere" class="form-label">
+                                <i class="fas fa-book"></i> Matière
+                                <span class="text-danger">*</span>
+                            </label>
+                            <select class="form-select" id="matiere" name="matiere" required disabled>
+                                <option value="">-- Sélectionner d'abord une classe --</option>
+                            </select>
+                        </div>
+
+                        <!-- Évaluation (conditionnel) -->
+                        <div class="mb-3" id="evaluationGroup" style="display: none;">
+                            <label for="evaluation" class="form-label">
+                                <i class="fas fa-clipboard-list"></i> Évaluation
+                                <span class="text-danger">*</span>
+                            </label>
+                            <select class="form-select" id="evaluation" name="evaluation" disabled>
+                                <option value="">-- Sélectionner d'abord une matière --</option>
+                            </select>
+                        </div>
+
+                        <!-- Période -->
+                        <div class="mb-3">
+                            <label for="periode" class="form-label">
+                                <i class="fas fa-calendar"></i> Période
+                                <span class="text-danger">*</span>
+                            </label>
+                            <select class="form-select" id="periode" name="periode" required>
+                                <option value="">-- Sélectionner --</option>
+                                <optgroup label="Périodes Mensuelles">
+                                    {% for value, label in periodes_mensuelles %}
+                                        <option value="{{ value }}">{{ label }}</option>
+                                    {% endfor %}
+                                </optgroup>
+                                <optgroup label="Périodes Trimestrielles">
+                                    {% for value, label in periodes_trimestrielles %}
+                                        <option value="{{ value }}">{{ label }}</option>
+                                    {% endfor %}
+                                </optgroup>
+                                <optgroup label="Périodes Semestrielles">
+                                    {% for value, label in periodes_semestrielles %}
+                                        <option value="{{ value }}">{{ label }}</option>
+                                    {% endfor %}
+                                </optgroup>
+                            </select>
+                        </div>
+
+                        <!-- Année scolaire -->
+                        <div class="mb-3">
+                            <label for="annee_scolaire" class="form-label">
+                                <i class="fas fa-calendar-alt"></i> Année Scolaire
+                                <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" 
+                                   class="form-control" 
+                                   id="annee_scolaire" 
+                                   name="annee_scolaire" 
+                                   placeholder="2024-2025"
+                                   pattern="\d{4}-\d{4}"
+                                   required>
+                        </div>
+
+                        <!-- Fichier -->
+                        <div class="mb-3">
+                            <label for="fichier" class="form-label">
+                                <i class="fas fa-file-excel"></i> Fichier Excel/CSV
+                                <span class="text-danger">*</span>
+                            </label>
+                            <input type="file" 
+                                   class="form-control" 
+                                   id="fichier" 
+                                   name="fichier" 
+                                   accept=".xlsx,.xls,.csv"
+                                   required>
+                            <small class="text-muted">
+                                Formats acceptés: Excel (.xlsx, .xls) ou CSV (.csv)
+                            </small>
+                        </div>
+
+                        <!-- Boutons -->
+                        <div class="d-flex justify-content-between">
+                            <button type="button" class="btn btn-success" id="btnTemplate">
+                                <i class="fas fa-download"></i>
+                                Télécharger le Template
+                            </button>
+                            <div>
+                                <a href="{% url 'notes:consulter_notes' %}" class="btn btn-secondary">
+                                    <i class="fas fa-times"></i>
+                                    Annuler
+                                </a>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-upload"></i>
+                                    Importer les Notes
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm mb-3">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-info-circle"></i>
+                        Instructions
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <ol class="mb-0">
+                        <li class="mb-2">
+                            <strong>Sélectionnez le type de notes</strong> à importer
+                        </li>
+                        <li class="mb-2">
+                            <strong>Choisissez la classe et la matière</strong>
+                        </li>
+                        <li class="mb-2">
+                            <strong>Téléchargez le fichier template</strong> avec la liste des élèves
+                        </li>
+                        <li class="mb-2">
+                            <strong>Remplissez les notes</strong> dans le fichier Excel
+                        </li>
+                        <li class="mb-2">
+                            <strong>Uploadez le fichier</strong> complété
+                        </li>
+                    </ol>
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-header bg-warning">
+                    <h5 class="mb-0">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Format du Fichier
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-2"><strong>Colonnes requises:</strong></p>
+                    <ul class="mb-3">
+                        <li><code>Matricule</code> - Matricule de l'élève</li>
+                        <li><code>Prénom</code> - Prénom de l'élève</li>
+                        <li><code>Nom</code> - Nom de l'élève</li>
+                        <li><code>Note</code> - Note sur 20 (vide si absent)</li>
+                        <li><code>Absent</code> - OUI ou NON</li>
+                    </ul>
+                    
+                    <div class="alert alert-warning mb-0">
+                        <small>
+                            <strong>Attention:</strong> Ne modifiez pas les colonnes Matricule, Prénom et Nom.
+                            Seules les colonnes Note et Absent doivent être remplies.
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .card {
+        border: none;
+        border-radius: 10px;
+    }
+    
+    .card-header {
+        border-radius: 10px 10px 0 0 !important;
+    }
+    
+    .form-label {
+        font-weight: 600;
+        color: #495057;
+    }
+    
+    .btn {
+        border-radius: 5px;
+    }
+    
+    .alert {
+        border-radius: 5px;
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const typeImportSelect = document.getElementById('type_import');
+    const classeSelect = document.getElementById('classe');
+    const matiereSelect = document.getElementById('matiere');
+    const evaluationSelect = document.getElementById('evaluation');
+    const evaluationGroup = document.getElementById('evaluationGroup');
+    const periodeSelect = document.getElementById('periode');
+    const btnTemplate = document.getElementById('btnTemplate');
+
+    // Stocker les options de période originales
+    const periodesOriginales = periodeSelect.innerHTML;
+
+    // Filtrer les périodes selon le type d'import
+    function filtrerPeriodes(typeImport) {
+        periodeSelect.innerHTML = '<option value="">-- Sélectionner --</option>';
+        
+        if (typeImport === 'MENSUELLE') {
+            // Seulement les mois
+            periodeSelect.innerHTML += `
+                <optgroup label="Périodes Mensuelles">
+                    <option value="OCTOBRE">Octobre</option>
+                    <option value="NOVEMBRE">Novembre</option>
+                    <option value="DECEMBRE">Décembre</option>
+                    <option value="JANVIER">Janvier</option>
+                    <option value="FEVRIER">Février</option>
+                    <option value="MARS">Mars</option>
+                    <option value="AVRIL">Avril</option>
+                    <option value="MAI">Mai</option>
+                </optgroup>
+            `;
+        } else if (typeImport === 'COMPOSITION') {
+            // Trimestres et Semestres
+            periodeSelect.innerHTML += `
+                <optgroup label="Périodes Trimestrielles">
+                    <option value="TRIMESTRE_1">Trimestre 1</option>
+                    <option value="TRIMESTRE_2">Trimestre 2</option>
+                    <option value="TRIMESTRE_3">Trimestre 3</option>
+                </optgroup>
+                <optgroup label="Périodes Semestrielles">
+                    <option value="SEMESTRE_1">Semestre 1</option>
+                    <option value="SEMESTRE_2">Semestre 2</option>
+                </optgroup>
+            `;
+        } else if (typeImport === 'EVALUATION') {
+            // Toutes les périodes
+            periodeSelect.innerHTML = periodesOriginales;
+        } else {
+            // Par défaut: toutes les périodes
+            periodeSelect.innerHTML = periodesOriginales;
+        }
+    }
+
+    // Afficher/masquer le champ évaluation et filtrer périodes selon le type
+    typeImportSelect.addEventListener('change', function() {
+        // Filtrer les périodes
+        filtrerPeriodes(this.value);
+        
+        if (this.value === 'EVALUATION') {
+            evaluationGroup.style.display = 'block';
+            evaluationSelect.required = true;
+        } else {
+            evaluationGroup.style.display = 'none';
+            evaluationSelect.required = false;
+        }
+    });
+
+    // Charger les matières quand une classe est sélectionnée
+    classeSelect.addEventListener('change', function() {
+        const classeId = this.value;
+        
+        if (!classeId) {
+            matiereSelect.innerHTML = '<option value="">-- Sélectionner d\'abord une classe --</option>';
+            matiereSelect.disabled = true;
+            return;
+        }
+        
+        // Charger les matières via AJAX
+        fetch(`/notes/api/matieres-classe/?classe_id=${classeId}`)
+            .then(response => response.json())
+            .then(data => {
+                matiereSelect.innerHTML = '<option value="">-- Sélectionner une matière --</option>';
+                data.matieres.forEach(matiere => {
+                    const option = document.createElement('option');
+                    option.value = matiere.id;
+                    option.textContent = `${matiere.nom} (${matiere.code})`;
+                    matiereSelect.appendChild(option);
+                });
+                matiereSelect.disabled = false;
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                alert('Erreur lors du chargement des matières');
+            });
+    });
+
+    // Charger les évaluations quand une matière est sélectionnée
+    matiereSelect.addEventListener('change', function() {
+        const matiereId = this.value;
+        
+        if (!matiereId || typeImportSelect.value !== 'EVALUATION') {
+            return;
+        }
+        
+        // Charger les évaluations via AJAX
+        fetch(`/notes/api/evaluations-matiere/?matiere_id=${matiereId}`)
+            .then(response => response.json())
+            .then(data => {
+                evaluationSelect.innerHTML = '<option value="">-- Sélectionner une évaluation --</option>';
+                data.evaluations.forEach(evaluation => {
+                    const option = document.createElement('option');
+                    option.value = evaluation.id;
+                    option.textContent = `${evaluation.titre} - ${evaluation.periode}`;
+                    evaluationSelect.appendChild(option);
+                });
+                evaluationSelect.disabled = false;
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                alert('Erreur lors du chargement des évaluations');
+            });
+    });
+
+    // Télécharger le template
+    btnTemplate.addEventListener('click', function() {
+        const classeId = classeSelect.value;
+        const matiereId = matiereSelect.value;
+        const typeImport = typeImportSelect.value;
+        
+        if (!classeId || !matiereId || !typeImport) {
+            alert('Veuillez sélectionner le type, la classe et la matière avant de télécharger le template');
+            return;
+        }
+        
+        const url = `/notes/template-import/?classe=${classeId}&matiere=${matiereId}&type_import=${typeImport}`;
+        window.location.href = url;
+    });
+
+    // Année scolaire automatique (année en cours)
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const anneeInput = document.getElementById('annee_scolaire');
+    
+    if (month >= 8) { // Septembre ou après
+        anneeInput.value = `${year}-${year + 1}`;
+    } else {
+        anneeInput.value = `${year - 1}-${year}`;
+    }
+});
+</script>
+{% endblock %}

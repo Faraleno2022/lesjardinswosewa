@@ -1,0 +1,377 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Nouvel Abonnement Bus{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        max-width: 900px;
+        margin: 2rem auto;
+    }
+    
+    .form-header {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 10px;
+        margin-bottom: 2rem;
+        text-align: center;
+    }
+    
+    .form-header h2 {
+        margin: 0;
+        font-size: 1.8rem;
+        font-weight: 700;
+    }
+    
+    .form-header p {
+        margin: 0.5rem 0 0 0;
+        opacity: 0.9;
+    }
+    
+    .tarif-card {
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        border-left: 4px solid #007bff;
+        padding: 1.5rem;
+        border-radius: 10px;
+        margin-bottom: 2rem;
+    }
+    
+    .tarif-card h4 {
+        color: #0056b3;
+        margin-bottom: 1rem;
+    }
+    
+    .tarif-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid rgba(0,0,0,0.1);
+    }
+    
+    .tarif-item:last-child {
+        border-bottom: none;
+    }
+    
+    .tarif-label {
+        font-weight: 600;
+        color: #333;
+    }
+    
+    .tarif-montant {
+        color: #007bff;
+        font-weight: 700;
+    }
+    
+    .form-group label {
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 0.5rem;
+    }
+    
+    .form-control, .form-select {
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 0.75rem;
+        transition: all 0.3s;
+    }
+    
+    .form-control:focus, .form-select:focus {
+        border-color: #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+    
+    .btn-save {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        border: none;
+        padding: 0.75rem 2rem;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.3s;
+    }
+    
+    .btn-save:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+        color: white;
+    }
+    
+    .btn-cancel {
+        background: #6c757d;
+        color: white;
+        border: none;
+        padding: 0.75rem 2rem;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.3s;
+    }
+    
+    .btn-cancel:hover {
+        background: #5a6268;
+        color: white;
+    }
+    
+    .info-box {
+        background: #d1ecf1;
+        border-left: 4px solid #0c5460;
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+    }
+    
+    .info-box i {
+        color: #0c5460;
+        margin-right: 0.5rem;
+    }
+    
+    .select2-container {
+        width: 100% !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="form-card">
+        <div class="form-header">
+            <h2><i class="fas fa-bus"></i> Nouvel Abonnement Bus Scolaire</h2>
+            <p>Abonner un élève au transport scolaire</p>
+        </div>
+        
+        <div class="info-box">
+            <i class="fas fa-info-circle"></i>
+            <strong>Information:</strong> L'abonnement démarre aujourd'hui et le montant est calculé automatiquement selon la durée choisie.
+        </div>
+        
+        {% if type_bus %}
+        <div class="tarif-card">
+            <h4><i class="fas fa-money-bill-wave"></i> Tarifs Bus Scolaire</h4>
+            <div class="tarif-item">
+                <span class="tarif-label">Mensuel (1 mois)</span>
+                <span class="tarif-montant">{{ type_bus.tarif_mensuel|floatformat:0 }} GNF</span>
+            </div>
+            <div class="tarif-item">
+                <span class="tarif-label">Trimestriel (3 mois) - 10% réduction</span>
+                <span class="tarif-montant">{{ type_bus.tarif_trimestriel|floatformat:0 }} GNF</span>
+            </div>
+            <div class="tarif-item">
+                <span class="tarif-label">Annuel (1 an) - 25% réduction</span>
+                <span class="tarif-montant">{{ type_bus.tarif_annuel|floatformat:0 }} GNF</span>
+            </div>
+        </div>
+        {% endif %}
+        
+        <form method="post" id="creerAbonnementForm">
+            {% csrf_token %}
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-group mb-3">
+                        <label for="eleve">
+                            <i class="fas fa-user-graduate"></i> Élève *
+                        </label>
+                        <select name="eleve" id="eleve" class="form-select" required>
+                            <option value="">-- Sélectionner un élève --</option>
+                            {% for eleve in eleves %}
+                            <option value="{{ eleve.id }}">
+                                {{ eleve.matricule }} - {{ eleve.nom_complet }} ({{ eleve.classe }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="form-group mb-3">
+                        <label for="itineraire">
+                            <i class="fas fa-route"></i> Itinéraire *
+                        </label>
+                        <select name="itineraire" id="itineraire" class="form-select" required>
+                            <option value="">-- Sélectionner un itinéraire --</option>
+                            {% for itin in itineraires %}
+                            <option value="{{ itin.id }}" 
+                                    data-depart="{{ itin.heure_depart_matin }}"
+                                    data-retour="{{ itin.heure_retour_soir }}"
+                                    data-capacite="{{ itin.capacite }}"
+                                    data-abonnes="{{ itin.nombre_abonnes }}">
+                                {{ itin.nom }} ({{ itin.nombre_abonnes }}/{{ itin.capacite }} places)
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted" id="itineraire-info"></small>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-group mb-3">
+                        <label for="duree">
+                            <i class="fas fa-calendar-alt"></i> Durée *
+                        </label>
+                        <select name="duree" id="duree" class="form-select" required>
+                            <option value="">-- Choisir la durée --</option>
+                            <option value="MENSUEL">Mensuel (1 mois)</option>
+                            <option value="TRIMESTRIEL">Trimestriel (3 mois)</option>
+                            <option value="ANNUEL">Annuel (1 an)</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="form-group mb-3">
+                        <label for="contact_urgence">
+                            <i class="fas fa-phone"></i> Contact d'urgence *
+                        </label>
+                        <input type="tel" name="contact_urgence" id="contact_urgence" 
+                               class="form-control" placeholder="+224 XXX XXX XXX" required>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="form-group mb-3">
+                        <label for="point_montee">
+                            <i class="fas fa-map-marker-alt"></i> Point de montée *
+                        </label>
+                        <input type="text" name="point_montee" id="point_montee" 
+                               class="form-control" placeholder="Ex: Carrefour Sangoyah" required>
+                        <small class="text-muted">Lieu précis où l'élève monte dans le bus</small>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <div class="form-group mb-3">
+                        <label for="point_descente">
+                            <i class="fas fa-map-marker-alt"></i> Point de descente *
+                        </label>
+                        <input type="text" name="point_descente" id="point_descente" 
+                               class="form-control" placeholder="Ex: École" required>
+                        <small class="text-muted">Lieu précis où l'élève descend du bus</small>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-group mb-3">
+                <label for="observations">
+                    <i class="fas fa-comment"></i> Observations
+                </label>
+                <textarea name="observations" id="observations" class="form-control" 
+                          rows="3" placeholder="Remarques particulières..."></textarea>
+            </div>
+            
+            <div id="montant-preview" class="alert alert-info" style="display: none;">
+                <strong><i class="fas fa-calculator"></i> Montant à payer:</strong>
+                <span id="montant-value" class="float-end fw-bold fs-5"></span>
+            </div>
+            
+            <hr class="my-4">
+            
+            <div class="d-flex justify-content-between">
+                <a href="{% url 'abonnements:liste_bus' %}" class="btn btn-cancel">
+                    <i class="fas fa-times"></i> Annuler
+                </a>
+                <button type="submit" class="btn btn-save">
+                    <i class="fas fa-save"></i> Créer l'abonnement
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const itineraireSelect = document.getElementById('itineraire');
+    const dureeSelect = document.getElementById('duree');
+    const montantPreview = document.getElementById('montant-preview');
+    const montantValue = document.getElementById('montant-value');
+    const itineraireInfo = document.getElementById('itineraire-info');
+    
+    // Tarifs
+    const tarifs = {
+        'MENSUEL': {{ type_bus.tarif_mensuel|default:0 }},
+        'TRIMESTRIEL': {{ type_bus.tarif_trimestriel|default:0 }},
+        'ANNUEL': {{ type_bus.tarif_annuel|default:0 }}
+    };
+    
+    // Afficher info itinéraire
+    itineraireSelect.addEventListener('change', function() {
+        const option = this.options[this.selectedIndex];
+        if (option.value) {
+            const depart = option.dataset.depart;
+            const retour = option.dataset.retour;
+            const capacite = option.dataset.capacite;
+            const abonnes = option.dataset.abonnes;
+            
+            itineraireInfo.innerHTML = `
+                <i class="fas fa-clock"></i> Départ: ${depart} - Retour: ${retour} | 
+                <i class="fas fa-users"></i> ${abonnes}/${capacite} places occupées
+            `;
+            
+            // Vérifier capacité
+            if (parseInt(abonnes) >= parseInt(capacite)) {
+                itineraireInfo.innerHTML += ' <span class="text-danger">⚠️ Complet!</span>';
+            }
+        } else {
+            itineraireInfo.innerHTML = '';
+        }
+    });
+    
+    // Calculer et afficher le montant
+    function updateMontant() {
+        const duree = dureeSelect.value;
+        if (duree && tarifs[duree]) {
+            const montant = tarifs[duree];
+            montantValue.textContent = montant.toLocaleString('fr-FR') + ' GNF';
+            montantPreview.style.display = 'block';
+        } else {
+            montantPreview.style.display = 'none';
+        }
+    }
+    
+    dureeSelect.addEventListener('change', updateMontant);
+    
+    // Validation avant soumission
+    document.getElementById('creerAbonnementForm').addEventListener('submit', function(e) {
+        const eleve = document.getElementById('eleve');
+        const itineraire = document.getElementById('itineraire');
+        const duree = document.getElementById('duree');
+        
+        if (!eleve.value || !itineraire.value || !duree.value) {
+            e.preventDefault();
+            alert('Veuillez remplir tous les champs obligatoires');
+            return false;
+        }
+        
+        // Vérifier capacité
+        const option = itineraire.options[itineraire.selectedIndex];
+        const capacite = parseInt(option.dataset.capacite);
+        const abonnes = parseInt(option.dataset.abonnes);
+        
+        if (abonnes >= capacite) {
+            e.preventDefault();
+            alert('⚠️ Cet itinéraire est complet! Veuillez choisir un autre itinéraire.');
+            return false;
+        }
+        
+        const eleveNom = eleve.options[eleve.selectedIndex].text;
+        const itineraireNom = itineraire.options[itineraire.selectedIndex].text;
+        const montant = tarifs[duree.value];
+        
+        if (!confirm(`Confirmer l'abonnement bus?\n\nÉlève: ${eleveNom}\nItinéraire: ${itineraireNom}\nDurée: ${duree.value}\nMontant: ${montant.toLocaleString('fr-FR')} GNF`)) {
+            e.preventDefault();
+            return false;
+        }
+    });
+});
+</script>
+{% endblock %}

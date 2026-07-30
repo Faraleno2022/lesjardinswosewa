@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <!-- En-tête -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="fas fa-undo text-success"></i> {{ titre_page }}</h2>
+                </div>
+                <div>
+                    <a href="{% url 'depenses:liste_emprunts' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Retour
+                    </a>
+                </div>
+            </div>
+
+            <!-- Informations de l'emprunt -->
+            <div class="card mb-3">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-info-circle"></i> Informations de l'Emprunt</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>N° Emprunt:</strong> {{ emprunt.numero_emprunt }}</p>
+                            <p><strong>Livre:</strong> {{ emprunt.livre.titre }}</p>
+                            <p><strong>Auteur:</strong> {{ emprunt.livre.auteur }}</p>
+                            <p><strong>Élève:</strong> {{ emprunt.eleve }}</p>
+                            <p><strong>Classe:</strong> {{ emprunt.eleve.classe.nom|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Date d'emprunt:</strong> {{ emprunt.date_emprunt|date:"d/m/Y" }}</p>
+                            <p><strong>Date de retour prévue:</strong> {{ emprunt.date_retour_prevue|date:"d/m/Y" }}</p>
+                            <p><strong>État à l'emprunt:</strong> {{ emprunt.etat_livre_emprunt|default:"-" }}</p>
+                            {% if emprunt.est_en_retard %}
+                            <div class="alert alert-danger mb-0">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <strong>Retard:</strong> {{ emprunt.jours_restants }} jour(s)
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Formulaire de retour -->
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-check"></i> Enregistrer le Retour</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="mb-3">
+                            <label class="form-label">État du livre au retour *</label>
+                            <select name="etat_retour" class="form-control" required>
+                                <option value="NEUF">Neuf</option>
+                                <option value="TRES_BON">Très bon état</option>
+                                <option value="BON" selected>Bon état</option>
+                                <option value="MOYEN">État moyen</option>
+                                <option value="MAUVAIS">Mauvais état</option>
+                                <option value="HORS_SERVICE">Hors service</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Observations</label>
+                            <textarea name="observations" class="form-control" rows="3" 
+                                      placeholder="Remarques sur l'état du livre, dommages éventuels..."></textarea>
+                        </div>
+
+                        {% if emprunt.est_en_retard %}
+                        <div class="alert alert-warning">
+                            <h6><i class="fas fa-exclamation-triangle"></i> Pénalité de Retard</h6>
+                            <p class="mb-0">
+                                Le livre est en retard de <strong>{{ emprunt.jours_restants }} jour(s)</strong>.<br>
+                                Une pénalité sera automatiquement calculée et appliquée.
+                            </p>
+                        </div>
+                        {% endif %}
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'depenses:liste_emprunts' %}" class="btn btn-secondary">
+                                <i class="fas fa-times"></i> Annuler
+                            </a>
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="fas fa-check"></i> Confirmer le Retour
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

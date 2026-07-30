@@ -1,0 +1,132 @@
+{% extends 'base.html' %}
+{% block title %}Notes de suivi (bonus){% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h2 class="mb-0"><i class="fas fa-star text-warning me-2"></i>Notes de suivi (bonus)</h2>
+        <div class="d-flex align-items-center gap-2">
+            <form method="post" action="{% url 'notes:toggle_bonus_suivi' %}" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                {% if bonus_actif %}
+                <button type="submit" class="btn btn-success"><i class="fas fa-toggle-on me-1"></i>Bonus ACTIVÉ — cliquer pour désactiver</button>
+                {% else %}
+                <button type="submit" class="btn btn-outline-danger"><i class="fas fa-toggle-off me-1"></i>Bonus DÉSACTIVÉ — cliquer pour activer</button>
+                {% endif %}
+            </form>
+            <a href="{% url 'notes:tableau_bord' %}" class="btn btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i>Retour Notes</a>
+        </div>
+    </div>
+
+    {% if bonus_actif %}
+    <div class="alert alert-info py-2 small">
+        <i class="fas fa-info-circle me-1"></i>
+        Le bonus est <strong>activé</strong> pour votre école. Les notes de suivi (cours, orale, écrite, devoirs, participation) ajoutent un
+        <strong>bonus plafonné à +{{ bonus_max }} points</strong> sur la note mensuelle de la matière.
+        Un élève sans note de suivi n'est pas pénalisé (bonus 0). Le bonus =
+        moyenne des notes de suivi ÷ 20 × {{ bonus_max }}.
+    </div>
+    {% else %}
+    <div class="alert alert-warning py-2 small">
+        <i class="fas fa-exclamation-triangle me-1"></i>
+        Le bonus est <strong>désactivé</strong> : vous pouvez saisir les notes de suivi, mais elles n'affecteront
+        les moyennes qu'une fois le bonus activé (bouton vert ci-dessus).
+    </div>
+    {% endif %}
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">Classe</label>
+                    <select name="classe_id" class="form-select" onchange="this.form.submit()">
+                        <option value="">— Choisir —</option>
+                        {% for c in classes %}
+                        <option value="{{ c.id }}" {% if classe_id == c.id|stringformat:"s" %}selected{% endif %}>{{ c.nom }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Matière</label>
+                    <select name="matiere_id" class="form-select" onchange="this.form.submit()" {% if not matieres %}disabled{% endif %}>
+                        <option value="">— Choisir —</option>
+                        {% for m in matieres %}
+                        <option value="{{ m.id }}" {% if matiere_id == m.id|stringformat:"s" %}selected{% endif %}>{{ m.nom }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Mois</label>
+                    <select name="mois" class="form-select" onchange="this.form.submit()">
+                        <option value="">— Choisir —</option>
+                        {% for val, lib in mois_choices %}
+                        <option value="{{ val }}" {% if mois == val %}selected{% endif %}>{{ lib }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Type de note</label>
+                    <select name="type_note" class="form-select" onchange="this.form.submit()">
+                        {% for val, lib in type_choices %}
+                        <option value="{{ val }}" {% if type_note == val %}selected{% endif %}>{{ lib }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label" title="Numéro d'interrogation/devoir dans le mois">N°</label>
+                    <select name="numero" class="form-select" onchange="this.form.submit()">
+                        {% for n in numeros %}
+                        <option value="{{ n }}" {% if numero == n %}selected{% endif %}>{{ n }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if classe and matiere and mois %}
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="classe_id" value="{{ classe.id }}">
+        <input type="hidden" name="matiere_id" value="{{ matiere.id }}">
+        <input type="hidden" name="mois" value="{{ mois }}">
+        <input type="hidden" name="type_note" value="{{ type_note }}">
+        <div class="card">
+            <div class="card-header">
+                <strong>{{ classe.nom }} — {{ matiere.nom }} — {{ mois }}</strong> —
+                {% for v,l in type_choices %}{% if v == type_note %}{{ l }}{% endif %}{% endfor %} n°{{ numero }}
+                — {{ lignes|length }} élève(s)
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr><th>N°</th><th>Élève</th><th style="width:140px">Note /20</th><th style="width:160px">Bonus actuel (mois)</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for l in lignes %}
+                        <tr>
+                            <td>{{ forloop.counter }}</td>
+                            <td>{{ l.eleve.prenom }} <strong>{{ l.eleve.nom }}</strong></td>
+                            <td><input type="number" step="0.25" min="0" max="20" name="note_{{ l.eleve.id }}" value="{{ l.note }}" class="form-control form-control-sm" placeholder="—"></td>
+                            <td>
+                                {% if l.bonus %}<span class="badge bg-success">+{{ l.bonus }}</span>{% else %}<span class="text-muted">+0</span>{% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-center text-muted py-3">Aucun élève trouvé pour cette classe.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer text-end">
+                <small class="text-muted me-3">Laisser vide pour effacer une note. Le bonus se recalcule après enregistrement.</small>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Enregistrer</button>
+            </div>
+        </div>
+    </form>
+    {% else %}
+    <div class="alert alert-secondary">Choisissez une classe, une matière et un mois pour saisir les notes de suivi.</div>
+    {% endif %}
+</div>
+{% endblock %}

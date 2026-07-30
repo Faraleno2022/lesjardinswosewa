@@ -1,0 +1,266 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>
+                    <i class="fas fa-user text-primary"></i>
+                    {{ titre_page }}
+                </h1>
+                <a href="{% url 'administration:users_management' %}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Retour à la liste
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <!-- Informations utilisateur -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-id-card"></i> Informations personnelles</h5>
+                </div>
+                <div class="card-body">
+                    <div class="text-center mb-3">
+                        {% if user_detail.is_superuser %}
+                            <i class="fas fa-crown fa-3x text-warning"></i>
+                        {% elif user_detail.is_staff %}
+                            <i class="fas fa-user-shield fa-3x text-info"></i>
+                        {% else %}
+                            <i class="fas fa-user fa-3x text-secondary"></i>
+                        {% endif %}
+                    </div>
+                    
+                    <table class="table table-borderless">
+                        <tr>
+                            <td><strong>Nom d'utilisateur:</strong></td>
+                            <td>{{ user_detail.username }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Nom complet:</strong></td>
+                            <td>{{ user_detail.get_full_name|default:"-" }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Email:</strong></td>
+                            <td>{{ user_detail.email|default:"-" }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Statut:</strong></td>
+                            <td>
+                                {% if user_detail.is_active %}
+                                    <span class="badge bg-success">Actif</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Inactif</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Type:</strong></td>
+                            <td>
+                                {% if user_detail.is_superuser %}
+                                    <span class="badge bg-warning">SUPERUSER</span>
+                                {% elif user_detail.is_staff %}
+                                    <span class="badge bg-primary">STAFF</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">USER</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Date d'inscription:</strong></td>
+                            <td>{{ user_detail.date_joined|date:"d/m/Y H:i" }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Dernière connexion:</strong></td>
+                            <td>
+                                {% if user_detail.last_login %}
+                                    {{ user_detail.last_login|date:"d/m/Y H:i" }}
+                                {% else %}
+                                    <span class="text-muted">Jamais</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Profil utilisateur -->
+            {% if user_detail.profil %}
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5><i class="fas fa-briefcase"></i> Profil professionnel</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-borderless">
+                        <tr>
+                            <td><strong>Rôle:</strong></td>
+                            <td>
+                                <span class="badge bg-info">{{ user_detail.profil.role }}</span>
+                            </td>
+                        </tr>
+                        {% if user_detail.profil.ecole %}
+                        <tr>
+                            <td><strong>École:</strong></td>
+                            <td>{{ user_detail.profil.ecole.nom }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if user_detail.profil.telephone %}
+                        <tr>
+                            <td><strong>Téléphone:</strong></td>
+                            <td>{{ user_detail.profil.telephone }}</td>
+                        </tr>
+                        {% endif %}
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Statistiques et activité -->
+        <div class="col-md-8">
+            <!-- Statistiques -->
+            {% if user_stats %}
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5><i class="fas fa-chart-bar"></i> Statistiques</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-4">
+                            <div class="mb-2">
+                                <i class="fas fa-school fa-2x text-primary"></i>
+                            </div>
+                            <h4>{{ user_stats.ecole.nom }}</h4>
+                            <small class="text-muted">École assignée</small>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-2">
+                                <i class="fas fa-user-graduate fa-2x text-info"></i>
+                            </div>
+                            <h4>{{ user_stats.eleves_ecole }}</h4>
+                            <small class="text-muted">Élèves dans l'école</small>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-2">
+                                <i class="fas fa-money-bill fa-2x text-success"></i>
+                            </div>
+                            <h4>{{ user_stats.paiements_traites }}</h4>
+                            <small class="text-muted">Paiements ce mois</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Activité récente -->
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-history"></i> Activité récente</h5>
+                </div>
+                <div class="card-body">
+                    {% if user_logs %}
+                    <div style="max-height: 400px; overflow-y: auto;">
+                        {% for log in user_logs %}
+                        <div class="d-flex justify-content-between align-items-start mb-3 p-3 bg-light rounded">
+                            <div class="flex-grow-1">
+                                <div class="d-flex align-items-center mb-1">
+                                    {% if log.action == 'DELETE' %}
+                                        <span class="badge bg-danger me-2">{{ log.get_action_display }}</span>
+                                    {% elif log.action == 'ERROR' %}
+                                        <span class="badge bg-warning me-2">{{ log.get_action_display }}</span>
+                                    {% elif log.action == 'LOGIN' %}
+                                        <span class="badge bg-success me-2">{{ log.get_action_display }}</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary me-2">{{ log.get_action_display }}</span>
+                                    {% endif %}
+                                    <small class="text-muted">{{ log.timestamp|date:"d/m/Y H:i" }}</small>
+                                </div>
+                                <div>{{ log.description }}</div>
+                                {% if log.ip_address %}
+                                <small class="text-muted">IP: {{ log.ip_address }}</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-history fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">Aucune activité récente</h5>
+                        <p class="text-muted">Cet utilisateur n'a pas d'activité enregistrée récemment.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Actions administratives -->
+    {% if user.is_superuser %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5><i class="fas fa-tools"></i> Actions administratives</h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>Attention:</strong> Ces actions sont réservées aux super-administrateurs et peuvent avoir des conséquences importantes.
+                    </div>
+                    
+                    <div class="d-flex flex-wrap gap-2" role="group">
+                        <form method="post" action="{% url 'administration:user_toggle_active' user_detail.id %}" onsubmit="return confirm('Confirmer le changement d\'activation de cet utilisateur ?');">
+                            {% csrf_token %}
+                            {% if user_detail.is_active %}
+                            <button class="btn btn-outline-danger">
+                                <i class="fas fa-user-slash"></i> Désactiver l'utilisateur
+                            </button>
+                            {% else %}
+                            <button class="btn btn-outline-success">
+                                <i class="fas fa-user-check"></i> Activer l'utilisateur
+                            </button>
+                            {% endif %}
+                        </form>
+
+                        <form method="post" action="{% url 'administration:user_toggle_staff' user_detail.id %}" onsubmit="return confirm('Basculer le statut STAFF de cet utilisateur ?');">
+                            {% csrf_token %}
+                            <button class="btn btn-outline-info">
+                                <i class="fas fa-user-shield"></i>
+                                {% if user_detail.is_staff %}Retirer STAFF{% else %}Rendre STAFF{% endif %}
+                            </button>
+                        </form>
+
+                        <form method="post" action="{% url 'administration:user_reset_password' user_detail.id %}" onsubmit="return confirm('Réinitialiser le mot de passe ? Un mot de passe temporaire sera affiché.');">
+                            {% csrf_token %}
+                            <button class="btn btn-outline-warning">
+                                <i class="fas fa-key"></i> Réinitialiser le mot de passe
+                            </button>
+                        </form>
+
+                        <form method="post" action="{% url 'administration:user_activate_and_validate' user_detail.id %}" onsubmit="return confirm('Activer cet utilisateur et valider ses écoles en attente ?');">
+                            {% csrf_token %}
+                            <button class="btn btn-outline-primary">
+                                <i class="fas fa-check-double"></i> Activer + Valider écoles
+                            </button>
+                        </form>
+
+                        {% if user_detail.profil and not user_detail.profil.is_validated %}
+                        <a class="btn btn-success" href="{% url 'utilisateurs:valider_compte' user_detail.id %}" target="_blank" rel="noopener">
+                            <i class="fas fa-badge-check"></i> Valider maintenant
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

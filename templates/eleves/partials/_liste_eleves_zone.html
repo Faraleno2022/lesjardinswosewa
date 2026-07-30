@@ -1,0 +1,98 @@
+{# Partial: zone complète = stats + résultats #}
+
+<!-- Export des élèves -->
+<div class="card mb-3">
+  <div class="card-header">
+    <h6 class="card-title mb-0"><i class="fas fa-download me-2"></i>Exporter les données</h6>
+  </div>
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label for="export-classe-select" class="form-label">Filtrer / Exporter par classe</label>
+        <select id="export-classe-select" class="form-select">
+          <option value="" {% if not selected_classe_id %}selected{% endif %}>Toutes les classes</option>
+          {% for c in classes %}
+            <option value="{{ c.id }}" {% if selected_classe_id and selected_classe_id == c.id|stringformat:'s' %}selected{% endif %}>{{ c.ecole.nom }} - {{ c.nom }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6 d-flex align-items-end">
+        <div class="btn-group" role="group">
+          <button type="button" id="btn-export-pdf" class="btn btn-outline-danger">
+            <i class="fas fa-file-pdf me-1"></i>PDF
+          </button>
+          <button type="button" id="btn-export-excel" class="btn btn-outline-success">
+            <i class="fas fa-file-excel me-1"></i>Excel
+          </button>
+          <button type="button" id="btn-cartes-scolaires" class="btn btn-outline-primary">
+            <i class="fas fa-id-card me-1"></i>Cartes Scolaires
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="row g-3 mt-2">
+      <div class="col-12">
+        <div class="btn-group" role="group">
+          <button type="button" id="btn-tickets-retrait-masse" class="btn btn-outline-info">
+            <i class="fas fa-ticket-alt me-1"></i>Tickets Retrait (Classe)
+          </button>
+          <button type="button" id="btn-tickets-bus-masse" class="btn btn-outline-warning">
+            <i class="fas fa-bus me-1"></i>Tickets Bus (Classe)
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Statistiques rapides -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card card-stats success">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h5 class="card-title text-muted">Total Élèves</h5>
+                        <h4 class="text-success mb-0">{{ stats.total_eleves }}</h4>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-users fa-2x text-success"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card card-stats">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h5 class="card-title text-muted">Élèves Actifs</h5>
+                        <h4 class="text-primary mb-0">{{ stats.eleves_actifs }}</h4>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-user-check fa-2x text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card card-stats warning">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h5 class="card-title text-muted">Suspendus</h5>
+                        <h4 class="text-warning mb-0">{{ stats.eleves_suspendus }}</h4>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="fas fa-user-times fa-2x text-warning"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# Résultats (table + pagination + modals) #}
+{% include 'eleves/partials/_liste_eleves_results.html' %}

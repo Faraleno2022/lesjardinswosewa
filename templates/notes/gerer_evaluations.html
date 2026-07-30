@@ -1,0 +1,223 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Gérer les Évaluations{% endblock %}
+
+{% block extra_css %}
+<style>
+    .selection-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        margin-bottom: 2rem;
+    }
+    
+    .evaluation-card {
+        border-left: 4px solid #007bff;
+        transition: all 0.3s ease;
+    }
+    
+    .evaluation-card:hover {
+        box-shadow: 0 4px 12px rgba(0, 123, 255, 0.2);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3"><i class="fas fa-clipboard-list me-2"></i>Gérer les Évaluations</h1>
+        <div>
+            <a href="{% url 'notes:saisir_notes' %}" class="btn btn-success me-2">
+                <i class="fas fa-edit me-2"></i>Saisir des notes
+            </a>
+            <a href="{% url 'notes:tableau_bord' %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Retour
+            </a>
+        </div>
+    </div>
+
+    <!-- Sélection de classe -->
+    <div class="selection-card">
+        <h4 class="mb-3"><i class="fas fa-school me-2"></i>1. Sélectionner une classe</h4>
+        {% if classes %}
+            <div class="row">
+                {% for classe in classes %}
+                    <div class="col-md-3 col-sm-6 mb-2">
+                        <a href="?classe_id={{ classe.id }}" 
+                           class="btn {% if classe_selectionnee and classe.id == classe_selectionnee.id %}btn-primary{% else %}btn-outline-primary{% endif %} w-100">
+                            <i class="fas fa-school me-2"></i>{{ classe.nom }}
+                            <br><small>{{ classe.get_niveau_display }}</small>
+                        </a>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Aucune classe disponible.
+            </div>
+        {% endif %}
+    </div>
+
+    {% if classe_selectionnee %}
+    <!-- Sélection de matière -->
+    <div class="selection-card">
+        <h4 class="mb-3"><i class="fas fa-book me-2"></i>2. Sélectionner une matière</h4>
+        {% if matieres %}
+            <div class="row">
+                {% for matiere in matieres %}
+                    <div class="col-md-3 col-sm-6 mb-2">
+                        <a href="?classe_id={{ classe_selectionnee.id }}&matiere_id={{ matiere.id }}" 
+                           class="btn {% if matiere_selectionnee and matiere.id == matiere_selectionnee.id %}btn-primary{% else %}btn-outline-primary{% endif %} w-100">
+                            <i class="fas fa-book me-2"></i>{{ matiere.nom }}
+                            <br><small>Coef: {{ matiere.coefficient }}</small>
+                        </a>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Aucune matière disponible. <a href="{% url 'notes:gerer_matieres' %}">Créer des matières</a>
+            </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if matiere_selectionnee %}
+    <!-- Liste des évaluations -->
+    <div class="selection-card">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h4 class="mb-0"><i class="fas fa-clipboard-list me-2"></i>Évaluations de {{ matiere_selectionnee.nom }}</h4>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalCreerEvaluation">
+                <i class="fas fa-plus me-2"></i>Créer une évaluation
+            </button>
+        </div>
+
+        {% if evaluations %}
+            <div class="row">
+                {% for evaluation in evaluations %}
+                    <div class="col-md-6 mb-3">
+                        <div class="card evaluation-card">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h5 class="card-title">{{ evaluation.titre }}</h5>
+                                        <p class="card-text">
+                                            <span class="badge bg-info">{{ evaluation.get_type_evaluation_display }}</span>
+                                            <span class="badge bg-secondary">{{ evaluation.get_periode_display }}</span>
+                                            <span class="badge bg-primary">Sur {{ evaluation.note_sur }}</span>
+                                            <span class="badge bg-success">Coef {{ evaluation.coefficient }}</span>
+                                        </p>
+                                        <p class="text-muted mb-0">
+                                            <i class="fas fa-calendar me-1"></i>{{ evaluation.date_evaluation|date:"d/m/Y" }}
+                                        </p>
+                                        {% if evaluation.description %}
+                                            <p class="mt-2 mb-0"><small>{{ evaluation.description }}</small></p>
+                                        {% endif %}
+                                    </div>
+                                    <div>
+                                        <a href="{% url 'notes:saisir_notes' %}?classe_id={{ classe_selectionnee.id }}&matiere_id={{ matiere_selectionnee.id }}&evaluation_id={{ evaluation.id }}" 
+                                           class="btn btn-sm btn-success" title="Saisir les notes">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                Aucune évaluation créée pour cette matière. Cliquez sur "Créer une évaluation" pour commencer.
+            </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal Créer Évaluation -->
+<div class="modal fade" id="modalCreerEvaluation" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="{% url 'notes:creer_evaluation' %}">
+                {% csrf_token %}
+                <input type="hidden" name="matiere_id" value="{{ matiere_selectionnee.id }}">
+                
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-plus me-2"></i>Créer une évaluation</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Titre <span class="text-danger">*</span></label>
+                        <input type="text" name="titre" class="form-control" required 
+                               placeholder="Ex: Devoir de Mathématiques N°1">
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Type <span class="text-danger">*</span></label>
+                            <select name="type_evaluation" class="form-select" required>
+                                <option value="">-- Choisir --</option>
+                                <option value="DEVOIR">Devoir</option>
+                                <option value="COMPOSITION">Composition</option>
+                                <option value="EXAMEN">Examen</option>
+                                <option value="CONTROLE">Contrôle</option>
+                                <option value="INTERROGATION">Interrogation</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Période <span class="text-danger">*</span></label>
+                            <select name="periode" class="form-select" required>
+                                <option value="">-- Choisir --</option>
+                                <option value="TRIMESTRE_1">Trimestre 1</option>
+                                <option value="TRIMESTRE_2">Trimestre 2</option>
+                                <option value="TRIMESTRE_3">Trimestre 3</option>
+                                <option value="SEMESTRE_1">Semestre 1</option>
+                                <option value="SEMESTRE_2">Semestre 2</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Date <span class="text-danger">*</span></label>
+                            <input type="date" name="date_evaluation" class="form-control" required>
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Note sur</label>
+                            <input type="number" name="note_sur" class="form-control" value="20" min="1" step="0.5">
+                        </div>
+                        
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Coefficient</label>
+                            <input type="number" name="coefficient" class="form-control" value="1" min="0.5" step="0.5">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea name="description" class="form-control" rows="2" 
+                                  placeholder="Description optionnelle..."></textarea>
+                    </div>
+                </div>
+                
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-2"></i>Créer l'évaluation
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12 d-flex justify-content-between align-items-center">
+            <h2><i class="fas fa-book-medical text-primary"></i> {{ titre_page }}</h2>
+            <a href="{% url 'depenses:catalogue_livres' %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Catalogue
+            </a>
+        </div>
+    </div>
+
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="row g-4">
+            <!-- Informations principales -->
+            <div class="col-lg-8">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header"><i class="fas fa-info-circle"></i> Informations principales</div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-8">
+                                <label class="form-label">Titre <span class="text-danger">*</span></label>
+                                <input type="text" name="titre" class="form-control" required value="{{ f.titre }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Code livre</label>
+                                <input type="text" name="code_livre" class="form-control" placeholder="Auto (LIV-0001)" value="{{ f.code_livre }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Auteur <span class="text-danger">*</span></label>
+                                <input type="text" name="auteur" class="form-control" required value="{{ f.auteur }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Catégorie <span class="text-danger">*</span></label>
+                                <select name="categorie" class="form-select" required>
+                                    <option value="">— Choisir —</option>
+                                    {% for cat in categories %}
+                                    <option value="{{ cat.id }}" {% if f.categorie == cat.id|stringformat:'s' %}selected{% endif %}>
+                                        {{ cat.nom }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text">
+                                    <a href="{% url 'depenses:gestion_categories_livres' %}">+ Gérer les catégories</a>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">ISBN</label>
+                                <input type="text" name="isbn" class="form-control" value="{{ f.isbn }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Éditeur</label>
+                                <input type="text" name="editeur" class="form-control" value="{{ f.editeur }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Langue</label>
+                                <input type="text" name="langue" class="form-control" value="{{ f.langue }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Année de publication</label>
+                                <input type="number" name="annee_publication" class="form-control" min="0" value="{{ f.annee_publication }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Nombre de pages</label>
+                                <input type="number" name="nombre_pages" class="form-control" min="0" value="{{ f.nombre_pages }}">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Résumé</label>
+                                <textarea name="resume" class="form-control" rows="2">{{ f.resume }}</textarea>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label">Mots-clés</label>
+                                <input type="text" name="mots_cles" class="form-control" placeholder="séparés par des virgules" value="{{ f.mots_cles }}">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gestion / exemplaires -->
+            <div class="col-lg-4">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header"><i class="fas fa-boxes"></i> Exemplaires & localisation</div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Emplacement (rayon/étagère)</label>
+                            <input type="text" name="emplacement" class="form-control" placeholder="Ex : Rayon A-3" value="{{ f.emplacement }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Nombre d'exemplaires</label>
+                            <input type="number" name="nombre_exemplaires" class="form-control" min="1" value="{{ f.nombre_exemplaires }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">État</label>
+                            <select name="etat" class="form-select">
+                                {% for val, lib in etats %}
+                                <option value="{{ val }}" {% if f.etat == val %}selected{% endif %}>{{ lib }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Prix d'acquisition (GNF)</label>
+                            <input type="number" name="prix_acquisition" class="form-control" min="0" value="{{ f.prix_acquisition }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Couverture</label>
+                            <input type="file" name="couverture" class="form-control" accept="image/*">
+                            {% if livre and livre.couverture %}
+                            <div class="form-text">Actuelle : {{ livre.couverture.name }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        <i class="fas fa-save"></i> {% if livre %}Enregistrer{% else %}Ajouter au catalogue{% endif %}
+                    </button>
+                    <a href="{% url 'depenses:catalogue_livres' %}" class="btn btn-outline-secondary">Annuler</a>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

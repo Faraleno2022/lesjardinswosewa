@@ -1,0 +1,237 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-user-check me-2"></i>{{ title }}
+                    </h5>
+                </div>
+                
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <!-- Informations du compte -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <h6 class="text-primary">
+                                    <i class="fas fa-user me-2"></i>Informations du compte
+                                </h6>
+                                <div class="bg-light p-3 rounded">
+                                    <p><strong>Nom d'utilisateur :</strong> {{ user_to_validate.username }}</p>
+                                    {% if user_to_validate.get_full_name %}
+                                    <p><strong>Nom complet :</strong> {{ user_to_validate.get_full_name }}</p>
+                                    {% endif %}
+                                    {% if user_to_validate.email %}
+                                    <p><strong>Email :</strong> 
+                                        <a href="mailto:{{ user_to_validate.email }}">{{ user_to_validate.email }}</a>
+                                    </p>
+                                    {% endif %}
+                                    <p><strong>Date d'inscription :</strong> {{ user_to_validate.date_joined|date:"d/m/Y H:i" }}</p>
+                                    <p><strong>Statut actuel :</strong> 
+                                        {% if not user_to_validate.is_active %}
+                                            <span class="badge bg-danger">Inactif</span>
+                                        {% else %}
+                                            <span class="badge bg-success">Actif</span>
+                                        {% endif %}
+                                    </p>
+                                </div>
+
+                        {% if ecole_associee %}
+                        <!-- Aperçu des classes de l'école -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h6 class="text-secondary">
+                                    <i class="fas fa-layer-group me-2"></i>Classes déclarées
+                                </h6>
+                                {% if ecole_associee.classes.all %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped align-middle">
+                                        <thead>
+                                            <tr>
+                                                <th>Nom</th>
+                                                <th>Niveau</th>
+                                                <th>Année</th>
+                                                <th class="text-end">Capacité</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for c in ecole_associee.classes.all %}
+                                            <tr>
+                                                <td>{{ c.nom }}</td>
+                                                <td>{{ c.get_niveau_display }}</td>
+                                                <td>{{ c.annee_scolaire }}</td>
+                                                <td class="text-end">{{ c.capacite_max }}</td>
+                                            </tr>
+                                            {% empty %}
+                                            <tr><td colspan="4" class="text-center text-muted">Aucune classe déclarée</td></tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Aperçu des grilles tarifaires -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h6 class="text-secondary">
+                                    <i class="fas fa-coins me-2"></i>Grilles tarifaires déclarées
+                                </h6>
+                                {% if ecole_associee.grilles_tarifaires.all %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped align-middle">
+                                        <thead>
+                                            <tr>
+                                                <th>Niveau</th>
+                                                <th>Année</th>
+                                                <th class="text-end">Inscription</th>
+                                                <th class="text-end">Réinscription</th>
+                                                <th class="text-end">T1</th>
+                                                <th class="text-end">T2</th>
+                                                <th class="text-end">T3</th>
+                                                <th class="text-end">Total scolarité</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for g in ecole_associee.grilles_tarifaires.all %}
+                                            <tr>
+                                                <td>{{ g.get_niveau_display }}</td>
+                                                <td>{{ g.annee_scolaire }}</td>
+                                                <td class="text-end">{{ g.frais_inscription|floatformat:0 }}</td>
+                                                <td class="text-end">{{ g.frais_reinscription|floatformat:0 }}</td>
+                                                <td class="text-end">{{ g.tranche_1|floatformat:0 }}</td>
+                                                <td class="text-end">{{ g.tranche_2|floatformat:0 }}</td>
+                                                <td class="text-end">{{ g.tranche_3|floatformat:0 }}</td>
+                                                <td class="text-end fw-bold">{{ g.total_scolarite|floatformat:0 }}</td>
+                                            </tr>
+                                            {% empty %}
+                                            <tr><td colspan="8" class="text-center text-muted">Aucune grille tarifaire déclarée</td></tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                            </div>
+                            
+                            <div class="col-md-6">
+                                {% if ecole_associee %}
+                                <h6 class="text-info">
+                                    <i class="fas fa-school me-2"></i>École associée
+                                </h6>
+                                <div class="bg-light p-3 rounded">
+                                    <p><strong>Nom :</strong> {{ ecole_associee.nom }}</p>
+                                    {% if ecole_associee.ville %}
+                                    <p><strong>Ville :</strong> {{ ecole_associee.ville }}</p>
+                                    {% endif %}
+                                    {% if ecole_associee.adresse %}
+                                    <p><strong>Adresse :</strong> {{ ecole_associee.adresse }}</p>
+                                    {% endif %}
+                                    {% if ecole_associee.telephone %}
+                                    <p><strong>Téléphone :</strong> {{ ecole_associee.telephone }}</p>
+                                    {% endif %}
+                                    <p><strong>Statut :</strong> 
+                                        <span class="badge bg-warning text-dark">{{ ecole_associee.get_etat_display }}</span>
+                                    </p>
+                                    
+                                    <div class="form-check mt-3">
+                                        <input class="form-check-input" type="checkbox" name="valider_ecole" 
+                                               id="validerEcole" checked>
+                                        <label class="form-check-label" for="validerEcole">
+                                            <strong>Valider également cette école</strong>
+                                            <br><small class="text-muted">L'école passera en statut "Validée"</small>
+                                        </label>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    Aucune école associée à ce compte.
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Informations complémentaires -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label for="telephone" class="form-label">
+                                    <i class="fas fa-phone me-2"></i>Téléphone <span class="text-danger">*</span>
+                                </label>
+                                <input type="text" class="form-control" id="telephone" name="telephone" 
+                                       placeholder="+224XXXXXXXXX" pattern="^\+224\d{8,9}$" required>
+                                <div class="form-text">Format : +224XXXXXXXXX</div>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="adresse" class="form-label">
+                                    <i class="fas fa-map-marker-alt me-2"></i>Adresse (optionnel)
+                                </label>
+                                <textarea class="form-control" id="adresse" name="adresse" rows="3" 
+                                          placeholder="Adresse complète..."></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Permissions par défaut -->
+                        <div class="alert alert-info">
+                            <h6><i class="fas fa-shield-alt me-2"></i>Permissions par défaut</h6>
+                            <p class="mb-0">Ce compte sera créé avec le rôle <strong>DIRECTEUR</strong> et les permissions suivantes :</p>
+                            <ul class="mb-0 mt-2">
+                                <li>Validation des paiements et dépenses</li>
+                                <li>Génération de rapports</li>
+                                <li>Gestion des utilisateurs de son école</li>
+                                <li>Ajout et modification des données de son école</li>
+                            </ul>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'utilisateurs:comptes_en_attente' %}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left me-2"></i>Retour à la liste
+                            </a>
+                            
+                            <div>
+                                <button type="button" class="btn btn-outline-danger me-2" 
+                                        onclick="window.location.href='{% url 'utilisateurs:comptes_en_attente' %}'">
+                                    <i class="fas fa-times me-2"></i>Annuler
+                                </button>
+                                <button type="submit" class="btn btn-success">
+                                    <i class="fas fa-check me-2"></i>Valider le compte
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Validation du format téléphone en temps réel
+document.getElementById('telephone').addEventListener('input', function(e) {
+    const value = e.target.value;
+    const pattern = /^\+224\d{8,9}$/;
+    
+    if (value && !pattern.test(value)) {
+        e.target.setCustomValidity('Format requis : +224XXXXXXXXX');
+        e.target.classList.add('is-invalid');
+    } else {
+        e.target.setCustomValidity('');
+        e.target.classList.remove('is-invalid');
+        if (value) e.target.classList.add('is-valid');
+    }
+});
+</script>
+{% endblock %}

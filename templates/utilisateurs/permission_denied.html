@@ -1,0 +1,152 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Accès Refusé{% endblock %}
+
+{% block extra_css %}
+<style>
+    .permission-denied-container {
+        background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+        color: white;
+        border-radius: 15px;
+        padding: 3rem;
+        margin: 2rem auto;
+        max-width: 600px;
+        text-align: center;
+        box-shadow: 0 15px 35px rgba(255, 107, 107, 0.3);
+    }
+    
+    .permission-icon {
+        font-size: 4rem;
+        margin-bottom: 1.5rem;
+        opacity: 0.9;
+    }
+    
+    .permission-title {
+        font-size: 2rem;
+        font-weight: bold;
+        margin-bottom: 1rem;
+    }
+    
+    .permission-message {
+        font-size: 1.1rem;
+        margin-bottom: 2rem;
+        opacity: 0.9;
+        line-height: 1.6;
+    }
+    
+    .user-info {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 1rem;
+        margin: 1.5rem 0;
+        backdrop-filter: blur(10px);
+    }
+    
+    .back-button {
+        background: rgba(255, 255, 255, 0.2);
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        color: white;
+        padding: 0.75rem 2rem;
+        border-radius: 25px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        text-decoration: none;
+        display: inline-block;
+        margin: 0.5rem;
+    }
+    
+    .back-button:hover {
+        background: rgba(255, 255, 255, 0.3);
+        border-color: rgba(255, 255, 255, 0.5);
+        color: white;
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(255, 255, 255, 0.2);
+    }
+    
+    .contact-admin {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 1.5rem;
+        margin-top: 2rem;
+    }
+    
+    .contact-admin h5 {
+        margin-bottom: 1rem;
+        font-weight: 600;
+    }
+    
+    .permission-details {
+        font-size: 0.9rem;
+        opacity: 0.8;
+        margin-top: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="permission-denied-container">
+        <div class="permission-icon">
+            <i class="fas fa-shield-alt"></i>
+        </div>
+        
+        <h1 class="permission-title">
+            Accès Refusé
+        </h1>
+        
+        <div class="permission-message">
+            {{ error_message|default:"Vous n'avez pas les permissions nécessaires pour accéder à cette page." }}
+        </div>
+        
+        <div class="user-info">
+            <strong>Utilisateur :</strong> {{ user.get_full_name|default:user.username }}<br>
+            <strong>Rôle :</strong> {{ user_role|default:"Non défini" }}<br>
+            {% if permission_name %}
+                <strong>Permission requise :</strong> {{ permission_name }}
+            {% endif %}
+        </div>
+        
+        <div class="mt-4">
+            <a href="javascript:history.back()" class="back-button">
+                <i class="fas fa-arrow-left me-2"></i>Retour
+            </a>
+            <a href="{% url 'eleves:liste_eleves' %}" class="back-button">
+                <i class="fas fa-home me-2"></i>Accueil
+            </a>
+        </div>
+        
+        <div class="contact-admin">
+            <h5><i class="fas fa-user-shield me-2"></i>Besoin d'accès ?</h5>
+            <p class="mb-2">
+                Si vous pensez que vous devriez avoir accès à cette fonctionnalité, 
+                contactez l'administrateur FARA LENO AU +224622613559.
+            </p>
+            <p class="mb-0">
+                <strong>Administrateur :</strong> FARA LENO<br>
+                <strong>Téléphone :</strong> +224622613559
+            </p>
+        </div>
+        
+        {% if permission_name %}
+        <div class="permission-details">
+            <small>
+                <i class="fas fa-info-circle me-1"></i>
+                Code d'erreur : PERM_{{ permission_name|upper }}
+            </small>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Auto-redirection après 30 secondes (optionnel)
+setTimeout(function() {
+    if (confirm('Voulez-vous être redirigé vers la page d\'accueil ?')) {
+        window.location.href = "{% url 'eleves:liste_eleves' %}";
+    }
+}, 30000);
+</script>
+{% endblock %}

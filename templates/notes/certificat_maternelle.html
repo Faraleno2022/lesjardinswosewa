@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Satisfecits Maternelle - {{ classe.nom }}</title>
+    <style>
+        @page {
+            size: A4 landscape;
+            margin: 10mm;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Comic Sans MS', 'Arial Rounded MT Bold', sans-serif;
+            background: #fff;
+        }
+        
+        .certificat {
+            width: 277mm;
+            height: 190mm;
+            padding: 8mm 12mm;
+            page-break-after: always;
+            position: relative;
+            background: linear-gradient(135deg, #fff5f5 0%, #fff 30%, #f0fff0 70%, #fffff0 100%);
+            border: 4px solid #ff9800;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+        
+        .certificat:last-child {
+            page-break-after: avoid;
+        }
+        
+        /* Bordure décorative avec étoiles */
+        .bordure-decorative {
+            position: absolute;
+            top: 6mm;
+            left: 6mm;
+            right: 6mm;
+            bottom: 6mm;
+            border: 3px dashed #4caf50;
+            border-radius: 12px;
+            pointer-events: none;
+        }
+        
+        /* Étoiles décoratives */
+        .etoile {
+            position: absolute;
+            font-size: 24pt;
+            color: #ffd700;
+            text-shadow: 0 0 5px rgba(255, 215, 0, 0.5);
+        }
+        .etoile-1 { top: 12mm; left: 15mm; }
+        .etoile-2 { top: 12mm; right: 15mm; }
+        .etoile-3 { bottom: 12mm; left: 15mm; }
+        .etoile-4 { bottom: 12mm; right: 15mm; }
+        .etoile-5 { top: 50%; left: 10mm; transform: translateY(-50%); }
+        .etoile-6 { top: 50%; right: 10mm; transform: translateY(-50%); }
+        
+        /* En-tête */
+        .entete {
+            text-align: center;
+            margin-bottom: 3mm;
+        }
+        
+        .republique {
+            font-size: 11pt;
+            font-weight: bold;
+            color: #333;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 1mm;
+        }
+        
+        .devise {
+            font-size: 9pt;
+            margin: 1mm 0;
+        }
+        
+        .devise-rouge { color: #CE1126; }
+        .devise-jaune { color: #FCD116; text-shadow: 0 0 1px #000; }
+        .devise-vert { color: #009460; }
+        
+        .ministere {
+            font-size: 8pt;
+            color: #666;
+            margin-bottom: 2mm;
+        }
+        
+        /* Logo et nom école */
+        .ecole-header {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8mm;
+            margin-bottom: 3mm;
+        }
+        
+        .logo-ecole {
+            width: 25mm;
+            height: 25mm;
+            object-fit: contain;
+        }
+        
+        .nom-ecole {
+            font-size: 16pt;
+            font-weight: bold;
+            color: #e91e63;
+            text-transform: uppercase;
+        }
+        
+        /* Titre principal */
+        .titre-certificat {
+            text-align: center;
+            margin: 3mm 0;
+        }
+        
+        .titre-certificat h1 {
+            font-size: 30pt;
+            color: #ff5722;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+            font-weight: bold;
+        }
+        
+        .titre-certificat .sous-titre {
+            font-size: 12pt;
+            color: #4caf50;
+            margin-top: 2mm;
+            font-style: italic;
+        }
+        
+        /* Badge du rang avec émojis enfantins */
+        .badge-rang {
+            text-align: center;
+            margin: 3mm 0;
+        }
+        
+        .medaille {
+            display: inline-block;
+            width: 18mm;
+            height: 18mm;
+            border-radius: 50%;
+            line-height: 18mm;
+            font-size: 24pt;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        
+        .medaille-or { background: linear-gradient(135deg, #ffd700, #ffec8b, #ffd700); }
+        .medaille-argent { background: linear-gradient(135deg, #c0c0c0, #e8e8e8, #c0c0c0); }
+        .medaille-bronze { background: linear-gradient(135deg, #cd7f32, #daa06d, #cd7f32); }
+        .medaille-4 { background: linear-gradient(135deg, #9c27b0, #ce93d8, #9c27b0); }
+        .medaille-5 { background: linear-gradient(135deg, #00bcd4, #80deea, #00bcd4); }
+        
+        /* Corps du certificat */
+        .corps-certificat {
+            text-align: center;
+            margin: 3mm 15mm;
+        }
+        
+        .texte-intro {
+            font-size: 13pt;
+            color: #333;
+            margin-bottom: 2mm;
+        }
+        
+        .nom-eleve {
+            font-size: 24pt;
+            font-weight: bold;
+            color: #2196f3;
+            margin: 3mm 0;
+            text-transform: uppercase;
+            border-bottom: 3px dotted #ff9800;
+            padding-bottom: 2mm;
+            display: inline-block;
+        }
+        
+        .classe-info {
+            font-size: 14pt;
+            color: #666;
+            margin: 2mm 0;
+        }
+        
+        .resultat {
+            font-size: 15pt;
+            color: #333;
+            margin: 2mm 0;
+        }
+        
+        .taux-acquisition {
+            font-size: 24pt;
+            font-weight: bold;
+            color: #4caf50;
+            background: linear-gradient(135deg, #e8f5e9, #c8e6c9);
+            padding: 2mm 8mm;
+            border-radius: 10px;
+            display: inline-block;
+        }
+        
+        .rang-texte {
+            font-size: 16pt;
+            font-weight: bold;
+            color: #ff5722;
+        }
+        
+        .periode-info {
+            font-size: 10pt;
+            color: #888;
+            margin-top: 2mm;
+            font-style: italic;
+        }
+        
+        /* Félicitations avec émojis */
+        .felicitations {
+            font-size: 12pt;
+            color: #333;
+            margin: 3mm 10mm;
+            text-align: center;
+            background: linear-gradient(135deg, #fff9c4, #fff59d);
+            padding: 3mm 5mm;
+            border-radius: 10px;
+            border: 2px dashed #ffeb3b;
+        }
+        
+        /* Date */
+        .date-lieu {
+            text-align: right;
+            margin-right: 15mm;
+            font-size: 9pt;
+            color: #666;
+            margin-bottom: 2mm;
+        }
+        
+        /* Signatures */
+        .signatures {
+            display: flex;
+            justify-content: space-between;
+            margin: 2mm 25mm 0;
+        }
+        
+        .signature-bloc {
+            text-align: center;
+            width: 40%;
+        }
+        
+        .signature-titre {
+            font-size: 9pt;
+            color: #333;
+            margin-bottom: 6mm;
+        }
+        
+        .signature-ligne {
+            border-top: 1px solid #333;
+            padding-top: 1mm;
+            font-size: 8pt;
+            color: #666;
+        }
+        
+        /* Filigrane logo */
+        .filigrane-logo {
+            position: absolute;
+            top: 55%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90mm;
+            height: 90mm;
+            opacity: 0.06;
+            pointer-events: none;
+            z-index: 0;
+        }
+        
+        .filigrane-logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            filter: grayscale(100%);
+        }
+        
+        /* Drapeau guinéen */
+        .drapeau {
+            position: absolute;
+            top: 15mm;
+            right: 20mm;
+            display: flex;
+            width: 30px;
+            height: 20px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+        
+        .drapeau-rouge { background: #CE1126; flex: 1; border-radius: 3px 0 0 3px; }
+        .drapeau-jaune { background: #FCD116; flex: 1; }
+        .drapeau-vert { background: #009460; flex: 1; border-radius: 0 3px 3px 0; }
+        
+        @media print {
+            .certificat {
+                page-break-after: always;
+            }
+            .certificat:last-child {
+                page-break-after: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+{% for eleve_data in eleves_top5 %}
+<div class="certificat">
+    <!-- Bordure décorative -->
+    <div class="bordure-decorative"></div>
+    
+    <!-- Étoiles décoratives -->
+    <span class="etoile etoile-1">⭐</span>
+    <span class="etoile etoile-2">⭐</span>
+    <span class="etoile etoile-3">⭐</span>
+    <span class="etoile etoile-4">⭐</span>
+    <span class="etoile etoile-5">🌟</span>
+    <span class="etoile etoile-6">🌟</span>
+    
+    <!-- Filigrane logo -->
+    {% if logo_base64 %}
+    <div class="filigrane-logo">
+        <img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo">
+    </div>
+    {% endif %}
+    
+    <!-- Drapeau -->
+    <div class="drapeau">
+        <div class="drapeau-rouge"></div>
+        <div class="drapeau-jaune"></div>
+        <div class="drapeau-vert"></div>
+    </div>
+    
+    <!-- En-tête -->
+    <div class="entete">
+        <div class="republique">République de Guinée</div>
+        <div class="devise">
+            <span class="devise-rouge">Travail</span> - 
+            <span class="devise-jaune">Justice</span> - 
+            <span class="devise-vert">Solidarité</span>
+        </div>
+        <div class="ministere">Ministère de l'Enseignement Pré-Universitaire et de l'Alphabétisation</div>
+    </div>
+    
+    <!-- Logo et nom école -->
+    <div class="ecole-header">
+        {% if logo_base64 %}
+        <img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo" class="logo-ecole">
+        {% endif %}
+        <div class="nom-ecole">{{ ecole.nom }}</div>
+    </div>
+    
+    <!-- Titre -->
+    <div class="titre-certificat">
+        <h1>🎉 Satisfecit 🎉</h1>
+        <div class="sous-titre">Pour Excellent Travail en Maternelle</div>
+    </div>
+    
+    <!-- Badge du rang -->
+    <div class="badge-rang">
+        {% if eleve_data.rang == 1 %}
+        <span class="medaille medaille-or">🏆</span>
+        {% elif eleve_data.rang == 2 %}
+        <span class="medaille medaille-argent">🥈</span>
+        {% elif eleve_data.rang == 3 %}
+        <span class="medaille medaille-bronze">🥉</span>
+        {% elif eleve_data.rang == 4 %}
+        <span class="medaille medaille-4">4</span>
+        {% elif eleve_data.rang == 5 %}
+        <span class="medaille medaille-5">5</span>
+        {% endif %}
+    </div>
+    
+    <!-- Corps -->
+    <div class="corps-certificat">
+        <div class="texte-intro">Ce satisfecit est décerné à</div>
+        <div class="nom-eleve">{{ eleve_data.eleve.prenom }} {{ eleve_data.eleve.nom }}</div>
+        <div class="classe-info">Élève en classe de <strong>{{ classe.nom }}</strong></div>
+        <div class="resultat">
+            Pour avoir obtenu un taux d'acquisition de <span class="taux-acquisition">{{ eleve_data.moyenne|floatformat:1 }}%</span>
+        </div>
+        <div class="resultat">
+            Se classant <span class="rang-texte">{{ eleve_data.rang_formate }}</span> sur {{ total_eleves }} élèves
+        </div>
+        <div class="periode-info">{{ periode_label }} - Année scolaire {{ annee_scolaire }}</div>
+    </div>
+    
+    <!-- Félicitations -->
+    <div class="felicitations">
+        {% if eleve_data.rang == 1 %}
+        🌟 Bravo champion(ne) ! Tu es le/la meilleur(e) de ta classe ! Continue comme ça ! 🌟
+        {% elif eleve_data.rang == 2 %}
+        👏 Super travail ! Tu es presque au sommet ! Continue tes efforts ! 👏
+        {% elif eleve_data.rang == 3 %}
+        🎈 Très bien ! Tu fais partie des meilleurs ! On est fier de toi ! 🎈
+        {% else %}
+        ✨ Félicitations ! Tu travailles très bien ! Continue à progresser ! ✨
+        {% endif %}
+    </div>
+    
+    <!-- Date -->
+    <div class="date-lieu">
+        Fait à {{ ville|default:"Conakry" }}, le {{ date_emission }}
+    </div>
+    
+    <!-- Signatures -->
+    <div class="signatures">
+        <div class="signature-bloc">
+            <div class="signature-titre">La Coordinatrice</div>
+            <div class="signature-ligne">_______________________</div>
+        </div>
+        <div class="signature-bloc">
+            <div class="signature-titre">Le Directeur Général</div>
+            <div class="signature-ligne">{{ ecole.directeur }}</div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+</body>
+</html>

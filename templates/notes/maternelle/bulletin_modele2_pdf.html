@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Bulletin Maternelle - {{ eleve.nom }} {{ eleve.prenom }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 8mm;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Times New Roman', serif;
+            font-size: 11pt;
+            line-height: 1.3;
+            color: #000;
+        }
+        
+        .bulletin-container {
+            width: 190mm;
+            margin: 0 auto;
+            padding: 5mm;
+            position: relative;
+        }
+        
+        
+        /* En-tête */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+        
+        .header-left {
+            width: 35%;
+            font-size: 9pt;
+            line-height: 1.4;
+        }
+        
+        .header-left p {
+            margin-bottom: 2px;
+        }
+        
+        .header-center {
+            width: 30%;
+            text-align: center;
+        }
+        
+        .header-center img {
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
+        }
+        
+        .header-right {
+            width: 35%;
+            text-align: right;
+            font-size: 10pt;
+        }
+        
+        .republique {
+            font-weight: bold;
+            font-size: 11pt;
+            color: #000;
+        }
+        
+        .devise {
+            font-size: 9pt;
+            font-style: italic;
+            color: #c00;
+        }
+        
+        /* Titre du bulletin */
+        .bulletin-titre {
+            text-align: center;
+            font-size: 16pt;
+            font-weight: bold;
+            margin: 20px 0;
+            text-decoration: underline;
+        }
+        
+        /* Informations élève */
+        .info-eleve {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            font-size: 11pt;
+        }
+        
+        .info-left {
+            width: 60%;
+        }
+        
+        .info-right {
+            width: 40%;
+            text-align: right;
+        }
+        
+        .info-eleve p {
+            margin-bottom: 5px;
+        }
+        
+        .info-label {
+            display: inline-block;
+            min-width: 80px;
+        }
+        
+        .info-value {
+            border-bottom: 1px dotted #000;
+            display: inline-block;
+            min-width: 150px;
+        }
+        
+        /* Tableau des notes */
+        .notes-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            font-size: 10pt;
+        }
+        
+        .notes-table th,
+        .notes-table td {
+            border: 1px solid #000;
+            padding: 6px 8px;
+            text-align: center;
+            vertical-align: middle;
+        }
+        
+        .notes-table th {
+            background-color: #d9d9d9;
+            font-weight: bold;
+            font-size: 10pt;
+        }
+        
+        .notes-table .matiere-cell {
+            text-align: left;
+            font-weight: bold;
+            padding-left: 10px;
+        }
+        
+        .notes-table .activite-cell {
+            text-align: left;
+            padding-left: 15px;
+        }
+        
+        /* Couleurs des matières */
+        .matiere-francais {
+            background-color: #f4b183;
+        }
+        
+        .matiere-maths {
+            background-color: #ffd966;
+        }
+        
+        .matiere-explorer {
+            background-color: #a9d18e;
+        }
+        
+        .matiere-expression {
+            background-color: #9dc3e6;
+        }
+        
+        .matiere-activites {
+            background-color: #d5a6bd;
+        }
+        
+        .col-matiere {
+            width: 22%;
+        }
+        
+        .col-activite {
+            width: 28%;
+        }
+        
+        .col-observation {
+            width: 25%;
+        }
+        
+        .col-appreciation {
+            width: 25%;
+        }
+        
+        /* Section appréciation et signatures */
+        .footer-section {
+            margin-top: 20px;
+        }
+        
+        .appreciation-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+        
+        .appreciation-enseignante {
+            width: 55%;
+        }
+        
+        .visa-direction {
+            width: 40%;
+            text-align: center;
+        }
+        
+        .appreciation-label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            font-size: 10pt;
+        }
+        
+        .appreciation-box {
+            border: 1px solid #000;
+            min-height: 50px;
+            padding: 5px;
+        }
+        
+        /* Rang et effectifs */
+        .stats-row {
+            display: flex;
+            justify-content: center;
+            gap: 50px;
+            margin-top: 15px;
+            font-size: 11pt;
+        }
+        
+        .stat-item {
+            text-align: center;
+        }
+        
+        .stat-label {
+            font-weight: bold;
+        }
+        
+        .stat-value {
+            border-bottom: 1px dotted #000;
+            display: inline-block;
+            min-width: 60px;
+            text-align: center;
+        }
+        
+        /* Signatures */
+        .signatures-row {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 30px;
+        }
+        
+        .signature-box {
+            width: 30%;
+            text-align: center;
+        }
+        
+        .signature-label {
+            font-weight: bold;
+            font-size: 10pt;
+            margin-bottom: 40px;
+        }
+        
+        .signature-line {
+            border-top: 1px solid #000;
+            margin-top: 30px;
+        }
+        
+        /* Smileys pour les observations */
+        .smiley {
+            font-size: 18pt;
+            display: inline-block;
+        }
+        
+        .smiley-a { color: #27ae60; } /* Vert - Excellent */
+        .smiley-b { color: #2ecc71; } /* Vert clair - Très bien */
+        .smiley-c { color: #f39c12; } /* Orange - Bien */
+        .smiley-d { color: #e67e22; } /* Orange foncé - Passable */
+        .smiley-e { color: #e74c3c; } /* Rouge - Insuffisant */
+    </style>
+</head>
+<body>
+    
+    <div class="bulletin-container">
+        <!-- En-tête -->
+        <div class="header">
+            <div class="header-left">
+                <p><strong>MPUA</strong></p>
+                <p>IRE: {{ ecole.region|default:"KINDIA" }}</p>
+                <p>DPE: {{ ecole.prefecture|default:"COYAH" }}</p>
+                <p>EP: {{ ecole.nom|default:"GS HADJA KANFING DIANE" }}</p>
+            </div>
+            <div class="header-center">
+                {% if logo_base64 %}
+                <img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo">
+                {% elif ecole.logo %}
+                <img src="{{ ecole.logo.url }}" alt="Logo">
+                {% endif %}
+            </div>
+            <div class="header-right">
+                <p class="republique">RÉPUBLIQUE DE GUINÉE</p>
+                <p class="devise">Travail-Justice-Solidarité</p>
+            </div>
+        </div>
+        
+        <!-- Titre -->
+        <div class="bulletin-titre">
+            Bulletin Trimestriel d'Évaluation
+        </div>
+        
+        <!-- Informations élève -->
+        <div class="info-eleve">
+            <div class="info-left">
+                <p><span class="info-label">Nom:</span> <span class="info-value">{{ eleve.nom }}</span></p>
+                <p><span class="info-label">Prénoms:</span> <span class="info-value">{{ eleve.prenom }}</span></p>
+                <p><span class="info-label">Classe:</span> <span class="info-value">{{ classe.nom }}</span></p>
+            </div>
+            <div class="info-right">
+                <p>Période: <strong>{{ annee_scolaire }}</strong></p>
+                <p>Nom de l'Enseignant(e):</p>
+                <p><span class="info-value">{{ enseignant|default:"................................" }}</span></p>
+            </div>
+        </div>
+        
+        <!-- Tableau des notes -->
+        <table class="notes-table">
+            <thead>
+                <tr>
+                    <th class="col-matiere">MATIÈRE</th>
+                    <th class="col-activite">ACTIVITÉ</th>
+                    <th class="col-observation">OBSERVATION</th>
+                    <th class="col-appreciation">APPRÉCIATION</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- FRANÇAIS -->
+                <tr>
+                    <td class="matiere-cell matiere-francais" rowspan="4">FRANÇAIS</td>
+                    <td class="activite-cell">Lecture</td>
+                    <td>
+                        {% if notes_dict.francais_lecture.appreciation == 'A+' or notes_dict.francais_lecture.appreciation == 'A' %}<span class="smiley smiley-a">😄</span>
+                        {% elif notes_dict.francais_lecture.appreciation == 'B+' %}<span class="smiley smiley-b">🙂</span>
+                        {% elif notes_dict.francais_lecture.appreciation == 'B' or notes_dict.francais_lecture.appreciation == 'B-' %}<span class="smiley smiley-c">😐</span>
+                        {% elif notes_dict.francais_lecture.appreciation == 'C' %}<span class="smiley smiley-d">😕</span>
+                        {% elif notes_dict.francais_lecture.appreciation == 'D' %}<span class="smiley smiley-e">😢</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ notes_dict.francais_lecture.appreciation_texte|default:"" }}</td>
+                </tr>
+                <tr>
+                    <td class="activite-cell">Graphisme (écriture)</td>
+                    <td>
+                        {% if notes_dict.francais_graphisme.appreciation == 'A+' or notes_dict.francais_graphisme.appreciation == 'A' %}<span class="smiley smiley-a">😄</span>
+                        {% elif notes_dict.francais_graphisme.appreciation == 'B+' %}<span class="smiley smiley-b">🙂</span>
+                        {% elif notes_dict.francais_graphisme.appreciation == 'B' or notes_dict.francais_graphisme.appreciation == 'B-' %}<span class="smiley smiley-c">😐</span>
+                        {% elif notes_dict.francais_graphisme.appreciation == 'C' %}<span class="smiley smiley-d">😕</span>
+                        {% elif notes_dict.francais_graphisme.appreciation == 'D' %}<span class="smiley smiley-e">😢</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ notes_dict.francais_graphisme.appreciation_texte|default:"" }}</td>
+                </tr>
+                <tr>
+                    <td class="activite-cell">Récitation</td>
+                    <td>
+                        {% if notes_dict.francais_recitation.appreciation == 'A+' or notes_dict.francais_recitation.appreciation == 'A' %}<span class="smiley smiley-a">😄</span>
+                        {% elif notes_dict.francais_recitation.appreciation == 'B+' %}<span class="smiley smiley-b">🙂</span>
+                        {% elif notes_dict.francais_recitation.appreciation == 'B' or notes_dict.francais_recitation.appreciation == 'B-' %}<span class="smiley smiley-c">😐</span>
+                        {% elif notes_dict.francais_recitation.appreciation == 'C' %}<span class="smiley smiley-d">😕</span>
+                        {% elif notes_dict.francais_recitation.appreciation == 'D' %}<span class="smiley smiley-e">😢</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ notes_dict.francais_recitation.appreciation_texte|default:"" }}</td>
+                </tr>
+                <tr>
+                    <td class="activite-cell">Oral (Langage)</td>
+                    <td>
+                        {% if notes_dict.francais_oral.appreciation == 'A+' or notes_dict.francais_oral.appreciation == 'A' %}<span class="smiley smiley-a">😄</span>
+                        {% elif notes_dict.francais_oral.appreciation == 'B+' %}<span class="smiley smiley-b">🙂</span>
+                        {% elif notes_dict.francais_oral.appreciation == 'B' or notes_dict.francais_oral.appreciation == 'B-' %}<span class="smiley smiley-c">😐</span>
+                        {% elif notes_dict.francais_oral.appreciation == 'C' %}<span class="smiley smiley-d">😕</span>
+                        {% elif notes_dict.francais_oral.appreciation == 'D' %}<span class="smiley smiley-e">😢</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ notes_dict.francais_oral.appreciation_texte|default:"" }}</td>
+                </tr>
+                
+                <!-- MATHS -->
+                <tr>
+                    <td class="matiere-cell matiere-maths" rowspan="3">MATHS</td>
+                    <td class="activite-cell">Numération</td>
+                    <td>
+                        {% if notes_dict.maths_numeration.appreciation == 'A+' or notes_dict.maths_numeration.appreciation == 'A' %}<span class="smiley smiley-a">😄</span>
+                        {% elif notes_dict.maths_numeration.appreciation == 'B+' %}<span class="smiley smiley-b">🙂</span>
+                        {% elif notes_dict.maths_numeration.appreciation == 'B' or notes_dict.maths_numeration.appreciation == 'B-' %}<span class="smiley smiley-c">😐</span>
+                        {% elif notes_dict.maths_numeration.appreciation == 'C' %}<span class="smiley smiley-d">😕</span>
+                        {% elif notes_dict.maths_numeration.appreciation == 'D' %}<span class="smiley smiley-e">😢</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ notes_dict.maths_numeration.appreciation_texte|default:"" }}</td>
+                </tr>
+                <tr>
+                    <td class="activite-cell">Géométrie</td>
+                    <td>
+                        {% if notes_dict.maths_geometrie.appreciation == 'A+' or notes_dict.maths_geometrie.appreciation == 'A' %}<span class="smiley smiley-a">😄</span>
+                        {% elif notes_dict.maths_geometrie.appreciation == 'B+' %}<span class="smiley smiley-b">🙂</span>
+                        {% elif notes_dict.maths_geometrie.appreciation == 'B' or notes_dict.maths_geometrie.appreciation == 'B-' %}<span class="smiley smiley-c">😐</span>
+                        {% elif notes_dict.maths_geometrie.appreciation == 'C' %}<span class="smiley smiley-d">😕</span>
+                        {% elif notes_dict.maths_geometrie.appreciation == 'D' %}<span class="smiley smiley-e">😢</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ notes_dict.maths_geometrie.appreciation_texte|default:"" }}</td>
+                </tr>
+                <tr>
+                    <td class="activite-cell">Prénumérations</td>
+                    <td>
+                        {% if notes_dict.maths_prenumerations.appreciation == 'A+' or notes_dict.maths_prenumerations.appreciation == 'A' %}<span class="smiley smiley-a">😄</span>
+                        {% elif notes_dict.maths_prenumerations.appreciation == 'B+' %}<span class="smiley smiley-b">🙂</span>
+                        {% elif notes_dict.maths_prenumerations.appreciation == 'B' or notes_dict.maths_prenumerations.appreciation == 'B-' %}<span class="smiley smiley-c">😐</span>
+                        {% elif notes_dict.maths_prenumerations.appreciation == 'C' %}<span class="smiley smiley-d">😕</span>
+                        {% elif notes_dict.maths_prenumerations.appreciation == 'D' %}<span class="smiley smiley-e">😢</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ notes_dict.maths_prenumerations.appreciation_texte|default:"" }}</td>
+                </tr>
+                
+                <!-- EXPLORER LE MONDE -->
+                <tr>
+                    <td class="matiere-cell matiere-explorer">EXPLORER LE MONDE</td>
+                    <td class="activite-cell">Instruction civique et moral</td>
+                    <td>
+                        {% if notes_dict.explorer_civique.appreciation == 'A+' or notes_dict.explorer_civique.appreciation == 'A' %}<span class="smiley smiley-a">😄</span>
+                        {% elif notes_dict.explorer_civique.appreciation == 'B+' %}<span class="smiley smiley-b">🙂</span>
+                        {% elif notes_dict.explorer_civique.appreciation == 'B' or notes_dict.explorer_civique.appreciation == 'B-' %}<span class="smiley smiley-c">😐</span>
+                        {% elif notes_dict.explorer_civique.appreciation == 'C' %}<span class="smiley smiley-d">😕</span>
+                        {% elif notes_dict.explorer_civique.appreciation == 'D' %}<span class="smiley smiley-e">😢</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ notes_dict.explorer_civique.appreciation_texte|default:"" }}</td>
+                </tr>
+                
+                <!-- EXPRESSION DE CRÉATION ET DE CRÉATION -->
+                <tr>
+                    <td class="matiere-cell matiere-expression">EXPRESSION DE CRÉATION<br>ET DE CRÉATION</td>
+                    <td class="activite-cell">Coloriage</td>
+                    <td>
+                        {% if notes_dict.expression_coloriage.appreciation == 'A+' or notes_dict.expression_coloriage.appreciation == 'A' %}<span class="smiley smiley-a">😄</span>
+                        {% elif notes_dict.expression_coloriage.appreciation == 'B+' %}<span class="smiley smiley-b">🙂</span>
+                        {% elif notes_dict.expression_coloriage.appreciation == 'B' or notes_dict.expression_coloriage.appreciation == 'B-' %}<span class="smiley smiley-c">😐</span>
+                        {% elif notes_dict.expression_coloriage.appreciation == 'C' %}<span class="smiley smiley-d">😕</span>
+                        {% elif notes_dict.expression_coloriage.appreciation == 'D' %}<span class="smiley smiley-e">😢</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ notes_dict.expression_coloriage.appreciation_texte|default:"" }}</td>
+                </tr>
+                
+                <!-- ACTIVITÉS DE VEILLE AU MILIEU -->
+                <tr>
+                    <td class="matiere-cell matiere-activites" rowspan="2">ACTIVITÉS DE VEILLE AU<br>MILIEU</td>
+                    <td class="activite-cell">Situation dans l'espace</td>
+                    <td>
+                        {% if notes_dict.activites_espace.appreciation == 'A+' or notes_dict.activites_espace.appreciation == 'A' %}<span class="smiley smiley-a">😄</span>
+                        {% elif notes_dict.activites_espace.appreciation == 'B+' %}<span class="smiley smiley-b">🙂</span>
+                        {% elif notes_dict.activites_espace.appreciation == 'B' or notes_dict.activites_espace.appreciation == 'B-' %}<span class="smiley smiley-c">😐</span>
+                        {% elif notes_dict.activites_espace.appreciation == 'C' %}<span class="smiley smiley-d">😕</span>
+                        {% elif notes_dict.activites_espace.appreciation == 'D' %}<span class="smiley smiley-e">😢</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ notes_dict.activites_espace.appreciation_texte|default:"" }}</td>
+                </tr>
+                <tr>
+                    <td class="activite-cell">Situation dans le temps</td>
+                    <td>
+                        {% if notes_dict.activites_temps.appreciation == 'A+' or notes_dict.activites_temps.appreciation == 'A' %}<span class="smiley smiley-a">😄</span>
+                        {% elif notes_dict.activites_temps.appreciation == 'B+' %}<span class="smiley smiley-b">🙂</span>
+                        {% elif notes_dict.activites_temps.appreciation == 'B' or notes_dict.activites_temps.appreciation == 'B-' %}<span class="smiley smiley-c">😐</span>
+                        {% elif notes_dict.activites_temps.appreciation == 'C' %}<span class="smiley smiley-d">😕</span>
+                        {% elif notes_dict.activites_temps.appreciation == 'D' %}<span class="smiley smiley-e">😢</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ notes_dict.activites_temps.appreciation_texte|default:"" }}</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <!-- Section appréciation -->
+        <div class="footer-section">
+            <div class="appreciation-row">
+                <div class="appreciation-enseignante">
+                    <div class="appreciation-label">Appréciation de l'enseignante</div>
+                    <div class="appreciation-box">
+                        {{ appreciation_generale|default:"" }}
+                    </div>
+                </div>
+                <div class="visa-direction">
+                    <div class="appreciation-label">Visa de la Direction</div>
+                    <div class="appreciation-box">
+                        &nbsp;
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Rang et Effectifs -->
+            <div class="stats-row">
+                <div class="stat-item">
+                    <span class="stat-label">Rang</span><br>
+                    <span class="stat-value">{{ rang|default:"" }}</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Effectifs</span><br>
+                    <span class="stat-value">{{ effectif|default:"" }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

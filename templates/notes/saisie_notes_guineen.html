@@ -1,0 +1,490 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load notes_tags %}
+
+{% block title %}Saisie des Notes Guinéennes{% endblock %}
+
+{% block extra_css %}
+<style>
+    .saisie-container {
+        background: linear-gradient(to bottom right, #eff6ff, #f0fdf4);
+        min-height: 100vh;
+        padding: 2rem;
+    }
+    
+    .control-card {
+        background: white;
+        border-radius: 15px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        margin-bottom: 2rem;
+    }
+    
+    .eleve-info-card {
+        background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+        color: white;
+        border-radius: 15px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    
+    .matiere-card {
+        background: #f9fafb;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        transition: all 0.3s ease;
+    }
+    
+    .matiere-card:hover {
+        border-color: #16a34a;
+        box-shadow: 0 4px 12px rgba(22, 163, 74, 0.1);
+    }
+    
+    .periode-section {
+        border-radius: 10px;
+        padding: 1rem;
+    }
+    
+    .periode-1 {
+        background: #dbeafe;
+    }
+    
+    .periode-2 {
+        background: #dcfce7;
+    }
+    
+    .note-input {
+        width: 100%;
+        padding: 0.5rem;
+        border: 2px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        transition: border-color 0.2s;
+    }
+    
+    .note-input:focus {
+        outline: none;
+        border-color: #16a34a;
+        box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
+    }
+    
+    .note-input.composition {
+        background: #fef3c7;
+        border-color: #fbbf24;
+    }
+    
+    .note-input.composition:focus {
+        border-color: #f59e0b;
+    }
+    
+    .save-btn {
+        background: #16a34a;
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        border: none;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .save-btn:hover {
+        background: #15803d;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
+    }
+    
+    .toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        color: white;
+        font-weight: 600;
+        z-index: 9999;
+        animation: slideIn 0.3s ease;
+    }
+    
+    .toast.success {
+        background: #16a34a;
+    }
+    
+    .toast.error {
+        background: #dc2626;
+    }
+    
+    @keyframes slideIn {
+        from {
+            transform: translateX(400px);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="saisie-container">
+    <div class="max-w-7xl mx-auto">
+        <!-- En-tête -->
+        <div class="control-card">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 mb-0">
+                    <i class="fas fa-edit text-success me-2"></i>
+                    Saisie des Notes - Système Guinéen
+                </h1>
+                <div class="d-flex gap-2">
+                    <a href="{% url 'notes:tableau_bord' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left me-2"></i>Retour
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Sélection système -->
+            <div class="mb-3">
+                <label class="form-label fw-bold">Système d'évaluation:</label>
+                <div class="btn-group" role="group">
+                    <a href="?{% if classe_selectionnee %}classe_id={{ classe_selectionnee.id }}&{% endif %}{% if eleve_selectionne %}eleve_id={{ eleve_selectionne.id }}&{% endif %}system_type=semestre" 
+                       class="btn {% if system_type == 'semestre' %}btn-success{% else %}btn-outline-success{% endif %}">
+                        Semestriel
+                    </a>
+                    <a href="?{% if classe_selectionnee %}classe_id={{ classe_selectionnee.id }}&{% endif %}{% if eleve_selectionne %}eleve_id={{ eleve_selectionne.id }}&{% endif %}system_type=trimestre" 
+                       class="btn {% if system_type == 'trimestre' %}btn-success{% else %}btn-outline-success{% endif %}">
+                        Trimestriel
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Sélection classe -->
+            <div class="mb-3">
+                <label class="form-label fw-bold">1. Sélectionner une classe:</label>
+                <div class="row">
+                    {% for classe in classes %}
+                    <div class="col-md-2 col-sm-4 mb-2">
+                        <a href="?classe_id={{ classe.id }}&system_type={{ system_type }}" 
+                           class="btn {% if classe_selectionnee and classe.id == classe_selectionnee.id %}btn-success{% else %}btn-outline-success{% endif %} w-100">
+                            {{ classe.nom }}
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <!-- Sélection élève -->
+            {% if classe_selectionnee %}
+            <div class="mb-3">
+                <label class="form-label fw-bold">2. Sélectionner un élève:</label>
+                <select class="form-select" onchange="window.location.href='?classe_id={{ classe_selectionnee.id }}&eleve_id=' + this.value + '&system_type={{ system_type }}'">
+                    <option value="">-- Choisir un élève --</option>
+                    {% for eleve in eleves %}
+                    <option value="{{ eleve.id }}" {% if eleve_selectionne and eleve.id == eleve_selectionne.id %}selected{% endif %}>
+                        {{ eleve.prenom }} {{ eleve.nom }} ({{ eleve.matricule }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+        </div>
+        
+        {% if eleve_selectionne %}
+        <!-- Informations élève -->
+        <div class="eleve-info-card">
+            <div class="row">
+                <div class="col-md-3">
+                    <p class="mb-0 opacity-75 small">Nom et Prénom</p>
+                    <h4 class="mb-0">{{ eleve_selectionne.nom }} {{ eleve_selectionne.prenom }}</h4>
+                </div>
+                <div class="col-md-2">
+                    <p class="mb-0 opacity-75 small">Matricule</p>
+                    <h5 class="mb-0">{{ eleve_selectionne.matricule }}</h5>
+                </div>
+                <div class="col-md-2">
+                    <p class="mb-0 opacity-75 small">Classe</p>
+                    <h5 class="mb-0">{{ classe_selectionnee.nom }}</h5>
+                </div>
+                <div class="col-md-3">
+                    <p class="mb-0 opacity-75 small">Année Scolaire</p>
+                    <h5 class="mb-0">{{ classe_selectionnee.annee_scolaire }}</h5>
+                </div>
+                <div class="col-md-2">
+                    <p class="mb-0 opacity-75 small">Système</p>
+                    <h5 class="mb-0">{% if system_type == 'semestre' %}Semestriel{% else %}Trimestriel{% endif %}</h5>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Saisie des notes -->
+        <div id="notes-container">
+            {% for matiere_id, data in notes_data.items %}
+            <div class="matiere-card" data-matiere-id="{{ matiere_id }}">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0 fw-bold text-success">
+                        <i class="fas fa-book me-2"></i>{{ data.matiere.nom }}
+                    </h5>
+                    <span class="badge bg-success">Coefficient: {{ data.matiere.coefficient }}</span>
+                </div>
+                
+                <div class="row">
+                    <!-- Période 1 -->
+                    <div class="col-md-6">
+                        <div class="periode-section periode-1">
+                            <h6 class="fw-bold text-primary mb-3">
+                                {% if system_type == 'semestre' %}1er Semestre{% else %}1er Trimestre{% endif %}
+                            </h6>
+                            
+                            <div class="row g-2 mb-3">
+                                {% if system_type == 'semestre' %}
+                                    {% for mois in 'OCTOBRE,NOVEMBRE,DECEMBRE,JANVIER'|split:',' %}
+                                    <div class="col-6">
+                                        <label class="form-label small mb-1">{{ mois|title }}</label>
+                                        <input type="number" 
+                                               class="note-input" 
+                                               data-mois="{{ mois }}"
+                                               data-periode="1"
+                                               step="0.01" 
+                                               min="0" 
+                                               max="20"
+                                               value="{% if data.notes_mois|get_item:mois and data.notes_mois|get_item:mois|get_item:'note' %}{{ data.notes_mois|get_item:mois|get_item:'note' }}{% endif %}"
+                                               placeholder="/20">
+                                    </div>
+                                    {% endfor %}
+                                {% else %}
+                                    {% for mois in 'OCTOBRE,NOVEMBRE,DECEMBRE'|split:',' %}
+                                    <div class="col-4">
+                                        <label class="form-label small mb-1">{{ mois|title }}</label>
+                                        <input type="number" 
+                                               class="note-input" 
+                                               data-mois="{{ mois }}"
+                                               data-periode="1"
+                                               step="0.01" 
+                                               min="0" 
+                                               max="20"
+                                               value="{% if data.notes_mois|get_item:mois and data.notes_mois|get_item:mois|get_item:'note' %}{{ data.notes_mois|get_item:mois|get_item:'note' }}{% endif %}"
+                                               placeholder="/20">
+                                    </div>
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
+                            
+                            <div>
+                                <label class="form-label small mb-1 fw-bold">Composition</label>
+                                <input type="number" 
+                                       class="note-input composition" 
+                                       data-composition="1"
+                                       step="0.01" 
+                                       min="0" 
+                                       max="20"
+                                       value="{% if data.composition1 and data.composition1.note %}{{ data.composition1.note }}{% endif %}"
+                                       placeholder="/20">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Période 2 -->
+                    <div class="col-md-6">
+                        <div class="periode-section periode-2">
+                            <h6 class="fw-bold text-success mb-3">
+                                {% if system_type == 'semestre' %}2ème Semestre{% else %}2ème Trimestre{% endif %}
+                            </h6>
+                            
+                            <div class="row g-2 mb-3">
+                                {% if system_type == 'semestre' %}
+                                    {% for mois in 'FEVRIER,MARS,AVRIL,MAI'|split:',' %}
+                                    <div class="col-6">
+                                        <label class="form-label small mb-1">{{ mois|title }}</label>
+                                        <input type="number" 
+                                               class="note-input" 
+                                               data-mois="{{ mois }}"
+                                               data-periode="2"
+                                               step="0.01" 
+                                               min="0" 
+                                               max="20"
+                                               value="{% if data.notes_mois|get_item:mois and data.notes_mois|get_item:mois|get_item:'note' %}{{ data.notes_mois|get_item:mois|get_item:'note' }}{% endif %}"
+                                               placeholder="/20">
+                                    </div>
+                                    {% endfor %}
+                                {% else %}
+                                    {% for mois in 'JANVIER,FEVRIER,MARS'|split:',' %}
+                                    <div class="col-4">
+                                        <label class="form-label small mb-1">{{ mois|title }}</label>
+                                        <input type="number" 
+                                               class="note-input" 
+                                               data-mois="{{ mois }}"
+                                               data-periode="2"
+                                               step="0.01" 
+                                               min="0" 
+                                               max="20"
+                                               value="{% if data.notes_mois|get_item:mois and data.notes_mois|get_item:mois|get_item:'note' %}{{ data.notes_mois|get_item:mois|get_item:'note' }}{% endif %}"
+                                               placeholder="/20">
+                                    </div>
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
+                            
+                            <div>
+                                <label class="form-label small mb-1 fw-bold">Composition</label>
+                                <input type="number" 
+                                       class="note-input composition" 
+                                       data-composition="2"
+                                       step="0.01" 
+                                       min="0" 
+                                       max="20"
+                                       value="{% if data.composition2 and data.composition2.note %}{{ data.composition2.note }}{% endif %}"
+                                       placeholder="/20">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="text-end mt-3">
+                    <button onclick="sauvegarderMatiere({{ matiere_id }})" class="save-btn">
+                        <i class="fas fa-save me-2"></i>Sauvegarder cette matière
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <!-- Bouton global -->
+        <div class="text-center mt-4">
+            <button onclick="sauvegarderTout()" class="btn btn-success btn-lg">
+                <i class="fas fa-check-circle me-2"></i>Sauvegarder Toutes les Notes
+            </button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+const eleveId = {{ eleve_selectionne.id|stringformat:"d"|default:'null' }};
+const anneeScolaire = '{{ classe_selectionnee.annee_scolaire|default:'' }}';
+const systemType = '{{ system_type }}';
+
+function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
+
+function collecterNotesMatiere(matiereId) {
+    const card = document.querySelector(`[data-matiere-id="${matiereId}"]`);
+    const notesMois = {};
+    const compositions = {};
+    
+    // Collecter les notes mensuelles
+    card.querySelectorAll('.note-input[data-mois]').forEach(input => {
+        const mois = input.dataset.mois;
+        const note = input.value;
+        if (note) {
+            notesMois[mois] = {
+                note: parseFloat(note),
+                absent: false
+            };
+        }
+    });
+    
+    // Collecter les compositions
+    card.querySelectorAll('.note-input[data-composition]').forEach(input => {
+        const comp = input.dataset.composition;
+        const note = input.value;
+        if (note) {
+            compositions[`composition${comp}`] = {
+                note: parseFloat(note),
+                absent: false
+            };
+        }
+    });
+    
+    return { notesMois, compositions };
+}
+
+async function sauvegarderMatiere(matiereId) {
+    if (!eleveId) {
+        showToast('Veuillez sélectionner un élève', 'error');
+        return;
+    }
+    
+    const { notesMois, compositions } = collecterNotesMatiere(matiereId);
+    
+    try {
+        const response = await fetch('{% url "notes:sauvegarder_notes_guineen" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                eleve_id: eleveId,
+                matiere_id: matiereId,
+                annee_scolaire: anneeScolaire,
+                notes_mois: notesMois,
+                compositions: compositions,
+                system_type: systemType
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Notes sauvegardées avec succès!', 'success');
+        } else {
+            showToast('Erreur: ' + data.error, 'error');
+        }
+    } catch (error) {
+        showToast('Erreur de connexion', 'error');
+        console.error(error);
+    }
+}
+
+async function sauvegarderTout() {
+    if (!eleveId) {
+        showToast('Veuillez sélectionner un élève', 'error');
+        return;
+    }
+    
+    const matiereCards = document.querySelectorAll('[data-matiere-id]');
+    let successCount = 0;
+    
+    for (const card of matiereCards) {
+        const matiereId = card.dataset.matiereId;
+        const { notesMois, compositions } = collecterNotesMatiere(matiereId);
+        
+        try {
+            const response = await fetch('{% url "notes:sauvegarder_notes_guineen" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    eleve_id: eleveId,
+                    matiere_id: matiereId,
+                    annee_scolaire: anneeScolaire,
+                    notes_mois: notesMois,
+                    compositions: compositions,
+                    system_type: systemType
+                })
+            });
+            
+            const data = await response.json();
+            if (data.success) successCount++;
+        } catch (error) {
+            console.error('Erreur pour matière', matiereId, error);
+        }
+    }
+    
+    showToast(`${successCount} matière(s) sauvegardée(s) avec succès!`, 'success');
+}
+</script>
+{% endblock %}

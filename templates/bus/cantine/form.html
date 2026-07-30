@@ -1,0 +1,331 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <!-- En-tête -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2>
+                        <i class="fas fa-utensils text-success"></i> {{ titre_page }}
+                    </h2>
+                </div>
+                <div>
+                    <a href="{% url 'bus:liste_abonnements_cantine' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Retour à la liste
+                    </a>
+                </div>
+            </div>
+
+            <!-- Formulaire -->
+            <div class="card">
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <!-- Informations Élève -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-primary text-white">
+                                <i class="fas fa-user"></i> Informations Élève
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <div class="mb-3">
+                                            <label class="form-label">Élève *</label>
+                                            {{ form.eleve }}
+                                            {% if form.eleve.errors %}
+                                                <div class="text-danger">{{ form.eleve.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label class="form-label">Contact Parent</label>
+                                            {{ form.contact_parent }}
+                                            {% if form.contact_parent.errors %}
+                                                <div class="text-danger">{{ form.contact_parent.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Informations de l'élève (affichage automatique) -->
+                                <div id="eleve-info" class="alert alert-info" style="display: none;">
+                                    <h6 class="mb-3"><i class="fas fa-info-circle"></i> Informations de l'élève</h6>
+                                    <div class="row align-items-center">
+                                        <div class="col-md-3 text-center">
+                                            <img id="info-photo" src="" alt="Photo élève" class="img-thumbnail" style="max-width: 120px; max-height: 120px; display: none;">
+                                            <div id="info-no-photo" style="display: none;">
+                                                <div class="bg-secondary text-white rounded d-inline-block p-3">
+                                                    <i class="fas fa-user fa-3x"></i>
+                                                </div>
+                                                <p class="text-muted small mt-2">Pas de photo</p>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-9">
+                                            <div class="row">
+                                                <div class="col-md-6 mb-2">
+                                                    <strong>Nom complet :</strong> <span id="info-nom-complet">-</span>
+                                                </div>
+                                                <div class="col-md-6 mb-2">
+                                                    <strong>Classe :</strong> <span id="info-classe">-</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Détails Abonnement -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-success text-white">
+                                <i class="fas fa-calendar"></i> Détails de l'Abonnement
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label class="form-label">Type de Repas *</label>
+                                            {{ form.type_repas }}
+                                            {% if form.type_repas.errors %}
+                                                <div class="text-danger">{{ form.type_repas.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label class="form-label">Périodicité *</label>
+                                            {{ form.periodicite }}
+                                            {% if form.periodicite.errors %}
+                                                <div class="text-danger">{{ form.periodicite.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label class="form-label">Montant (GNF) *</label>
+                                            {{ form.montant }}
+                                            {% if form.montant.errors %}
+                                                <div class="text-danger">{{ form.montant.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label class="form-label">Date de Début *</label>
+                                            {{ form.date_debut }}
+                                            {% if form.date_debut.errors %}
+                                                <div class="text-danger">{{ form.date_debut.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="mb-3">
+                                            <label class="form-label">Date d'Expiration *</label>
+                                            {{ form.date_expiration }}
+                                            {% if form.date_expiration.errors %}
+                                                <div class="text-danger">{{ form.date_expiration.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label class="form-label">Statut *</label>
+                                            {{ form.statut }}
+                                            {% if form.statut.errors %}
+                                                <div class="text-danger">{{ form.statut.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label class="form-label">Alerte avant (jours)</label>
+                                            {{ form.alerte_avant_jours }}
+                                            <small class="form-text text-muted">Nombre de jours avant expiration pour recevoir une alerte</small>
+                                            {% if form.alerte_avant_jours.errors %}
+                                                <div class="text-danger">{{ form.alerte_avant_jours.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Régime Alimentaire -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-info text-white">
+                                <i class="fas fa-leaf"></i> Régime Alimentaire et Allergies
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label class="form-label">Régime Alimentaire</label>
+                                            {{ form.regime_alimentaire }}
+                                            <small class="form-text text-muted">Ex: Végétarien, Halal, Sans porc, etc.</small>
+                                            {% if form.regime_alimentaire.errors %}
+                                                <div class="text-danger">{{ form.regime_alimentaire.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label class="form-label">Allergies Alimentaires</label>
+                                            {{ form.allergies }}
+                                            <small class="form-text text-muted">Indiquez toutes les allergies connues</small>
+                                            {% if form.allergies.errors %}
+                                                <div class="text-danger">{{ form.allergies.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Observations -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-secondary text-white">
+                                <i class="fas fa-sticky-note"></i> Observations
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label class="form-label">Observations</label>
+                                    {{ form.observations }}
+                                    {% if form.observations.errors %}
+                                        <div class="text-danger">{{ form.observations.errors }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Boutons -->
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'bus:liste_abonnements_cantine' %}" class="btn btn-secondary">
+                                <i class="fas fa-times"></i> Annuler
+                            </a>
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="fas fa-save"></i> Enregistrer
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const eleveSelect = document.getElementById('id_eleve');
+    const contactParentInput = document.getElementById('id_contact_parent');
+    const eleveInfoDiv = document.getElementById('eleve-info');
+    const infoNomComplet = document.getElementById('info-nom-complet');
+    const infoClasse = document.getElementById('info-classe');
+    const infoPhoto = document.getElementById('info-photo');
+    const infoNoPhoto = document.getElementById('info-no-photo');
+    
+    if (eleveSelect) {
+        // Charger les infos si un élève est déjà sélectionné (mode édition)
+        if (eleveSelect.value) {
+            loadEleveInfo(eleveSelect.value);
+        }
+        
+        // Écouter les changements de sélection
+        eleveSelect.addEventListener('change', function() {
+            const eleveId = this.value;
+            
+            if (eleveId) {
+                loadEleveInfo(eleveId);
+            } else {
+                // Réinitialiser si aucun élève sélectionné
+                eleveInfoDiv.style.display = 'none';
+                contactParentInput.value = '';
+                infoPhoto.style.display = 'none';
+                infoNoPhoto.style.display = 'none';
+            }
+        });
+    }
+    
+    function loadEleveInfo(eleveId) {
+        // Afficher un indicateur de chargement
+        eleveInfoDiv.style.display = 'block';
+        infoNomComplet.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Chargement...';
+        infoClasse.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Chargement...';
+        infoPhoto.style.display = 'none';
+        infoNoPhoto.style.display = 'none';
+        
+        // Requête AJAX pour récupérer les informations
+        fetch(`/bus/cantine/api/eleve/${eleveId}/`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Erreur lors du chargement des informations');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    // Debug: afficher les données reçues
+                    console.log('Données élève reçues:', data);
+                    console.log('URL photo:', data.photo_url);
+                    
+                    // Afficher les informations
+                    infoNomComplet.textContent = data.nom_complet;
+                    infoClasse.textContent = data.classe || 'Non assigné';
+                    
+                    // Afficher la photo ou l'icône par défaut
+                    if (data.photo_url) {
+                        console.log('Chargement de la photo:', data.photo_url);
+                        infoPhoto.src = data.photo_url;
+                        infoPhoto.style.display = 'block';
+                        infoNoPhoto.style.display = 'none';
+                        
+                        // Gérer les erreurs de chargement d'image
+                        infoPhoto.onerror = function() {
+                            console.error('Erreur de chargement de l\'image:', data.photo_url);
+                            infoPhoto.style.display = 'none';
+                            infoNoPhoto.style.display = 'block';
+                        };
+                    } else {
+                        console.log('Pas de photo disponible');
+                        infoPhoto.style.display = 'none';
+                        infoNoPhoto.style.display = 'block';
+                    }
+                    
+                    // Remplir automatiquement le contact parent si vide
+                    if (!contactParentInput.value && data.telephone_parent) {
+                        contactParentInput.value = data.telephone_parent;
+                    }
+                    
+                    eleveInfoDiv.style.display = 'block';
+                } else {
+                    throw new Error(data.error || 'Erreur inconnue');
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                infoNomComplet.textContent = 'Erreur de chargement';
+                infoClasse.textContent = '-';
+                infoPhoto.style.display = 'none';
+                infoNoPhoto.style.display = 'none';
+                
+                // Afficher un message d'erreur
+                eleveInfoDiv.className = 'alert alert-warning';
+                setTimeout(() => {
+                    eleveInfoDiv.className = 'alert alert-info';
+                }, 3000);
+            });
+    }
+});
+</script>
+{% endblock %}

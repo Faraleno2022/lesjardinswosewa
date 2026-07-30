@@ -1,0 +1,327 @@
+{% load humanize %}
+
+{% if eleves_en_retard and eleves_en_retard|add:0 > 0 %}
+<div class="alert alert-warning d-flex align-items-center" role="alert" style="border-radius: 10px;">
+    <i class="fas fa-bell me-2"></i>
+    <div>
+        <strong>{{ eleves_en_retard|intcomma }} élève{{ eleves_en_retard|pluralize }} à relancer.</strong>
+    </div>
+    <a href="{% url 'paiements:eleves_en_retard' %}" class="btn btn-sm btn-outline-warning ms-auto">
+        <i class="fas fa-users me-1"></i>Voir les élèves à relancer
+    </a>
+</div>
+{% endif %}
+
+<!-- Totaux dynamiques (adaptatifs aux filtres) -->
+<div class="stats-row">
+    <div class="row">
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-value text-success">{{ totaux.montant_total_valide|floatformat:0|intcomma }} <small style="font-size:0.5em">GNF</small></div>
+                <div class="stat-label">Total montant payé (validé)</div>
+                <small class="text-muted">{{ totaux.total_paiements|intcomma }} paiement{{ totaux.total_paiements|pluralize }}</small>
+                {% if totaux.montant_en_attente > 0 %}
+                    <div><small class="text-warning">En attente: {{ totaux.montant_en_attente|floatformat:0|intcomma }} GNF ({{ totaux.total_en_attente }})</small></div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-value text-danger">{{ totaux.reste_a_payer|floatformat:0|intcomma }} <small style="font-size:0.5em">GNF</small></div>
+                <div class="stat-label">Reste à payer</div>
+                <small class="text-muted">{{ totaux.eleves_actifs_count|intcomma }} élève{{ totaux.eleves_actifs_count|pluralize }} actif{{ totaux.eleves_actifs_count|pluralize }}</small>
+                {% if totaux.total_paye_actifs > 0 %}
+                    <div><small class="text-muted">Déjà payé: {{ totaux.total_paye_actifs|floatformat:0|intcomma }} GNF</small></div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-value text-secondary">{{ totaux.montant_annule|floatformat:0|intcomma }} <small style="font-size:0.5em">GNF</small></div>
+                <div class="stat-label">Montant annulé</div>
+                <small class="text-muted">{{ totaux.total_annule|intcomma }} paiement{{ totaux.total_annule|pluralize }} annulé{{ totaux.total_annule|pluralize }}</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-value text-info">{{ totaux.montant_ce_mois_valide|floatformat:0|intcomma }} <small style="font-size:0.5em">GNF</small></div>
+                <div class="stat-label">Payé ce mois</div>
+                <small class="text-muted">{{ totaux.total_ce_mois|intcomma }} paiement{{ totaux.total_ce_mois|pluralize }}</small>
+                {% if totaux.montant_ce_mois != totaux.montant_ce_mois_valide %}
+                    <div><small class="text-muted">Total (tous statuts): {{ totaux.montant_ce_mois|floatformat:0|intcomma }} GNF</small></div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Dû scolarité après remises + Frais d'inscription (filtre libre appliqué) -->
+<div class="stats-row">
+    <div class="row">
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-value text-danger">{{ totaux_du.du_sco_net|default:0|floatformat:0|intcomma }}</div>
+                <div class="stat-label">Dû scolarité net après remises</div>
+                {% if totaux_du.eleves_count %}
+                    <small class="text-muted">{{ totaux_du.eleves_count|intcomma }} élève{{ totaux_du.eleves_count|pluralize }}</small>
+                {% endif %}
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-value text-secondary">{{ totaux_du.frais_inscription_total|default:0|floatformat:0|intcomma }}</div>
+                <div class="stat-label">Frais d'inscription (échéancier)</div>
+                <small class="text-muted">Calculés depuis les échéanciers filtrés</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-value text-primary">{{ totaux_du.frais_reinscription_total|default:0|floatformat:0|intcomma }}</div>
+                <div class="stat-label">Réinscription (échéancier)</div>
+                <small class="text-muted">Part spécifique des réinscriptions</small>
+                {% if totaux_du.frais_reinscription_pct is not None %}
+                    <div><small class="text-muted">{{ totaux_du.frais_reinscription_pct|floatformat:2 }} % des inscriptions</small></div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-value text-dark">{{ totaux_du.du_global_net|default:0|floatformat:0|intcomma }}</div>
+                <div class="stat-label">Total dû global (net)</div>
+                {% if q %}
+                    <small class="text-muted">Calculé sur le filtre: "{{ q }}"</small>
+                {% else %}
+                    <small class="text-muted">Calcul global (tous les élèves)</small>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if totaux_du_detail_classes %}
+<div class="payments-table mt-3">
+    <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0">
+            <thead>
+                <tr>
+                    <th>École</th>
+                    <th>Classe</th>
+                    <th class="text-end"># Élèves</th>
+                    <th class="text-end">Dû scolarité net</th>
+                    <th class="text-end">Inscription</th>
+                    <th class="text-end">Réinscription</th>
+                    <th class="text-end">Réinscription %</th>
+                    <th class="text-end">Total dû net</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in totaux_du_detail_classes %}
+                <tr>
+                    <td>{{ row.ecole_nom }}</td>
+                    <td>{{ row.classe_nom }}</td>
+                    <td class="text-end">{{ row.eleves_count|intcomma }}</td>
+                    <td class="text-end">{{ row.du_sco_net|floatformat:0|intcomma }}</td>
+                    <td class="text-end">{{ row.frais_inscription_total|floatformat:0|intcomma }}</td>
+                    <td class="text-end">{{ row.frais_reinscription_total|default:0|floatformat:0|intcomma }}</td>
+                    <td class="text-end">{{ row.frais_reinscription_pct|default:0|floatformat:2 }} %</td>
+                    <td class="text-end fw-bold">{{ row.du_global_net|floatformat:0|intcomma }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if q %}
+        <div class="p-2">
+            <small class="text-muted">Détail calculé sur le filtre: "{{ q }}"</small>
+        </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Tableau des paiements -->
+<div class="payments-table">
+    {% if page_obj %}
+        <div class="table-responsive table-container-scrollable">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Élève</th>
+                        <th>Type</th>
+                        <th>Montant (GNF)</th>
+                        <th>Mode</th>
+                        <th>Date</th>
+                        <th>Statut</th>
+                        <th>Reçu</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for paiement in page_obj %}
+                    <tr>
+                        <td>
+                            <div class="eleve-info">
+                                {% if paiement.eleve.photo %}
+                                <img src="{{ paiement.eleve.photo.url }}" class="eleve-avatar" alt="Photo">
+                                {% else %}
+                                <div class="eleve-placeholder">{{ paiement.eleve.nom|first|upper }}</div>
+                                {% endif %}
+                                <div>
+                                    <div class="fw-bold">{{ paiement.eleve.nom }} {{ paiement.eleve.prenom }}</div>
+                                    <small class="text-muted">{{ paiement.eleve.classe.nom }} - {{ paiement.eleve.classe.ecole.nom }}</small>
+                                </div>
+                            </div>
+                        </td>
+                        <td>{{ paiement.type_paiement.nom }}</td>
+                        <td class="montant-cell">{{ paiement.montant|floatformat:0|intcomma }}</td>
+                        <td>{{ paiement.mode_paiement.nom }}</td>
+                        <td>{{ paiement.date_paiement|date:'d/m/Y' }}</td>
+                        <td>
+                            {% if paiement.statut == 'VALIDE' %}
+                                <span class="status-badge status-valide">Validé</span>
+                            {% elif paiement.statut == 'EN_ATTENTE' %}
+                                <span class="status-badge status-attente">En attente</span>
+                            {% elif paiement.statut == 'REJETE' %}
+                                <span class="status-badge status-rejete">Rejeté</span>
+                            {% elif paiement.statut == 'ANNULE' %}
+                                <span class="status-badge status-annule">Annulé</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ paiement.statut }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if paiement.numero_recu %}
+                                <span class="badge bg-light text-dark">{{ paiement.numero_recu }}</span>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <a href="{% url 'paiements:detail_paiement' paiement.id %}" 
+                                   class="btn btn-outline-primary btn-action" title="Voir détails">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <a href="{% url 'paiements:liste_relances' %}?eleve_id={{ paiement.eleve.id }}"
+                                   class="btn btn-outline-warning btn-action" title="Alertes / Relances">
+                                    <i class="fas fa-bell"></i>
+                                </a>
+                                {% if paiement.statut == 'EN_ATTENTE' %}
+                                    <form method="post" action="{% url 'paiements:valider_paiement' paiement.id %}" style="display: inline;">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-outline-success btn-action" title="Valider"
+                                                onclick="return confirm('Êtes-vous sûr de vouloir valider ce paiement ?')">
+                                            <i class="fas fa-check"></i>
+                                        </button>
+                                    </form>
+                                {% endif %}
+                                {% if paiement.statut == 'VALIDE' %}
+                                    <a href="{% url 'paiements:generer_recu_pdf' paiement.id %}" 
+                                       class="btn btn-outline-info btn-action" title="Télécharger reçu">
+                                        <i class="fas fa-download"></i>
+                                    </a>
+                                {% endif %}
+                                <div class="dropdown">
+                                    <button class="btn btn-outline-secondary btn-action dropdown-toggle"
+                                            type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                        <i class="fas fa-ellipsis-v"></i>
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        <li>
+                                            <a class="dropdown-item" href="{% url 'paiements:echeancier_eleve' paiement.eleve.id %}">
+                                                <i class="fas fa-calendar me-2"></i>Voir échéancier
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item" href="{% url 'paiements:liste_relances' %}?eleve_id={{ paiement.eleve.id }}">
+                                                <i class="fas fa-bell me-2"></i>Alertes / Relances
+                                            </a>
+                                        </li>
+                                        {% if paiement.statut == 'EN_ATTENTE' %}
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li>
+                                            <a class="dropdown-item text-warning" href="#" 
+                                               onclick="rejeterPaiement({{ paiement.id }})">
+                                                <i class="fas fa-times me-2"></i>Rejeter
+                                            </a>
+                                        </li>
+                                        {% endif %}
+                                    </ul>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-receipt fa-4x text-muted mb-4"></i>
+            <h4 class="text-muted">Aucun paiement trouvé</h4>
+            <p class="text-muted mb-4">
+                {% if q %}
+                    Aucun paiement ne correspond à vos critères de recherche.
+                {% else %}
+                    Aucun paiement n'a encore été enregistré.
+                {% endif %}
+            </p>
+            <a href="{% url 'paiements:ajouter_paiement' %}" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>Enregistrer un paiement
+            </a>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Pagination -->
+{% if page_obj and page_obj.has_other_pages %}
+<div class="pagination-wrapper">
+    <nav aria-label="Navigation des paiements">
+        <ul class="pagination justify-content-center mb-0">
+            {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page=1{% if q %}&q={{ q|urlencode }}{% endif %}">
+                        <i class="fas fa-angle-double-left"></i>
+                    </a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}">
+                        <i class="fas fa-angle-left"></i>
+                    </a>
+                </li>
+            {% endif %}
+            
+            {% for num in page_obj.paginator.page_range %}
+                {% if page_obj.number == num %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ num }}</span>
+                    </li>
+                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ num }}{% if q %}&q={{ q|urlencode }}{% endif %}">{{ num }}</a>
+                    </li>
+                {% endif %}
+            {% endfor %}
+            
+            {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}">
+                        <i class="fas fa-angle-right"></i>
+                    </a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if q %}&q={{ q|urlencode }}{% endif %}">
+                        <i class="fas fa-angle-double-right"></i>
+                    </a>
+                </li>
+            {% endif %}
+        </ul>
+    </nav>
+    
+    <div class="text-center mt-3">
+        <small class="text-muted">
+            Page {{ page_obj.number }} sur {{ page_obj.paginator.num_pages }} 
+            ({{ page_obj.paginator.count }} paiement{{ page_obj.paginator.count|pluralize }} au total)
+        </small>
+    </div>
+</div>
+{% endif %}

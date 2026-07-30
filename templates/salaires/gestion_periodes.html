@@ -1,0 +1,535 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Gestion des Périodes de Salaire{% endblock %}
+
+{% block extra_css %}
+<style>
+    .period-card {
+        background: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+        border-left: 4px solid #007bff;
+    }
+    .period-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .period-card.closed {
+        border-left-color: #dc3545;
+        background: #f8f9fa;
+    }
+    .period-card.current {
+        border-left-color: #28a745;
+        background: linear-gradient(135deg, #f8fff9 0%, #e8f5e8 100%);
+    }
+    .period-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+    .period-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 0.25rem;
+    }
+    .period-school {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+    .period-status {
+        padding: 0.4rem 0.8rem;
+        border-radius: 15px;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+    .status-open {
+        background: #d4edda;
+        color: #155724;
+    }
+    .status-closed {
+        background: #f8d7da;
+        color: #721c24;
+    }
+    .period-details {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+    .detail-item {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 6px;
+        text-align: center;
+    }
+    .detail-value {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #2c3e50;
+        margin-bottom: 0.25rem;
+    }
+    .detail-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+    .period-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    .btn-action {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+        border-radius: 6px;
+    }
+    .filter-section {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    .stats-overview {
+        background: linear-gradient(135deg, #0d6efd 0%, #1e59d9 100%);
+        color: white;
+        border-radius: 10px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+        text-align: center;
+    }
+    .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+    }
+    .stat-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #6c757d;
+    }
+    .empty-state i {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+    .modal-header {
+        background: linear-gradient(135deg, #0d6efd 0%, #1e59d9 100%);
+        color: white;
+        border-bottom: none;
+    }
+    .modal-header .btn-close {
+        filter: invert(1);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">
+                <i class="fas fa-calendar-alt text-primary"></i>
+                Gestion des Périodes de Salaire
+            </h1>
+            <p class="text-muted mb-0">Création et gestion des périodes de calcul des salaires</p>
+        </div>
+        <div>
+            <button class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#nouvellePeriodeModal">
+                <i class="fas fa-plus"></i> Nouvelle Période
+            </button>
+            <a href="{% url 'salaires:tableau_bord' %}" class="btn btn-primary">
+                <i class="fas fa-tachometer-alt"></i> Tableau de Bord
+            </a>
+        </div>
+    </div>
+
+    <!-- Statistiques générales -->
+    <div class="stats-overview">
+        <div class="stat-grid">
+            <div>
+                <div class="stat-number" data-target="{{ stats.total_periodes }}">0</div>
+                <div class="stat-label">Total Périodes</div>
+            </div>
+            <div>
+                <div class="stat-number" data-target="{{ stats.periodes_ouvertes }}">0</div>
+                <div class="stat-label">Périodes Ouvertes</div>
+            </div>
+            <div>
+                <div class="stat-number" data-target="{{ stats.periodes_cloturees }}">0</div>
+                <div class="stat-label">Périodes Clôturées</div>
+            </div>
+            <div>
+                <div class="stat-number" data-target="{{ stats.etats_calcules }}">0</div>
+                <div class="stat-label">États Calculés</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="filter-section">
+        <form method="get" class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label">École</label>
+                <select name="ecole" class="form-select">
+                    <option value="">Toutes les écoles</option>
+                    {% for ecole in ecoles %}
+                    <option value="{{ ecole.id }}" {% if request.GET.ecole == ecole.id|stringformat:"s" %}selected{% endif %}>
+                        {{ ecole.nom }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Statut</label>
+                <select name="statut" class="form-select">
+                    <option value="">Tous les statuts</option>
+                    <option value="ouvert" {% if request.GET.statut == "ouvert" %}selected{% endif %}>Ouvertes</option>
+                    <option value="cloture" {% if request.GET.statut == "cloture" %}selected{% endif %}>Clôturées</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">&nbsp;</label>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-filter"></i> Filtrer
+                    </button>
+                    <a href="{% url 'salaires:gestion_periodes' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-times"></i> Reset
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Liste des périodes -->
+    {% if page_obj %}
+    <div class="row">
+        {% for periode in page_obj %}
+        <div class="col-lg-6">
+            <div class="period-card {% if periode.cloturee %}closed{% elif periode == periode_courante %}current{% endif %}">
+                <div class="period-header">
+                    <div>
+                        <div class="period-title">{{ periode }}</div>
+                        <div class="period-school">
+                            <i class="fas fa-school me-1"></i>{{ periode.ecole.nom }}
+                        </div>
+                    </div>
+                    <div>
+                        <span class="period-status {% if periode.cloturee %}status-closed{% else %}status-open{% endif %}">
+                            {% if periode.cloturee %}
+                            <i class="fas fa-lock me-1"></i>Clôturée
+                            {% else %}
+                            <i class="fas fa-unlock me-1"></i>Ouverte
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+
+                <div class="period-details">
+                    <div class="detail-item">
+                        <div class="detail-value">{{ periode.nombre_semaines }}</div>
+                        <div class="detail-label">Semaines</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-value">{{ periode.etats_salaire.count }}</div>
+                        <div class="detail-label">États Calculés</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-value">{{ periode.etats_valides }}</div>
+                        <div class="detail-label">États Validés</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-value">{{ periode.etats_payes }}</div>
+                        <div class="detail-label">États Payés</div>
+                    </div>
+                </div>
+
+                <div class="period-actions">
+                    {% if not periode.cloturee %}
+                    <a href="{% url 'salaires:calculer_salaires' periode.id %}" 
+                       class="btn btn-success btn-action"
+                       onclick="return confirm('Calculer les salaires pour {{ periode }} ?')">
+                        <i class="fas fa-calculator"></i> Calculer Salaires
+                    </a>
+                    
+                    <form method="post" action="{% url 'salaires:cloturer_periode' periode.id %}" class="d-inline">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-warning btn-action"
+                                onclick="return confirm('Clôturer la période {{ periode }} ? Cette action est irréversible.')">
+                            <i class="fas fa-lock"></i> Clôturer
+                        </button>
+                    </form>
+                    {% endif %}
+                    
+                    <a href="{% url 'salaires:etats_salaire' %}?periode={{ periode.id }}" 
+                       class="btn btn-info btn-action">
+                        <i class="fas fa-list"></i> Voir États
+                    </a>
+                    
+                    <button class="btn btn-outline-secondary btn-action" 
+                            onclick="exporterPeriode({{ periode.id }})">
+                        <i class="fas fa-download"></i> Exporter
+                    </button>
+                    
+                    {% if periode.cloturee %}
+                    <span class="btn btn-outline-muted btn-action" disabled>
+                        <i class="fas fa-info-circle"></i> 
+                        Clôturée le {{ periode.date_cloture|date:"d/m/Y" }}
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <nav aria-label="Navigation des périodes">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page=1{% if request.GET.ecole %}&ecole={{ request.GET.ecole }}{% endif %}{% if request.GET.statut %}&statut={{ request.GET.statut }}{% endif %}">
+                    <i class="fas fa-angle-double-left"></i>
+                </a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.ecole %}&ecole={{ request.GET.ecole }}{% endif %}{% if request.GET.statut %}&statut={{ request.GET.statut }}{% endif %}">
+                    <i class="fas fa-angle-left"></i>
+                </a>
+            </li>
+            {% endif %}
+            
+            {% for num in page_obj.paginator.page_range %}
+            {% if page_obj.number == num %}
+            <li class="page-item active">
+                <span class="page-link">{{ num }}</span>
+            </li>
+            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ num }}{% if request.GET.ecole %}&ecole={{ request.GET.ecole }}{% endif %}{% if request.GET.statut %}&statut={{ request.GET.statut }}{% endif %}">{{ num }}</a>
+            </li>
+            {% endif %}
+            {% endfor %}
+            
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.ecole %}&ecole={{ request.GET.ecole }}{% endif %}{% if request.GET.statut %}&statut={{ request.GET.statut }}{% endif %}">
+                    <i class="fas fa-angle-right"></i>
+                </a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if request.GET.ecole %}&ecole={{ request.GET.ecole }}{% endif %}{% if request.GET.statut %}&statut={{ request.GET.statut }}{% endif %}">
+                    <i class="fas fa-angle-double-right"></i>
+                </a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <!-- État vide -->
+    <div class="empty-state">
+        <i class="fas fa-calendar-alt"></i>
+        <h4>Aucune période trouvée</h4>
+        <p class="text-muted">
+            {% if request.GET.ecole or request.GET.statut %}
+            Aucune période ne correspond aux filtres sélectionnés.
+            <br><a href="{% url 'salaires:gestion_periodes' %}">Réinitialiser les filtres</a>
+            {% else %}
+            Commencez par créer une nouvelle période de salaire.
+            <br><button class="btn btn-success mt-2" data-bs-toggle="modal" data-bs-target="#nouvellePeriodeModal">
+                <i class="fas fa-plus"></i> Créer une Période
+            </button>
+            {% endif %}
+        </p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal Nouvelle Période -->
+<div class="modal fade" id="nouvellePeriodeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus me-2"></i>Nouvelle Période de Salaire
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'salaires:creer_periode' %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Mois</label>
+                            <select name="mois" class="form-select" required>
+                                <option value="">Sélectionner un mois</option>
+                                <option value="1">Janvier</option>
+                                <option value="2">Février</option>
+                                <option value="3">Mars</option>
+                                <option value="4">Avril</option>
+                                <option value="5">Mai</option>
+                                <option value="6">Juin</option>
+                                <option value="7">Juillet</option>
+                                <option value="8">Août</option>
+                                <option value="9">Septembre</option>
+                                <option value="10">Octobre</option>
+                                <option value="11">Novembre</option>
+                                <option value="12">Décembre</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Année</label>
+                            <select name="annee" class="form-select" required>
+                                <option value="">Sélectionner une année</option>
+                                <option value="2025">2025</option>
+                                <option value="2026" selected>2026</option>
+                                <option value="2027">2027</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">École</label>
+                            <select name="ecole" class="form-select" required>
+                                <option value="">Sélectionner une école</option>
+                                {% for ecole in ecoles %}
+                                <option value="{{ ecole.id }}">{{ ecole.nom }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Nombre de semaines</label>
+                            <input type="number" name="nombre_semaines" class="form-control" 
+                                   value="4" min="1" max="6" step="0.1" required>
+                            <div class="form-text">Nombre moyen de semaines dans le mois (défaut: 4)</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times"></i> Annuler
+                    </button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-plus"></i> Créer la Période
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Animation des cartes
+        const periodCards = document.querySelectorAll('.period-card');
+        periodCards.forEach((card, index) => {
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(20px)';
+            setTimeout(() => {
+                card.style.transition = 'all 0.5s ease';
+                card.style.opacity = '1';
+                card.style.transform = 'translateY(0)';
+            }, index * 100);
+        });
+
+        // Animation des statistiques
+        const statNumbers = document.querySelectorAll('.stat-number[data-target]');
+        statNumbers.forEach(stat => {
+            const target = parseInt(stat.getAttribute('data-target'));
+            let current = 0;
+            const increment = Math.ceil(target / 20);
+            
+            const counter = setInterval(() => {
+                current += increment;
+                if (current >= target) {
+                    current = target;
+                    clearInterval(counter);
+                }
+                stat.textContent = current;
+            }, 50);
+        });
+
+        // Auto-submit des filtres
+        let filterTimeout;
+        document.querySelectorAll('.filter-section select').forEach(select => {
+            select.addEventListener('change', function() {
+                clearTimeout(filterTimeout);
+                filterTimeout = setTimeout(() => {
+                    this.form.submit();
+                }, 500);
+            });
+        });
+
+        // Validation du formulaire de nouvelle période
+        const periodeForm = document.querySelector('#nouvellePeriodeModal form');
+        if (periodeForm) {
+            periodeForm.addEventListener('submit', function(e) {
+                const mois = this.querySelector('[name="mois"]').value;
+                const annee = this.querySelector('[name="annee"]').value;
+                const ecole = this.querySelector('[name="ecole"]').value;
+                
+                if (!mois || !annee || !ecole) {
+                    e.preventDefault();
+                    alert('Veuillez remplir tous les champs obligatoires.');
+                    return;
+                }
+                
+                if (!confirm(`Créer la période ${getMonthName(mois)} ${annee} ?`)) {
+                    e.preventDefault();
+                }
+            });
+        }
+    });
+
+    function getMonthName(monthNumber) {
+        const months = [
+            '', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+            'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
+        ];
+        return months[parseInt(monthNumber)];
+    }
+
+    function exporterPeriode(periodeId) {
+        // Construit la query string en conservant les filtres actuels et en imposant la période
+        const params = new URLSearchParams(window.location.search);
+        params.set('periode', String(periodeId));
+        const qs = params.toString();
+        // Redirige vers l'export PDF des états de salaire
+        window.location.href = "{% url 'salaires:export_etats_salaire_pdf' %}" + (qs ? ('?' + qs) : '');
+    }
+
+    // Confirmation pour les actions critiques
+    document.querySelectorAll('form[action*="cloturer"]').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            if (!confirm('Êtes-vous sûr de vouloir clôturer cette période ? Cette action est irréversible.')) {
+                e.preventDefault();
+            }
+        });
+    });
+
+    // Mise à jour automatique des statistiques toutes les 30 secondes
+    setInterval(function() {
+        // Ici on pourrait ajouter une requête AJAX pour actualiser les stats
+        console.log('Actualisation automatique des statistiques...');
+    }, 30000);
+</script>
+{% endblock %}

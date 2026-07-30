@@ -1,0 +1,124 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="fas fa-box text-primary"></i> {{ article.nom }}</h2>
+            <p class="text-muted mb-0">{{ article.code_article }} &middot; {{ article.categorie.nom }}</p>
+        </div>
+        <div>
+            <a href="{% url 'depenses:liste_articles' %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Retour
+            </a>
+            <a href="{% url 'depenses:modifier_article' article.id %}" class="btn btn-primary">
+                <i class="fas fa-edit"></i> Modifier
+            </a>
+            <a href="{% url 'depenses:creer_mouvement' %}?article={{ article.id }}" class="btn btn-success">
+                <i class="fas fa-exchange-alt"></i> Mouvement
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Synthèse stock -->
+        <div class="col-md-4">
+            <div class="card mb-3 {% if article.alerte_stock %}border-warning{% endif %}">
+                <div class="card-body text-center">
+                    <p class="text-muted mb-1">Stock actuel</p>
+                    <h1 class="mb-0">{{ article.stock_actuel }}</h1>
+                    <small class="text-muted">{{ article.get_unite_mesure_display }}</small>
+                    {% if article.alerte_stock %}
+                    <div class="alert alert-warning mt-3 mb-0">
+                        <i class="fas fa-exclamation-triangle"></i> Stock minimum atteint
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card mb-3">
+                <div class="card-body">
+                    <table class="table table-sm mb-0">
+                        <tr><th>Stock minimum</th><td class="text-end">{{ article.stock_minimum }}</td></tr>
+                        <tr><th>Stock maximum</th><td class="text-end">{{ article.stock_maximum }}</td></tr>
+                        <tr><th>Prix unitaire</th><td class="text-end">{{ article.prix_unitaire|intcomma }} GNF</td></tr>
+                        <tr><th>Valeur du stock</th><td class="text-end"><strong>{{ article.valeur_stock|intcomma }} GNF</strong></td></tr>
+                        <tr><th>État</th><td class="text-end">{{ article.get_etat_display }}</td></tr>
+                        <tr><th>Emplacement</th><td class="text-end">{{ article.emplacement|default:"-" }}</td></tr>
+                    </table>
+                </div>
+            </div>
+            {% if article.photo %}
+            <div class="card mb-3">
+                <img src="{{ article.photo.url }}" class="card-img-top" alt="{{ article.nom }}">
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Détails + historique -->
+        <div class="col-md-8">
+            <div class="card mb-3">
+                <div class="card-header"><h5 class="mb-0">Informations</h5></div>
+                <div class="card-body">
+                    <table class="table table-sm mb-0">
+                        <tr><th style="width:30%">Marque</th><td>{{ article.marque|default:"-" }}</td></tr>
+                        <tr><th>Référence</th><td>{{ article.reference|default:"-" }}</td></tr>
+                        <tr><th>Description</th><td>{{ article.description|default:"-"|linebreaksbr }}</td></tr>
+                        <tr><th>Créé le</th><td>{{ article.date_creation|date:"d/m/Y H:i" }}</td></tr>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-history"></i> Historique des mouvements</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>N°</th>
+                                    <th>Date</th>
+                                    <th>Type</th>
+                                    <th>Motif</th>
+                                    <th class="text-end">Quantité</th>
+                                    <th class="text-end">Stock après</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for mvt in mouvements %}
+                                <tr>
+                                    <td><small>{{ mvt.numero_mouvement }}</small></td>
+                                    <td>{{ mvt.date_mouvement|date:"d/m/Y H:i" }}</td>
+                                    <td>
+                                        <span class="badge
+                                            {% if mvt.type_mouvement == 'ENTREE' %}bg-success
+                                            {% elif mvt.type_mouvement == 'SORTIE' %}bg-danger
+                                            {% else %}bg-info{% endif %}">
+                                            {{ mvt.get_type_mouvement_display }}
+                                        </span>
+                                    </td>
+                                    <td>{{ mvt.get_motif_display }}</td>
+                                    <td class="text-end">{{ mvt.quantite }}</td>
+                                    <td class="text-end"><strong>{{ mvt.stock_apres }}</strong></td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="6" class="text-center py-4 text-muted">
+                                        Aucun mouvement enregistré pour cet article
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

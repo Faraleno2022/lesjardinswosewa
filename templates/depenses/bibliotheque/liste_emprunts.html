@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-hand-holding-heart text-success"></i> {{ titre_page }}</h2>
+                    <p class="text-muted">Gestion des emprunts de livres</p>
+                </div>
+                <div>
+                    <a href="{% url 'depenses:dashboard_bibliotheque' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Dashboard
+                    </a>
+                    <a href="{% url 'depenses:creer_emprunt' %}" class="btn btn-success">
+                        <i class="fas fa-plus"></i> Nouvel Emprunt
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Statut</label>
+                    <select name="statut" class="form-select">
+                        <option value="">Tous</option>
+                        <option value="EN_COURS" {% if statut == 'EN_COURS' %}selected{% endif %}>En cours</option>
+                        <option value="EN_RETARD" {% if statut == 'EN_RETARD' %}selected{% endif %}>En retard</option>
+                        <option value="RETOURNE" {% if statut == 'RETOURNE' %}selected{% endif %}>Retourné</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Date début</label>
+                    <input type="date" name="date_debut" class="form-control" value="{{ date_debut }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Date fin</label>
+                    <input type="date" name="date_fin" class="form-control" value="{{ date_fin }}">
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search"></i> Filtrer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Liste des emprunts -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>N° Emprunt</th>
+                            <th>Livre</th>
+                            <th>Élève</th>
+                            <th>Classe</th>
+                            <th>Date Emprunt</th>
+                            <th>Retour Prévu</th>
+                            <th>Retour Effectif</th>
+                            <th>Jours Retard</th>
+                            <th>Pénalité</th>
+                            <th>Statut</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for emp in emprunts %}
+                        <tr {% if emp.statut == 'EN_RETARD' %}class="table-warning"{% endif %}>
+                            <td><strong>{{ emp.numero_emprunt }}</strong></td>
+                            <td>{{ emp.livre.titre|truncatewords:5 }}</td>
+                            <td>{{ emp.eleve.nom }} {{ emp.eleve.prenom }}</td>
+                            <td>{{ emp.eleve.classe.nom|default:"-" }}</td>
+                            <td>{{ emp.date_emprunt|date:"d/m/Y" }}</td>
+                            <td>{{ emp.date_retour_prevue|date:"d/m/Y" }}</td>
+                            <td>
+                                {% if emp.date_retour_effectif %}
+                                {{ emp.date_retour_effectif|date:"d/m/Y" }}
+                                {% else %}-{% endif %}
+                            </td>
+                            <td>
+                                {% if emp.jours_retard > 0 %}
+                                <span class="badge bg-danger">{{ emp.jours_retard }} jour(s)</span>
+                                {% else %}-{% endif %}
+                            </td>
+                            <td>
+                                {% if emp.montant_penalite > 0 %}
+                                <strong class="text-danger">{{ emp.montant_penalite|intcomma }} GNF</strong>
+                                {% if emp.penalite_payee %}
+                                <i class="fas fa-check-circle text-success" title="Payée"></i>
+                                {% endif %}
+                                {% else %}-{% endif %}
+                            </td>
+                            <td>
+                                <span class="badge 
+                                    {% if emp.statut == 'EN_COURS' %}bg-primary
+                                    {% elif emp.statut == 'RETOURNE' %}bg-success
+                                    {% elif emp.statut == 'EN_RETARD' %}bg-danger
+                                    {% else %}bg-secondary{% endif %}">
+                                    {{ emp.get_statut_display }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if emp.statut in 'EN_COURS,EN_RETARD' %}
+                                <a href="{% url 'depenses:retourner_livre' emp.id %}" class="btn btn-sm btn-success">
+                                    <i class="fas fa-undo"></i> Retour
+                                </a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="11" class="text-center py-4">
+                                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                                <p class="text-muted">Aucun emprunt trouvé</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

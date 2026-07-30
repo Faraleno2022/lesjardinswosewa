@@ -1,0 +1,394 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Carte scolaire - {{ eleve.nom_complet }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    :root {
+        --card-blue: #1746a2;
+        --card-blue-soft: #eef4fb;
+        --card-green: #0f766e;
+        --card-ink: #0f172a;
+        --card-muted: #64748b;
+        --card-line: #dbe3ef;
+    }
+
+    body {
+        background: #edf2f7;
+    }
+
+    .preview-shell {
+        min-height: calc(100vh - 96px);
+        display: grid;
+        place-items: center;
+        padding: 32px 16px 96px;
+    }
+
+    .student-card-preview {
+        width: 86mm;
+        height: 54mm;
+        position: relative;
+        overflow: hidden;
+        background: #fff;
+        border: 1px solid var(--card-line);
+        border-radius: 8px;
+        box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18);
+        color: var(--card-ink);
+    }
+
+    .student-card-preview::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border: 2px solid var(--card-blue);
+        border-radius: 8px;
+        pointer-events: none;
+    }
+
+    .card-watermark {
+        position: absolute;
+        right: 7mm;
+        top: 19mm;
+        width: 30mm;
+        height: 30mm;
+        opacity: 0.055;
+        object-fit: contain;
+    }
+
+    .card-watermark-text {
+        position: absolute;
+        right: 9mm;
+        top: 24mm;
+        color: var(--card-blue);
+        font-size: 30px;
+        font-weight: 800;
+        opacity: 0.055;
+    }
+
+    .card-top {
+        position: relative;
+        z-index: 1;
+        height: 10.5mm;
+        margin: 0.8mm;
+        padding: 1.4mm 2.2mm;
+        display: flex;
+        align-items: center;
+        gap: 2mm;
+        background: var(--card-blue);
+        color: #fff;
+        border-radius: 7px 7px 0 0;
+    }
+
+    .card-logo {
+        width: 7.2mm;
+        height: 7.2mm;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        flex: 0 0 auto;
+        overflow: hidden;
+        background: #fff;
+        color: var(--card-blue);
+        font-size: 9px;
+        font-weight: 800;
+    }
+
+    .card-logo img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        padding: 0.6mm;
+    }
+
+    .school-title {
+        min-width: 0;
+        line-height: 1.1;
+    }
+
+    .school-title strong {
+        display: block;
+        max-width: 70mm;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 7.6px;
+        letter-spacing: 0;
+    }
+
+    .school-title span {
+        display: block;
+        margin-top: 1px;
+        color: #dbeafe;
+        font-size: 5.2px;
+        letter-spacing: 0;
+    }
+
+    .card-main {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: 24.5mm 1fr;
+        gap: 3mm;
+        padding: 3.2mm 3mm 0;
+    }
+
+    .photo-frame {
+        width: 22.5mm;
+        height: 27.5mm;
+        border: 1px solid var(--card-line);
+        border-radius: 4px;
+        background: #f5f8fc;
+        overflow: hidden;
+        display: grid;
+        place-items: center;
+    }
+
+    .photo-frame img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .photo-initials {
+        color: var(--card-blue);
+        font-size: 18px;
+        font-weight: 800;
+    }
+
+    .card-info {
+        min-width: 0;
+        padding-top: 0.5mm;
+    }
+
+    .student-name {
+        max-width: 51mm;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--card-ink);
+        font-size: 8.8px;
+        font-weight: 800;
+        text-transform: uppercase;
+        line-height: 1.1;
+    }
+
+    .name-rule {
+        width: 100%;
+        height: 1px;
+        margin: 1.7mm 0 2.2mm;
+        background: var(--card-green);
+    }
+
+    .detail-row {
+        display: grid;
+        grid-template-columns: 14mm 1fr;
+        gap: 1mm;
+        align-items: baseline;
+        min-height: 4.2mm;
+        font-size: 6.5px;
+        line-height: 1.1;
+    }
+
+    .detail-row .label {
+        color: var(--card-muted);
+        font-weight: 800;
+        text-transform: uppercase;
+    }
+
+    .detail-row .value {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: #111827;
+    }
+
+    .card-footer {
+        position: absolute;
+        left: 0.8mm;
+        right: 0.8mm;
+        bottom: 0.8mm;
+        height: 6.2mm;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 2.2mm;
+        background: var(--card-blue-soft);
+        border-top: 1px solid var(--card-line);
+        font-size: 5.6px;
+        color: var(--card-muted);
+    }
+
+    .card-footer strong {
+        color: var(--card-blue);
+    }
+
+    .preview-actions {
+        position: fixed;
+        right: 24px;
+        bottom: 24px;
+        z-index: 20;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .preview-actions .btn {
+        box-shadow: 0 10px 22px rgba(15, 23, 42, 0.18);
+    }
+
+    @media (max-width: 520px) {
+        .preview-shell {
+            align-items: start;
+            overflow-x: auto;
+            place-items: start center;
+        }
+
+        .student-card-preview {
+            transform: scale(0.92);
+            transform-origin: top center;
+        }
+
+        .preview-actions {
+            left: 12px;
+            right: 12px;
+        }
+
+        .preview-actions .btn {
+            flex: 1 1 auto;
+        }
+    }
+
+    @media print {
+        body {
+            background: #fff;
+        }
+
+        body > *:not(.container):not(main),
+        .preview-actions,
+        nav,
+        footer {
+            display: none !important;
+        }
+
+        .preview-shell {
+            min-height: auto;
+            padding: 0;
+            display: block;
+        }
+
+        .student-card-preview {
+            box-shadow: none;
+            margin: 0;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="preview-shell">
+    <article class="student-card-preview" aria-label="Carte scolaire de {{ eleve.nom_complet }}">
+        {% if eleve.classe.ecole.logo %}
+            <img class="card-watermark" src="{{ eleve.classe.ecole.logo.url }}" alt="">
+        {% else %}
+            <div class="card-watermark-text">{{ eleve.classe.ecole.nom|slice:":3"|upper }}</div>
+        {% endif %}
+
+        <header class="card-top">
+            <div class="card-logo">
+                {% if eleve.classe.ecole.logo %}
+                    <img src="{{ eleve.classe.ecole.logo.url }}" alt="Logo {{ eleve.classe.ecole.nom }}">
+                {% else %}
+                    {{ eleve.classe.ecole.nom|slice:":2"|upper }}
+                {% endif %}
+            </div>
+            <div class="school-title">
+                <strong>{{ eleve.classe.ecole.nom|upper }}</strong>
+                <span>CARTE SCOLAIRE</span>
+            </div>
+        </header>
+
+        <section class="card-main">
+            <div class="photo-frame">
+                {% if eleve.photo %}
+                    <img src="{{ eleve.photo.url }}" alt="Photo de {{ eleve.nom_complet }}">
+                {% else %}
+                    <div class="photo-initials">{{ eleve.prenom|slice:":1" }}{{ eleve.nom|slice:":1" }}</div>
+                {% endif %}
+            </div>
+
+            <div class="card-info">
+                <div class="student-name">{{ eleve.nom_complet }}</div>
+                <div class="name-rule"></div>
+
+                <div class="detail-row">
+                    <span class="label">Mat.</span>
+                    <span class="value">{{ eleve.matricule|default:"-" }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Classe</span>
+                    <span class="value">{{ eleve.classe.nom|default:"-" }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Niveau</span>
+                    <span class="value">{{ eleve.classe.get_niveau_display|default:eleve.classe.niveau }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Né(e)</span>
+                    <span class="value">
+                        {% if eleve.date_naissance %}{{ eleve.date_naissance|date:"d/m/Y" }}{% if eleve.age %} ({{ eleve.age }} ans){% endif %}{% else %}-{% endif %}
+                    </span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Lieu</span>
+                    <span class="value">{{ eleve.lieu_naissance|default:"-" }}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Contact</span>
+                    <span class="value">
+                        {% if eleve.responsable_principal and eleve.responsable_principal.telephone %}
+                            {{ eleve.responsable_principal.telephone }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+        </section>
+
+        <footer class="card-footer">
+            <strong>ANNÉE SCOLAIRE {{ eleve.classe.annee_scolaire }}</strong>
+            <span>ID #{{ eleve.id|stringformat:"06d" }}</span>
+        </footer>
+    </article>
+</div>
+
+<div class="preview-actions">
+    <button type="button" onclick="window.print()" class="btn btn-outline-secondary">
+        <i class="fas fa-print me-1"></i>Imprimer
+    </button>
+    <a href="{% url 'eleves:carte_scolaire_pdf' eleve.id %}?format=standard" class="btn btn-primary">
+        <i class="fas fa-download me-1"></i>PDF
+    </a>
+    <a href="{% url 'eleves:carte_scolaire_pdf' eleve.id %}?format=pvc" class="btn btn-success">
+        <i class="fas fa-credit-card me-1"></i>PVC
+    </a>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.photo-frame img, .card-logo img, .card-watermark').forEach(function (img) {
+        img.addEventListener('error', function () {
+            if (img.closest('.photo-frame')) {
+                img.parentElement.innerHTML = '<div class="photo-initials">{{ eleve.prenom|slice:":1" }}{{ eleve.nom|slice:":1" }}</div>';
+            } else {
+                img.remove();
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

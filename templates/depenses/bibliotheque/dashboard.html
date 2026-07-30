@@ -1,0 +1,239 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-book-reader text-primary"></i> {{ titre_page }}</h2>
+                    <p class="text-muted">Gestion de la bibliothèque scolaire</p>
+                </div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <a href="{% url 'depenses:creer_livre' %}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Ajouter un livre
+                    </a>
+                    <a href="{% url 'depenses:gestion_categories_livres' %}" class="btn btn-outline-primary">
+                        <i class="fas fa-tags"></i> Catégories
+                    </a>
+                    <a href="{% url 'depenses:catalogue_livres' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-book"></i> Catalogue
+                    </a>
+                    <a href="{% url 'depenses:creer_emprunt' %}" class="btn btn-success">
+                        <i class="fas fa-hand-holding-heart"></i> Nouvel Emprunt
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistiques -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card card-stats">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <p class="text-muted mb-1">Total Livres</p>
+                            <h3 class="mb-0">{{ total_livres }}</h3>
+                            <small class="text-muted">{{ total_exemplaires }} exemplaires</small>
+                        </div>
+                        <div class="text-primary">
+                            <i class="fas fa-book fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-stats success">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <p class="text-muted mb-1">Disponibles</p>
+                            <h3 class="mb-0">{{ livres_disponibles }}</h3>
+                        </div>
+                        <div class="text-success">
+                            <i class="fas fa-check-circle fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-stats warning">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <p class="text-muted mb-1">Emprunts</p>
+                            <h3 class="mb-0">{{ emprunts_en_cours }}</h3>
+                            <small class="text-danger">{{ emprunts_en_retard }} en retard</small>
+                        </div>
+                        <div class="text-warning">
+                            <i class="fas fa-hand-holding-heart fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-stats">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <p class="text-muted mb-1">Pénalités</p>
+                            <h3 class="mb-0">{{ penalites_total|intcomma }}</h3>
+                            <small class="text-muted">GNF</small>
+                        </div>
+                        <div class="text-danger">
+                            <i class="fas fa-exclamation-triangle fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Derniers emprunts -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-hand-holding-heart"></i> Derniers Emprunts</h5>
+                </div>
+                <div class="card-body">
+                    {% if derniers_emprunts %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>N° Emprunt</th>
+                                    <th>Livre</th>
+                                    <th>Élève</th>
+                                    <th>Date Emprunt</th>
+                                    <th>Retour Prévu</th>
+                                    <th>Statut</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for emp in derniers_emprunts %}
+                                <tr>
+                                    <td><strong>{{ emp.numero_emprunt }}</strong></td>
+                                    <td>{{ emp.livre.titre|truncatewords:5 }}</td>
+                                    <td>{{ emp.eleve }}</td>
+                                    <td>{{ emp.date_emprunt|date:"d/m/Y" }}</td>
+                                    <td>{{ emp.date_retour_prevue|date:"d/m/Y" }}</td>
+                                    <td>
+                                        <span class="badge 
+                                            {% if emp.statut == 'EN_COURS' %}bg-primary
+                                            {% elif emp.statut == 'RETOURNE' %}bg-success
+                                            {% elif emp.statut == 'EN_RETARD' %}bg-danger
+                                            {% else %}bg-secondary{% endif %}">
+                                            {{ emp.get_statut_display }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="text-center mt-3">
+                        <a href="{% url 'depenses:liste_emprunts' %}" class="btn btn-sm btn-outline-primary">
+                            Voir tous les emprunts
+                        </a>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">Aucun emprunt enregistré</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Livres populaires -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-star"></i> Top Livres</h5>
+                </div>
+                <div class="card-body">
+                    {% if livres_populaires %}
+                    <ul class="list-group list-group-flush">
+                        {% for livre in livres_populaires %}
+                        <li class="list-group-item d-flex justify-content-between align-items-start">
+                            <div class="ms-2 me-auto">
+                                <div class="fw-bold">{{ livre.titre|truncatewords:4 }}</div>
+                                <small class="text-muted">{{ livre.auteur }}</small>
+                            </div>
+                            <span class="badge bg-primary rounded-pill">{{ livre.nb_emprunts }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-book-open fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">Aucune donnée</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if reservations_actives > 0 %}
+            <div class="card mt-3">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="fas fa-bookmark"></i> Réservations</h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning mb-0">
+                        <i class="fas fa-bookmark"></i>
+                        <strong>{{ reservations_actives }}</strong> réservation(s) active(s)
+                        <a href="{% url 'depenses:liste_reservations' %}" class="alert-link">Voir</a>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Liens rapides -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-link"></i> Accès Rapides</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <a href="{% url 'depenses:catalogue_livres' %}" class="btn btn-outline-primary btn-block w-100 mb-2">
+                                <i class="fas fa-book"></i> Catalogue
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="{% url 'depenses:liste_emprunts' %}" class="btn btn-outline-success btn-block w-100 mb-2">
+                                <i class="fas fa-hand-holding-heart"></i> Emprunts
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="{% url 'depenses:liste_reservations' %}" class="btn btn-outline-warning btn-block w-100 mb-2">
+                                <i class="fas fa-bookmark"></i> Réservations
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="{% url 'depenses:statistiques_bibliotheque' %}" class="btn btn-outline-info btn-block w-100 mb-2">
+                                <i class="fas fa-chart-line"></i> Statistiques
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

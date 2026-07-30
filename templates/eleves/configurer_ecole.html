@@ -1,0 +1,345 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container my-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">{{ titre_page }}</h3>
+    <div>
+      {% if ecole.etat == 'BROUILLON' %}
+        <span class="badge bg-secondary">Brouillon</span>
+      {% elif ecole.etat == 'EN_ATTENTE' %}
+        <span class="badge bg-warning text-dark">En attente</span>
+      {% elif ecole.etat == 'VALIDE' %}
+        <span class="badge bg-success">Validée</span>
+      {% else %}
+        <span class="badge bg-danger">Rejetée</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if can_edit %}
+  <div class="alert alert-info d-flex align-items-start" role="alert">
+    <div class="me-2"><i class="fas fa-info-circle"></i></div>
+    <div>
+      Configurez les classes et les échéances (grilles tarifaires) de votre école, puis cliquez sur « Soumettre pour validation ».
+      Après validation par un administrateur, l'école sera activée.
+    </div>
+  </div>
+  {% else %}
+  <div class="alert alert-secondary" role="alert">
+    Cette école n'est pas modifiable (validation en cours ou finalisée). Vous pouvez consulter la configuration ci-dessous.
+  </div>
+  {% endif %}
+
+  <div class="row g-4">
+    <!-- Classes -->
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0"><i class="fas fa-layer-group me-2"></i>Classes</h5>
+        </div>
+        <div class="card-body">
+          {% if can_edit %}
+          <form method="post" class="mb-3">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add_classe">
+            <div class="row g-2 align-items-end">
+              <div class="col-md-6">
+                <label class="form-label">Nom</label>
+                <input type="text" class="form-control" name="classe_nom" placeholder="ex: 6ème A" required>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Année scolaire</label>
+                <input type="text" class="form-control" name="classe_annee" placeholder="2024-2025" pattern="^\d{4}-\d{4}$" required>
+              </div>
+              <div class="col-md-8">
+                <label class="form-label">Niveau</label>
+                <select class="form-select" name="classe_niveau" required>
+                  <option value="">— Sélectionnez —</option>
+                  {% for code,label in niveaux %}
+                    <option value="{{ code }}">{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Capacité</label>
+                <input type="number" class="form-control" name="classe_capacite" min="1" max="60" value="30">
+              </div>
+              <div class="col-12 d-flex justify-content-end">
+                <button class="btn btn-primary"><i class="fas fa-plus me-1"></i>Ajouter</button>
+              </div>
+            </div>
+          </form>
+          <script>
+            (function(){
+              try {
+                // Construire une map des grilles existantes: key = niveau|annee
+                var grillesMap = {};
+                {% for g in grilles %}
+                  grillesMap["{{ g.niveau }}|{{ g.annee_scolaire }}"] = {
+                    ech_insc: "{{ g.date_echeance_inscription_defaut|default_if_none:'' }}",
+                    ech_t1: "{{ g.date_echeance_tranche_1_defaut|default_if_none:'' }}",
+                    ech_t2: "{{ g.date_echeance_tranche_2_defaut|default_if_none:'' }}",
+                    ech_t3: "{{ g.date_echeance_tranche_3_defaut|default_if_none:'' }}",
+                    reinsc: "{{ g.frais_reinscription|default_if_none:'0' }}",
+                    insc: "{{ g.frais_inscription|default_if_none:'0' }}",
+                    t1: "{{ g.tranche_1|default_if_none:'0' }}",
+                    t2: "{{ g.tranche_2|default_if_none:'0' }}",
+                    t3: "{{ g.tranche_3|default_if_none:'0' }}"
+                  };
+                {% endfor %}
+
+                var selNiv = document.querySelector('select[name="grille_niveau"]');
+                var inpAn  = document.querySelector('input[name="grille_annee"]');
+                var fInsc = document.querySelector('input[name="grille_inscription"]');
+                var fReInsc = document.querySelector('input[name="grille_reinscription"]');
+                var fT1 = document.querySelector('input[name="grille_t1"]');
+                var fT2 = document.querySelector('input[name="grille_t2"]');
+                var fT3 = document.querySelector('input[name="grille_t3"]');
+                var dInsc = document.querySelector('input[name="grille_ech_insc"]');
+                var dT1 = document.querySelector('input[name="grille_ech_t1"]');
+                var dT2 = document.querySelector('input[name="grille_ech_t2"]');
+                var dT3 = document.querySelector('input[name="grille_ech_t3"]');
+
+                function prefillIfExists() {
+                  try {
+                    var k = (selNiv && selNiv.value ? selNiv.value : '') + '|' + (inpAn && inpAn.value ? inpAn.value.trim() : '');
+                    var g = grillesMap[k];
+                    if (!g) return;
+                    if (dInsc && !dInsc.value && g.ech_insc) dInsc.value = g.ech_insc;
+                    if (dT1 && !dT1.value && g.ech_t1) dT1.value = g.ech_t1;
+                    if (dT2 && !dT2.value && g.ech_t2) dT2.value = g.ech_t2;
+                    if (dT3 && !dT3.value && g.ech_t3) dT3.value = g.ech_t3;
+                    if (fReInsc && !fReInsc.value && g.reinsc) fReInsc.value = g.reinsc;
+                    // Optionnel: préremplir les montants si vides
+                    if (fInsc && !fInsc.value && g.insc) fInsc.value = g.insc;
+                    if (fT1 && !fT1.value && g.t1) fT1.value = g.t1;
+                    if (fT2 && !fT2.value && g.t2) fT2.value = g.t2;
+                    if (fT3 && !fT3.value && g.t3) fT3.value = g.t3;
+                  } catch(_e) {}
+                }
+                if (selNiv) selNiv.addEventListener('change', prefillIfExists);
+                if (inpAn)  inpAn.addEventListener('change', prefillIfExists);
+                if (inpAn)  inpAn.addEventListener('blur', prefillIfExists);
+              } catch(_err) {}
+            })();
+          </script>
+          {% endif %}
+
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead>
+                <tr>
+                  <th>Nom</th>
+                  <th>Niveau</th>
+                  <th>Année</th>
+                  <th>Capacité</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for c in classes %}
+                <tr>
+                  <td>{{ c.nom }}</td>
+                  <td>{{ c.get_niveau_display }}</td>
+                  <td>{{ c.annee_scolaire }}</td>
+                  <td>{{ c.capacite_max }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" class="text-muted">Aucune classe encore définie.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grilles tarifaires -->
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0"><i class="fas fa-coins me-2"></i>Grilles tarifaires (Échéances)</h5>
+        </div>
+        <div class="card-body">
+          {% if can_edit %}
+          <form method="post" class="mb-3">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add_grille">
+            <div class="row g-2 align-items-end">
+              <div class="col-md-6">
+                <label class="form-label">Niveau</label>
+                <select class="form-select" name="grille_niveau" required>
+                  <option value="">— Sélectionnez —</option>
+                  {% for code,label in niveaux %}
+                    <option value="{{ code }}">{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Année scolaire</label>
+                <input type="text" class="form-control" name="grille_annee" placeholder="2024-2025" pattern="^\d{4}-\d{4}$" required>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Frais d'inscription (GNF)</label>
+                <input type="number" class="form-control" name="grille_inscription" min="0" step="1" value="0">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Frais de réinscription (GNF)</label>
+                <input type="number" class="form-control" name="grille_reinscription" min="0" step="1" value="0">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Tranche 1 (GNF)</label>
+                <input type="number" class="form-control" name="grille_t1" min="0" step="1" value="0">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Tranche 2 (GNF)</label>
+                <input type="number" class="form-control" name="grille_t2" min="0" step="1" value="0">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Tranche 3 (GNF)</label>
+                <input type="number" class="form-control" name="grille_t3" min="0" step="1" value="0">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Période 1</label>
+                <input type="text" class="form-control" name="grille_p1" value="À l'inscription">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Période 2</label>
+                <input type="text" class="form-control" name="grille_p2" value="Début janvier">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Période 3</label>
+                <input type="text" class="form-control" name="grille_p3" value="Début mars">
+              </div>
+              <!-- Nouvelles dates d'échéance par défaut (optionnelles) -->
+              <div class="col-md-6">
+                <label class="form-label">Échéance inscription (défaut)</label>
+                <input type="date" class="form-control" name="grille_ech_insc">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Échéance Tranche 1 (défaut)</label>
+                <input type="date" class="form-control" name="grille_ech_t1">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Échéance Tranche 2 (défaut)</label>
+                <input type="date" class="form-control" name="grille_ech_t2">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Échéance Tranche 3 (défaut)</label>
+                <input type="date" class="form-control" name="grille_ech_t3">
+              </div>
+              <div class="col-12 d-flex justify-content-end">
+                <button class="btn btn-primary"><i class="fas fa-save me-1"></i>Enregistrer</button>
+              </div>
+            </div>
+          </form>
+          {% endif %}
+
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead>
+                <tr>
+                  <th>Année</th>
+                  <th>Niveau</th>
+                  <th>Inscription</th>
+                  <th>T1</th>
+                  <th>T2</th>
+                  <th>T3</th>
+                  <th>Statut dates</th>
+                  <th>Éch. Inscr. (défaut)</th>
+                  <th>Éch. T1</th>
+                  <th>Éch. T2</th>
+                  <th>Éch. T3</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for g in grilles %}
+                <tr>
+                  <td>{{ g.annee_scolaire }}</td>
+                  <td>{{ g.get_niveau_display }}</td>
+                  <td>{{ g.frais_inscription|floatformat:0 }}</td>
+                  <td>{{ g.tranche_1|floatformat:0 }}</td>
+                  <td>{{ g.tranche_2|floatformat:0 }}</td>
+                  <td>{{ g.tranche_3|floatformat:0 }}</td>
+                  <td>
+                    {% if g.date_echeance_inscription_defaut or g.date_echeance_tranche_1_defaut or g.date_echeance_tranche_2_defaut or g.date_echeance_tranche_3_defaut %}
+                      {% with c=0 %}{% endwith %}
+                      {% with has_all=g.date_echeance_inscription_defaut and g.date_echeance_tranche_1_defaut and g.date_echeance_tranche_2_defaut and g.date_echeance_tranche_3_defaut %}
+                        {% if has_all %}
+                          <span class="badge bg-success" title="Toutes les dates par défaut sont définies">Défini</span>
+                        {% else %}
+                          <span class="badge bg-warning text-dark" title="Certaines dates par défaut sont définies">Partiel</span>
+                        {% endif %}
+                      {% endwith %}
+                    {% else %}
+                      <span class="badge bg-secondary" title="Aucune date par défaut: fallback 15/01, 15/03, 15/05">Fallback</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if g.date_echeance_inscription_defaut %}{{ g.date_echeance_inscription_defaut|date:"d/m/Y" }}{% else %}—{% endif %}
+                  </td>
+                  <td>
+                    {% if g.date_echeance_tranche_1_defaut %}{{ g.date_echeance_tranche_1_defaut|date:"d/m/Y" }}{% else %}—{% endif %}
+                  </td>
+                  <td>
+                    {% if g.date_echeance_tranche_2_defaut %}{{ g.date_echeance_tranche_2_defaut|date:"d/m/Y" }}{% else %}—{% endif %}
+                  </td>
+                  <td>
+                    {% if g.date_echeance_tranche_3_defaut %}{{ g.date_echeance_tranche_3_defaut|date:"d/m/Y" }}{% else %}—{% endif %}
+                  </td>
+                </tr>
+                <tr>
+                  <td colspan="11">
+                    <div class="d-flex flex-wrap gap-2">
+                      <!-- Dupliquer vers une autre année -->
+                      <form method="post" class="d-flex align-items-end gap-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="duplicate_grille">
+                        <input type="hidden" name="source_grille_id" value="{{ g.id }}">
+                        <div>
+                          <label class="form-label mb-1 small">Dupliquer vers année</label>
+                          <input type="text" class="form-control form-control-sm" name="target_annee" placeholder="2025-2026" pattern="^\d{4}-\d{4}$" required>
+                        </div>
+                        <div class="align-self-end">
+                          <button class="btn btn-sm btn-outline-primary" title="Dupliquer montants, périodes et dates par défaut vers l'année cible">
+                            <i class="fas fa-copy me-1"></i>Dupliquer
+                          </button>
+                        </div>
+                      </form>
+
+                      <!-- Appliquer les dates par défaut aux échéanciers existants -->
+                      <form method="post" onsubmit="return confirm('Appliquer les dates par défaut de cette grille aux échéanciers existants (uniquement si dates manquantes) ?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="apply_grille_dates">
+                        <input type="hidden" name="grille_id" value="{{ g.id }}">
+                        <button class="btn btn-sm btn-outline-success" title="Met à jour les échéanciers existants en complétant uniquement les dates manquantes">
+                          <i class="fas fa-calendar-check me-1"></i>Appliquer dates aux élèves
+                        </button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="11" class="text-muted">Aucune grille encore définie.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex justify-content-between mt-4">
+    <a class="btn btn-outline-secondary" href="{% url 'home' %}"><i class="fas fa-home me-1"></i>Accueil</a>
+    {% if can_edit and ecole.etat == 'BROUILLON' %}
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="submit_validation">
+      <button class="btn btn-success"><i class="fas fa-paper-plane me-1"></i>Soumettre pour validation</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

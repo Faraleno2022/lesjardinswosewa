@@ -1,0 +1,193 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-chart-line text-info"></i> {{ titre_page }}</h2>
+                    <p class="text-muted">Statistiques et analyses de la bibliothèque</p>
+                </div>
+                <div>
+                    <a href="{% url 'depenses:dashboard_bibliotheque' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtres de période -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-5">
+                    <label class="form-label">Date début</label>
+                    <input type="date" name="date_debut" class="form-control" value="{{ date_debut }}">
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label">Date fin</label>
+                    <input type="date" name="date_fin" class="form-control" value="{{ date_fin }}">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search"></i> Filtrer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Statistiques générales -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card card-stats">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <p class="text-muted mb-1">Total Emprunts</p>
+                            <h3 class="mb-0">{{ stats.total_emprunts }}</h3>
+                        </div>
+                        <div class="text-primary">
+                            <i class="fas fa-hand-holding-heart fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-stats success">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <p class="text-muted mb-1">Retournés</p>
+                            <h3 class="mb-0">{{ stats.emprunts_retournes }}</h3>
+                        </div>
+                        <div class="text-success">
+                            <i class="fas fa-check-circle fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-stats warning">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <p class="text-muted mb-1">En Retard</p>
+                            <h3 class="mb-0">{{ stats.emprunts_en_retard }}</h3>
+                        </div>
+                        <div class="text-danger">
+                            <i class="fas fa-exclamation-triangle fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-stats">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <p class="text-muted mb-1">Pénalités</p>
+                            <h3 class="mb-0">{{ stats.total_penalites|intcomma }}</h3>
+                            <small class="text-muted">GNF</small>
+                        </div>
+                        <div class="text-warning">
+                            <i class="fas fa-coins fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Livres les plus empruntés -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-star"></i> Top 10 Livres les Plus Empruntés</h5>
+                </div>
+                <div class="card-body">
+                    {% if livres_populaires %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Titre</th>
+                                    <th>Auteur</th>
+                                    <th>Emprunts</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for livre in livres_populaires %}
+                                <tr>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td>{{ livre.titre|truncatewords:5 }}</td>
+                                    <td>{{ livre.auteur|truncatewords:2 }}</td>
+                                    <td><span class="badge bg-primary">{{ livre.nb_emprunts }}</span></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-book-open fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">Aucune donnée</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Élèves les plus actifs -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-user-graduate"></i> Top 10 Élèves les Plus Actifs</h5>
+                </div>
+                <div class="card-body">
+                    {% if eleves_actifs %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Élève</th>
+                                    <th>Classe</th>
+                                    <th>Emprunts</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for eleve in eleves_actifs %}
+                                <tr>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td>{{ eleve.nom }} {{ eleve.prenom }}</td>
+                                    <td>{{ eleve.classe.nom|default:"-" }}</td>
+                                    <td><span class="badge bg-success">{{ eleve.nb_emprunts }}</span></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">Aucune donnée</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

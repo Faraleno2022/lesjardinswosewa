@@ -1,0 +1,334 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>
+                    <i class="fas fa-users-cog text-primary"></i>
+                    {{ titre_page }}
+                </h1>
+                <div class="d-flex gap-2">
+                    <a href="{% url 'utilisateurs:comptable_create' %}" class="btn btn-success">
+                        <i class="fas fa-user-plus"></i> Créer un Comptable
+                    </a>
+                    <a href="{% url 'utilisateurs:gestion_permissions' %}" class="btn btn-outline-primary">
+                        <i class="fas fa-key"></i> Permissions
+                    </a>
+                    <a href="{% url 'administration:dashboard' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Retour au tableau de bord
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Filtres -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <form method="get" class="row g-3">
+                        <div class="col-md-4">
+                            <label for="search" class="form-label">Rechercher</label>
+                            <input type="text" class="form-control" id="search" name="search" 
+                                   value="{{ search_query }}" placeholder="Nom, email, nom d'utilisateur...">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="role" class="form-label">Rôle</label>
+                            <select class="form-select" id="role" name="role">
+                                <option value="">Tous les rôles</option>
+                                {% for role in roles %}
+                                <option value="{{ role }}" {% if role == role_filter %}selected{% endif %}>
+                                    {{ role }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label d-block">&nbsp;</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" value="1" id="pending" name="pending" {% if pending_only %}checked{% endif %}>
+                                <label class="form-check-label" for="pending">
+                                    Afficher seulement les comptes à valider
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary me-2">
+                                <i class="fas fa-search"></i> Filtrer
+                            </button>
+                            <a href="{% url 'administration:users_management' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-times"></i> Effacer
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Demandes en attente -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-user-clock me-2"></i>Comptes à valider</h5>
+                    <span class="badge bg-warning text-dark">{{ pending_users_count|default:0 }}</span>
+                </div>
+                <div class="card-body p-0">
+                    {% if pending_users_count %}
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Utilisateur</th>
+                                    <th>Email</th>
+                                    <th>Statut</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for u in pending_users %}
+                                <tr>
+                                    <td>
+                                        <strong>@{{ u.username }}</strong><br>
+                                        <small class="text-muted">Inscrit: {{ u.date_joined|date:"d/m/Y H:i" }}</small>
+                                    </td>
+                                    <td>{{ u.email|default:"-" }}</td>
+                                    <td>
+                                        {% if u.is_active %}
+                                            <span class="badge bg-success">Actif</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">Inactif</span>
+                                        {% endif %}
+                                        {% if u.profil and not u.profil.is_validated %}
+                                            <span class="badge bg-warning text-dark ms-1">Non validé</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a class="btn btn-sm btn-outline-success" href="{% url 'utilisateurs:valider_compte' u.id %}">
+                                            <i class="fas fa-check"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="p-2 text-end">
+                        <a href="{% url 'utilisateurs:comptes_en_attente' %}" class="btn btn-sm btn-primary">
+                            Voir tout
+                        </a>
+                    </div>
+                    {% else %}
+                    <div class="p-3 text-center text-muted">Aucune demande en attente</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-school me-2"></i>Écoles en attente</h5>
+                    <span class="badge bg-warning text-dark">{{ pending_schools_count|default:0 }}</span>
+                </div>
+                <div class="card-body p-0">
+                    {% if pending_schools_count %}
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>École</th>
+                                    <th>Créée par</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for e in pending_schools %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ e.nom }}</strong><br>
+                                        <small class="text-muted">Soumise: {{ e.date_creation|date:"d/m/Y H:i" }}</small>
+                                    </td>
+                                    <td>
+                                        {% if e.created_by %}
+                                        <span class="text-muted">@{{ e.created_by.username }}</span>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <form method="post" action="{% url 'administration:valider_ecole' e.id %}" onsubmit="return confirm('Valider cette école ?');">
+                                            {% csrf_token %}
+                                            <button class="btn btn-sm btn-outline-success"><i class="fas fa-check"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="p-2 text-end">
+                        <a href="{% url 'administration:dashboard' %}#pending-schools" class="btn btn-sm btn-primary">
+                            Voir dans le tableau de bord
+                        </a>
+                    </div>
+                    {% else %}
+                    <div class="p-3 text-center text-muted">Aucune école en attente</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Liste des utilisateurs -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>
+                        <i class="fas fa-list"></i> 
+                        Utilisateurs 
+                        <span class="badge bg-primary">{{ page_obj.paginator.count }}</span>
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if page_obj %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Utilisateur</th>
+                                    <th>Email</th>
+                                    <th>Rôle</th>
+                                    <th>École</th>
+                                    <th>Statut</th>
+                                    <th>Dernière connexion</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user in page_obj %}
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="avatar-sm me-2">
+                                                {% if user.is_superuser %}
+                                                    <i class="fas fa-crown text-warning"></i>
+                                                {% elif user.is_staff %}
+                                                    <i class="fas fa-user-shield text-info"></i>
+                                                {% else %}
+                                                    <i class="fas fa-user text-secondary"></i>
+                                                {% endif %}
+                                            </div>
+                                            <div>
+                                                <strong>{{ user.get_full_name|default:user.username }}</strong>
+                                                <br>
+                                                <small class="text-muted">@{{ user.username }}</small>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>{{ user.email|default:"-" }}</td>
+                                    <td>
+                                        {% if user.profil %}
+                                            <span class="badge bg-info">{{ user.profil.role }}</span>
+                                        {% elif user.is_superuser %}
+                                            <span class="badge bg-warning">SUPERUSER</span>
+                                        {% elif user.is_staff %}
+                                            <span class="badge bg-primary">STAFF</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">USER</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if user.profil and user.profil.ecole %}
+                                            {{ user.profil.ecole.nom }}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if user.is_active %}
+                                            <span class="badge bg-success">Actif</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">Inactif</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if user.last_login %}
+                                            {{ user.last_login|date:"d/m/Y H:i" }}
+                                        {% else %}
+                                            <span class="text-muted">Jamais</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'administration:user_detail' user.id %}" 
+                                           class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Pagination -->
+                    {% if page_obj.has_other_pages %}
+                    <div class="card-footer">
+                        <nav aria-label="Navigation des utilisateurs">
+                            <ul class="pagination justify-content-center mb-0">
+                                {% if page_obj.has_previous %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=1{% if search_query %}&search={{ search_query }}{% endif %}{% if role_filter %}&role={{ role_filter }}{% endif %}">
+                                            <i class="fas fa-angle-double-left"></i>
+                                        </a>
+                                    </li>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if role_filter %}&role={{ role_filter }}{% endif %}">
+                                            <i class="fas fa-angle-left"></i>
+                                        </a>
+                                    </li>
+                                {% endif %}
+                                
+                                <li class="page-item active">
+                                    <span class="page-link">
+                                        {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}
+                                    </span>
+                                </li>
+                                
+                                {% if page_obj.has_next %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if role_filter %}&role={{ role_filter }}{% endif %}">
+                                            <i class="fas fa-angle-right"></i>
+                                        </a>
+                                    </li>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if search_query %}&search={{ search_query }}{% endif %}{% if role_filter %}&role={{ role_filter }}{% endif %}">
+                                            <i class="fas fa-angle-double-right"></i>
+                                        </a>
+                                    </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    </div>
+                    {% endif %}
+                    
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">Aucun utilisateur trouvé</h5>
+                        <p class="text-muted">Essayez de modifier vos critères de recherche.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

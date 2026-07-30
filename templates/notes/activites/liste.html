@@ -1,0 +1,279 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Vie scolaire & activités{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header-activites {
+        background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+        box-shadow: 0 5px 20px rgba(13, 110, 253, 0.3);
+    }
+    .stat-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: .4rem;
+        padding: .35rem .8rem;
+        border-radius: 20px;
+        font-size: .85rem;
+        font-weight: 600;
+        color: #fff;
+    }
+    .badge-evaluation { background: #1976d2; }
+    .badge-absence   { background: #d32f2f; }
+    .badge-retard    { background: #f57c00; }
+    .badge-discipline{ background: #6d4c41; }
+    .badge-convocation{ background: #6f42c1; }
+    .badge-sportive  { background: #388e3c; }
+    .badge-culturelle{ background: #f57c00; }
+    .badge-artistique{ background: #7b1fa2; }
+    .badge-sortie    { background: #00838f; }
+    .badge-autre     { background: #546e7a; }
+    .activite-card {
+        border-radius: 12px;
+        border: none;
+        box-shadow: 0 2px 10px rgba(0,0,0,.08);
+        transition: transform .2s, box-shadow .2s;
+        overflow: hidden;
+    }
+    .activite-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 20px rgba(0,0,0,.12);
+    }
+    .activite-card .card-img-top {
+        height: 180px;
+        object-fit: cover;
+    }
+    .type-indicator {
+        width: 5px;
+        min-height: 100%;
+        position: absolute;
+        left: 0;
+        top: 0;
+    }
+    .type-EVALUATION .type-indicator { background: #1976d2; }
+    .type-ABSENCE .type-indicator    { background: #d32f2f; }
+    .type-RETARD .type-indicator     { background: #f57c00; }
+    .type-DISCIPLINE .type-indicator { background: #6d4c41; }
+    .type-CONVOCATION .type-indicator { background: #6f42c1; }
+    .type-SPORTIVE .type-indicator   { background: #388e3c; }
+    .type-CULTURELLE .type-indicator { background: #f57c00; }
+    .type-ARTISTIQUE .type-indicator { background: #7b1fa2; }
+    .type-SORTIE .type-indicator     { background: #00838f; }
+    .type-AUTRE .type-indicator      { background: #546e7a; }
+    .pj-thumb {
+        width: 48px;
+        height: 48px;
+        object-fit: cover;
+        border-radius: 6px;
+        border: 2px solid #eee;
+    }
+    .filter-bar {
+        background: #fff;
+        border-radius: 12px;
+        padding: 1.2rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,.06);
+        margin-bottom: 1.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+    <!-- En-tête -->
+    <div class="page-header-activites">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <h1 class="mb-1"><i class="fas fa-calendar-day me-2"></i>Vie scolaire & activités</h1>
+                <p class="mb-0 opacity-75">Absences, retards, discipline, convocations et activités des élèves</p>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{% url 'notes:ajouter_activite' %}" class="btn btn-light btn-lg">
+                    <i class="fas fa-plus me-1"></i> Nouvelle observation
+                </a>
+                <a href="{% url 'notes:tableau_bord' %}" class="btn btn-outline-light">
+                    <i class="fas fa-arrow-left me-1"></i> Retour
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistiques rapides -->
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <span class="stat-badge badge-absence">
+            <i class="fas fa-user-times"></i> Absences: {{ stats.par_type.ABSENCE|default:"0" }}
+        </span>
+        <span class="stat-badge badge-retard">
+            <i class="fas fa-clock"></i> Retards: {{ stats.par_type.RETARD|default:"0" }}
+        </span>
+        <span class="stat-badge badge-discipline">
+            <i class="fas fa-triangle-exclamation"></i> Discipline: {{ stats.par_type.DISCIPLINE|default:"0" }}
+        </span>
+        <span class="stat-badge badge-convocation">
+            <i class="fas fa-people-arrows"></i> Convocations: {{ stats.par_type.CONVOCATION|default:"0" }}
+        </span>
+        <span class="stat-badge badge-evaluation">
+            <i class="fas fa-file-alt"></i> Évaluation: {{ stats.par_type.EVALUATION|default:"0" }}
+        </span>
+        <span class="stat-badge badge-sportive">
+            <i class="fas fa-futbol"></i> Sportive: {{ stats.par_type.SPORTIVE|default:"0" }}
+        </span>
+        <span class="stat-badge badge-culturelle">
+            <i class="fas fa-theater-masks"></i> Culturelle: {{ stats.par_type.CULTURELLE|default:"0" }}
+        </span>
+        <span class="stat-badge badge-artistique">
+            <i class="fas fa-palette"></i> Artistique: {{ stats.par_type.ARTISTIQUE|default:"0" }}
+        </span>
+        <span class="stat-badge badge-sortie">
+            <i class="fas fa-bus"></i> Sortie: {{ stats.par_type.SORTIE|default:"0" }}
+        </span>
+        <span class="stat-badge badge-autre">
+            <i class="fas fa-ellipsis-h"></i> Autre: {{ stats.par_type.AUTRE|default:"0" }}
+        </span>
+    </div>
+
+    {% if stats.vie_scolaire_total %}
+    <div class="alert alert-warning d-flex align-items-center gap-2">
+        <i class="fas fa-user-shield fs-4"></i>
+        <div>
+            <strong>{{ stats.vie_scolaire_total }} fait{{ stats.vie_scolaire_total|pluralize }} de vie scolaire</strong>
+            sur la période affichée. Utilisez les filtres pour suivre une classe ou un élève précis.
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Filtres -->
+    <div class="filter-bar">
+        <form method="get" class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">Classe</label>
+                <select name="classe" class="form-select form-select-sm">
+                    <option value="">Toutes</option>
+                    {% for c in classes %}
+                    <option value="{{ c.id }}" {% if filtre_classe == c.id|stringformat:"d" %}selected{% endif %}>{{ c.nom }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">Type</label>
+                <select name="type" class="form-select form-select-sm">
+                    <option value="">Tous</option>
+                    {% for val, label in types %}
+                    <option value="{{ val }}" {% if filtre_type == val %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">Du</label>
+                <input type="date" name="date_debut" class="form-control form-control-sm" value="{{ filtre_date_debut|default:'' }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">Au</label>
+                <input type="date" name="date_fin" class="form-control form-control-sm" value="{{ filtre_date_fin|default:'' }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">Recherche</label>
+                <input type="text" name="q" class="form-control form-control-sm" placeholder="Nom, matricule, observation..." value="{{ filtre_search|default:'' }}">
+            </div>
+            <div class="col-md-2 d-flex gap-1">
+                <button type="submit" class="btn btn-primary btn-sm flex-grow-1"><i class="fas fa-search"></i> Filtrer</button>
+                <a href="{% url 'notes:liste_activites' %}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-undo"></i></a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Liste des activités -->
+    {% if page_obj.object_list %}
+    <div class="row g-3">
+        {% for activite in page_obj %}
+        <div class="col-md-6 col-lg-4">
+            <div class="card activite-card position-relative type-{{ activite.type_activite }}">
+                <div class="type-indicator"></div>
+
+                {% with first_img=activite.pieces_jointes.all|first %}
+                {% if first_img and first_img.is_image %}
+                <img src="{{ first_img.fichier.url }}" class="card-img-top" alt="{{ first_img.legende }}">
+                {% endif %}
+                {% endwith %}
+
+                <div class="card-body ps-4">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <span class="badge bg-secondary">{{ activite.get_type_activite_display }}</span>
+                        <small class="text-muted"><i class="fas fa-calendar"></i> {{ activite.date|date:"d/m/Y" }}</small>
+                    </div>
+                    <h6 class="card-title fw-bold mb-1">{{ activite.titre }}</h6>
+                    <p class="text-muted small mb-1">
+                        <i class="fas fa-user-graduate"></i> {{ activite.eleve.nom }} {{ activite.eleve.prenom }}
+                        <span class="ms-2"><i class="fas fa-school"></i> {{ activite.classe.nom }}</span>
+                    </p>
+                    {% if activite.appreciation %}
+                    <span class="badge bg-info text-dark"><i class="fas fa-star"></i> {{ activite.appreciation }}</span>
+                    {% endif %}
+
+                    {% if activite.pieces_jointes.count > 0 %}
+                    <div class="mt-2">
+                        <small class="text-muted"><i class="fas fa-paperclip"></i> {{ activite.pieces_jointes.count }} pièce{{ activite.pieces_jointes.count|pluralize }}
+                        </small>
+                    </div>
+                    {% endif %}
+
+                    <div class="mt-2 d-flex gap-1">
+                        <a href="{% url 'notes:detail_activite' activite.pk %}" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-eye"></i> Voir
+                        </a>
+                        <a href="{% url 'notes:modifier_activite' activite.pk %}" class="btn btn-sm btn-outline-warning">
+                            <i class="fas fa-edit"></i>
+                        </a>
+                        <form method="post" action="{% url 'notes:supprimer_activite' activite.pk %}"
+                              class="d-inline" onsubmit="return confirm('Supprimer cette observation ?')">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <nav class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&classe={{ filtre_classe|default:'' }}&type={{ filtre_type|default:'' }}&date_debut={{ filtre_date_debut|default:'' }}&date_fin={{ filtre_date_fin|default:'' }}&q={{ filtre_search|default:'' }}">&laquo;</a></li>
+            {% endif %}
+            {% for num in page_obj.paginator.page_range %}
+            {% if page_obj.number == num %}
+            <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+            {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
+            <li class="page-item"><a class="page-link" href="?page={{ num }}&classe={{ filtre_classe|default:'' }}&type={{ filtre_type|default:'' }}&date_debut={{ filtre_date_debut|default:'' }}&date_fin={{ filtre_date_fin|default:'' }}&q={{ filtre_search|default:'' }}">{{ num }}</a></li>
+            {% endif %}
+            {% endfor %}
+            {% if page_obj.has_next %}
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&classe={{ filtre_classe|default:'' }}&type={{ filtre_type|default:'' }}&date_debut={{ filtre_date_debut|default:'' }}&date_fin={{ filtre_date_fin|default:'' }}&q={{ filtre_search|default:'' }}">&raquo;</a></li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <div class="text-center py-5">
+        <i class="fas fa-calendar-day fa-4x text-muted mb-3"></i>
+        <h4 class="text-muted">Aucune observation enregistrée</h4>
+        <p class="text-muted">Commencez par ajouter une absence, un retard, une convocation ou une activité.</p>
+        <a href="{% url 'notes:ajouter_activite' %}" class="btn btn-primary btn-lg mt-2">
+            <i class="fas fa-plus me-1"></i> Ajouter une observation
+        </a>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

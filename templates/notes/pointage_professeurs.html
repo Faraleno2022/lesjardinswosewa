@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% block title %}Pointage des professeurs{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h2 class="mb-0"><i class="fas fa-user-clock text-primary me-2"></i>Pointage des professeurs</h2>
+        <div>
+            <a href="{% url 'notes:calendrier_professeurs' %}" class="btn btn-outline-info"><i class="fas fa-calendar me-1"></i>Calendrier</a>
+            <a href="{% url 'notes:tableau_bord' %}" class="btn btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i>Retour Notes</a>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label">Date</label>
+                    <input type="date" name="date" value="{{ jour|date:'Y-m-d' }}" class="form-control" onchange="this.form.submit()">
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="date" value="{{ jour|date:'Y-m-d' }}">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>{{ jour|date:'l d/m/Y' }} — {{ lignes|length }} professeur(s)</strong>
+                <button type="button" class="btn btn-sm btn-outline-success" onclick="marquerTous('PRESENT')">Tous présents</button>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr><th>N°</th><th>Professeur</th><th style="width:180px">Statut</th><th style="width:130px">Arrivée</th><th style="width:130px">Départ</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for l in lignes %}
+                        <tr>
+                            <td>{{ forloop.counter }}</td>
+                            <td>{{ l.enseignant.nom }} {{ l.enseignant.prenoms }}</td>
+                            <td>
+                                <select name="statut_{{ l.enseignant.id }}" class="form-select form-select-sm statut-select">
+                                    {% for val, lib in statut_choices %}
+                                    <option value="{{ val }}" {% if l.statut == val %}selected{% endif %}>{{ lib }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td><input type="time" name="arrivee_{{ l.enseignant.id }}" value="{{ l.arrivee }}" class="form-control form-control-sm"></td>
+                            <td><input type="time" name="depart_{{ l.enseignant.id }}" value="{{ l.depart }}" class="form-control form-control-sm"></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="text-center text-muted py-3">Aucun professeur enregistré pour votre école (module Salaires → Enseignants).</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if lignes %}
+            <div class="card-footer text-end">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Enregistrer le pointage</button>
+            </div>
+            {% endif %}
+        </div>
+    </form>
+</div>
+<script>
+function marquerTous(statut){document.querySelectorAll('.statut-select').forEach(s=>s.value=statut);}
+</script>
+{% endblock %}

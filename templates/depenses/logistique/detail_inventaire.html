@@ -1,0 +1,124 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="fas fa-clipboard-list text-success"></i> {{ inventaire.numero_inventaire }}</h2>
+            <p class="text-muted mb-0">
+                {{ inventaire.date_inventaire|date:"d/m/Y" }} &middot;
+                <span class="badge
+                    {% if inventaire.statut == 'EN_COURS' %}bg-info
+                    {% elif inventaire.statut == 'TERMINE' %}bg-warning text-dark
+                    {% elif inventaire.statut == 'VALIDE' %}bg-success
+                    {% else %}bg-secondary{% endif %}">
+                    {{ inventaire.get_statut_display }}
+                </span>
+            </p>
+        </div>
+        <div>
+            <a href="{% url 'depenses:liste_inventaires' %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Retour
+            </a>
+            {% if inventaire.statut == 'TERMINE' %}
+            <form method="post" action="{% url 'depenses:valider_inventaire' inventaire.id %}" class="d-inline"
+                  onsubmit="return confirm('Valider cet inventaire et ajuster le stock réel selon les écarts ?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-check"></i> Valider & ajuster le stock
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Synthèse -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card card-stats"><div class="card-body">
+                <p class="text-muted mb-1">Articles</p>
+                <h3 class="mb-0">{{ inventaire.nombre_articles }}</h3>
+            </div></div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-stats warning"><div class="card-body">
+                <p class="text-muted mb-1">Écarts détectés</p>
+                <h3 class="mb-0">{{ inventaire.ecarts_detectes }}</h3>
+            </div></div>
+        </div>
+        <div class="col-md-6">
+            <div class="card card-stats success"><div class="card-body">
+                <p class="text-muted mb-1">Valeur physique constatée</p>
+                <h3 class="mb-0">{{ inventaire.valeur_totale|intcomma }} GNF</h3>
+            </div></div>
+        </div>
+    </div>
+
+    <!-- Lignes -->
+    <form method="post">
+        {% csrf_token %}
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-list"></i> Comptage</h5>
+                {% if inventaire.statut == 'EN_COURS' %}
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="fas fa-save"></i> Enregistrer le comptage
+                </button>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Article</th>
+                                <th class="text-end">Stock théorique</th>
+                                <th class="text-end" style="width:140px">Stock physique</th>
+                                <th class="text-end">Écart</th>
+                                <th class="text-end">Valeur physique</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ligne in lignes %}
+                            <tr {% if ligne.ecart != 0 %}class="table-warning"{% endif %}>
+                                <td>
+                                    <strong>{{ ligne.article.nom }}</strong><br>
+                                    <small class="text-muted">{{ ligne.article.code_article }}</small>
+                                </td>
+                                <td class="text-end">{{ ligne.stock_theorique }}</td>
+                                <td class="text-end">
+                                    {% if inventaire.statut == 'EN_COURS' %}
+                                    <input type="number" name="stock_physique_{{ ligne.id }}"
+                                           value="{{ ligne.stock_physique }}" class="form-control form-control-sm text-end">
+                                    {% else %}
+                                    {{ ligne.stock_physique }}
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    {% if ligne.ecart > 0 %}
+                                    <span class="text-success">+{{ ligne.ecart }}</span>
+                                    {% elif ligne.ecart < 0 %}
+                                    <span class="text-danger">{{ ligne.ecart }}</span>
+                                    {% else %}
+                                    0
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">{{ ligne.valeur_physique|intcomma }} GNF</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center py-4 text-muted">Aucune ligne</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

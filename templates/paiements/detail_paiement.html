@@ -1,0 +1,539 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% load static %}
+
+{% block title %}{{ titre_page }} - {{ block.super }}{% endblock %}
+
+{% block breadcrumb_items %}
+    <li class="breadcrumb-item">
+        <a href="{% url 'paiements:tableau_bord' %}">Paiements</a>
+    </li>
+    <li class="breadcrumb-item">
+        <a href="{% url 'paiements:liste_paiements' %}">Liste des paiements</a>
+    </li>
+    <li class="breadcrumb-item active">Détail paiement</li>
+{% endblock %}
+
+{% block page_actions %}
+    <div>
+        <a href="{% url 'paiements:liste_paiements' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i>Retour à la liste
+        </a>
+        {% if paiement.statut == 'VALIDE' %}
+            <a href="{% url 'paiements:generer_recu_pdf' paiement.id %}" class="btn btn-primary">
+                <i class="fas fa-file-pdf me-1"></i>Télécharger le reçu
+            </a>
+            <button type="button" class="btn btn-success" onclick="envoyerRecuWhatsApp()" data-paiement-id="{{ paiement.id }}">
+                <i class="fab fa-whatsapp me-1"></i>Envoyer par WhatsApp
+            </button>
+        {% endif %}
+        {% if paiement.statut == 'EN_ATTENTE' %}
+            <a href="{% url 'paiements:appliquer_remise' paiement.id %}" class="btn btn-warning">
+                <i class="fas fa-percentage me-1"></i>Appliquer remises
+            </a>
+            {% if is_admin or is_comptable or user_permissions.can_validate_payments or user_permissions.can_modify_payments %}
+                <form method="post" action="{% url 'paiements:valider_paiement' paiement.id %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-success" onclick="return confirm('Confirmer la validation de ce paiement ?');">
+                        <i class="fas fa-check me-1"></i>Valider le paiement
+                    </button>
+                </form>
+            {% endif %}
+        {% endif %}
+        <!-- Nouveau paiement en tête de page -->
+        <a href="{% url 'paiements:ajouter_paiement_eleve' paiement.eleve.id %}" class="btn btn-outline-success">
+            <i class="fas fa-plus me-1"></i>Nouveau paiement
+        </a>
+        <!-- Bouton Relance visible en tête de page -->
+        <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#relanceModal">
+            <i class="fas fa-bell me-1"></i>Relance
+        </button>
+    </div>
+{% endblock %}
+
+{% block content %}
+    <div class="row">
+        <!-- Informations principales du paiement -->
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-receipt me-2"></i>Détails du paiement
+                    </h5>
+                    <span class="badge badge-status-{{ paiement.statut|lower }}">
+                        {{ paiement.get_statut_display }}
+                    </span>
+                </div>
+                <div class="card-body wm-container">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-muted mb-3">Informations générales</h6>
+                            
+                            <div class="info-item mb-3">
+                                <label class="info-label">Numéro de reçu :</label>
+                                <span class="info-value fw-bold">{{ paiement.numero_recu }}</span>
+                            </div>
+                            
+                            <div class="info-item mb-3">
+                                <label class="info-label">Montant :</label>
+                                <span class="info-value text-success fw-bold">
+                                    {{ paiement.montant|floatformat:0|intcomma }} GNF
+                                </span>
+                            </div>
+                            
+                            <div class="info-item mb-3">
+                                <label class="info-label">Date de paiement :</label>
+                                <span class="info-value">{{ paiement.date_paiement|date:"d/m/Y" }}</span>
+                            </div>
+                            
+                            <div class="info-item mb-3">
+                                <label class="info-label">Type de paiement :</label>
+                                <span class="info-value">{{ paiement.type_paiement.nom }}</span>
+                            </div>
+                            
+                            <div class="info-item mb-3">
+                                <label class="info-label">Mode de paiement :</label>
+                                <span class="info-value">{{ paiement.mode_paiement.nom }}</span>
+                            </div>
+                            
+                            {% if paiement.mode_paiement.frais_supplementaires > 0 %}
+                            <div class="info-item mb-3">
+                                <label class="info-label">Frais supplémentaires :</label>
+                                <span class="info-value text-warning">
+                                    {{ paiement.mode_paiement.frais_supplementaires|floatformat:0|intcomma }} GNF
+                                </span>
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <h6 class="text-muted mb-3">Informations de l'élève</h6>
+                            
+                            <div class="info-item mb-3">
+                                <label class="info-label">Élève :</label>
+                                <span class="info-value">
+                                    <a href="{% url 'eleves:detail_eleve' paiement.eleve.id %}" class="text-decoration-none">
+                                        {{ paiement.eleve.nom_complet }}
+                                    </a>
+                                </span>
+                            </div>
+                            
+                            <div class="info-item mb-3">
+                                <label class="info-label">Matricule :</label>
+                                <span class="info-value">{{ paiement.eleve.matricule }}</span>
+                            </div>
+                            
+                            <div class="info-item mb-3">
+                                <label class="info-label">Classe :</label>
+                                <span class="info-value">{{ paiement.eleve.classe }}</span>
+                            </div>
+                            
+                            <div class="info-item mb-3">
+                                <label class="info-label">École :</label>
+                                <span class="info-value">{{ paiement.eleve.classe.ecole.nom }}</span>
+                            </div>
+                            
+                            <div class="info-item mb-3">
+                                <label class="info-label">Responsable principal :</label>
+                                <span class="info-value">
+                                    {{ paiement.eleve.responsable_principal.nom_complet }}
+                                    <small class="text-muted d-block">
+                                        {{ paiement.eleve.responsable_principal.telephone }}
+                                    </small>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {% if paiement.observations %}
+                    <div class="mt-4">
+                        <h6 class="text-muted mb-2">Observations</h6>
+                        <div class="alert alert-light">
+                            {{ paiement.observations|linebreaks }}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Informations de traçabilité -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-history me-2"></i>Traçabilité
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="info-item mb-3">
+                        <label class="info-label">Créé le :</label>
+                        <span class="info-value">{{ paiement.date_creation|date:"d/m/Y à H:i" }}</span>
+                    </div>
+                    
+                    {% if paiement.cree_par %}
+                    <div class="info-item mb-3">
+                        <label class="info-label">Créé par :</label>
+                        <span class="info-value">{{ paiement.cree_par.get_full_name|default:paiement.cree_par.username }}</span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if paiement.date_validation %}
+                    <div class="info-item mb-3">
+                        <label class="info-label">Validé le :</label>
+                        <span class="info-value">{{ paiement.date_validation|date:"d/m/Y à H:i" }}</span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if paiement.valide_par %}
+                    <div class="info-item mb-3">
+                        <label class="info-label">Validé par :</label>
+                        <span class="info-value">{{ paiement.valide_par.get_full_name|default:paiement.valide_par.username }}</span>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="info-item mb-3">
+                        <label class="info-label">Dernière modification :</label>
+                        <span class="info-value">{{ paiement.date_modification|date:"d/m/Y à H:i" }}</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Remises appliquées -->
+            {% if remises_total and remises_total > 0 %}
+            <div class="card mt-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-percentage me-2"></i>Remises appliquées
+                    </h6>
+                    {% if paiement.statut == 'EN_ATTENTE' %}
+                        <a href="{% url 'paiements:appliquer_remise' paiement.id %}" class="btn btn-sm btn-outline-warning">
+                            <i class="fas fa-edit me-1"></i>Modifier remises
+                        </a>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-2">Les remises correspondent aux réductions accordées sur ce paiement.</p>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="fw-semibold">Total remises</span>
+                        <span class="text-success">-{{ remises_total|floatformat:0|intcomma }} GNF</span>
+                    </div>
+                    {% for paiement_remise in paiement.remises.all %}
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span>{{ paiement_remise.remise.nom }}</span>
+                        <span class="text-success">
+                            -{{ paiement_remise.montant_remise|floatformat:0|intcomma }} GNF
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Lien vers l'échéancier -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-calendar-alt me-2"></i>Actions rapides
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <a href="{% url 'paiements:echeancier_eleve' paiement.eleve.id %}" class="btn btn-outline-primary btn-sm w-100 mb-2">
+                        <i class="fas fa-calendar-check me-1"></i>Voir l'échéancier de l'élève
+                    </a>
+                    
+                    <a href="{% url 'paiements:ajouter_paiement_eleve' paiement.eleve.id %}" class="btn btn-outline-success btn-sm w-100">
+                        <i class="fas fa-plus me-1"></i>Nouveau paiement pour cet élève
+                    </a>
+
+                    {% if paiement.statut == 'EN_ATTENTE' %}
+                        <a href="{% url 'paiements:appliquer_remise' paiement.id %}" class="btn btn-warning btn-sm w-100 mt-2">
+                            <i class="fas fa-percentage me-1"></i>Appliquer remises
+                        </a>
+                    {% endif %}
+
+                    <!-- Bouton relance rapide (confirmation directe) -->
+                    <form method="post" action="{% url 'paiements:relancer_eleve' paiement.eleve.id %}" class="mt-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{% url 'paiements:detail_paiement' paiement.id %}">
+                        <button type="submit" class="btn btn-warning btn-sm w-100" onclick="return confirm('Envoyer une relance à ce responsable ?');">
+                            <i class="fas fa-bell me-1"></i>Relancer le responsable
+                        </button>
+                    </form>
+
+                    <!-- Bouton pour ouvrir la modale relance (choisir canal/message) -->
+                    <button type="button" class="btn btn-primary btn-sm w-100 mt-2" data-bs-toggle="modal" data-bs-target="#relanceModal">
+                        <i class="fas fa-paper-plane me-1"></i>Relance (choisir canal/message)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .info-item {
+        border-bottom: 1px solid #f0f0f0;
+        padding-bottom: 0.5rem;
+    }
+    
+    .info-label {
+        font-weight: 600;
+        color: #6c757d;
+        display: block;
+        margin-bottom: 0.25rem;
+    }
+    
+    .info-value {
+        color: #495057;
+    }
+    
+    .badge-status-en_attente {
+        background-color: #ffc107;
+        color: #000;
+    }
+    
+    .badge-status-valide {
+        background-color: #28a745;
+        color: #fff;
+    }
+    
+    .badge-status-rejete {
+        background-color: #dc3545;
+        color: #fff;
+    }
+    
+    .badge-status-rembourse {
+        background-color: #6f42c1;
+        color: #fff;
+    }
+    
+    .card-header {
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .wm-container {
+        position: relative;
+        overflow: hidden;
+    }
+    .wm-container::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: url('{% static "logos/logo.png" %}') center/45% no-repeat;
+        opacity: 0.06; /* Visible mais discret */
+        transform: rotate(-20deg);
+        pointer-events: none;
+        filter: grayscale(100%);
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Modal WhatsApp pour envoi du reçu -->
+<div class="modal fade" id="whatsappRecuModal" tabindex="-1" aria-labelledby="whatsappRecuModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header" style="background: #25D366; color: white;">
+                <h5 class="modal-title" id="whatsappRecuModalLabel">
+                    <i class="fab fa-whatsapp me-2"></i>Envoyer le reçu par WhatsApp
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="whatsappRecuContent">
+                    <div class="text-center">
+                        <div class="spinner-border text-success" role="status">
+                            <span class="visually-hidden">Chargement...</span>
+                        </div>
+                        <p class="mt-2">Préparation du message...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-success" id="btnOuvrirWhatsApp" disabled>
+                    <i class="fab fa-whatsapp me-2"></i>Ouvrir WhatsApp
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let whatsappRecuModal;
+let currentWhatsAppLink = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    whatsappRecuModal = new bootstrap.Modal(document.getElementById('whatsappRecuModal'));
+    
+    // Gestionnaire pour le bouton d'ouverture WhatsApp
+    document.getElementById('btnOuvrirWhatsApp').addEventListener('click', function() {
+        if (currentWhatsAppLink) {
+            window.open(currentWhatsAppLink, '_blank');
+            whatsappRecuModal.hide();
+            
+            // Afficher un message de confirmation
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-success alert-dismissible fade show mt-3';
+            alertDiv.innerHTML = `
+                <i class="fab fa-whatsapp me-2"></i>
+                <strong>WhatsApp ouvert !</strong> Le message avec le reçu a été pré-rempli.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            const container = document.querySelector('.container-fluid') || document.querySelector('.content');
+            if (container) {
+                container.insertBefore(alertDiv, container.firstChild);
+            }
+        }
+    });
+});
+
+function envoyerRecuWhatsApp() {
+    const paiementId = {{ paiement.id }};
+    
+    // Afficher la modal
+    whatsappRecuModal.show();
+    
+    // Charger l'aperçu
+    chargerApercuWhatsAppRecu(paiementId);
+}
+
+function chargerApercuWhatsAppRecu(paiementId) {
+    const content = document.getElementById('whatsappRecuContent');
+    const btnOuvrir = document.getElementById('btnOuvrirWhatsApp');
+    
+    // Réinitialiser
+    btnOuvrir.disabled = true;
+    currentWhatsAppLink = null;
+    content.innerHTML = `
+        <div class="text-center">
+            <div class="spinner-border text-success" role="status">
+                <span class="visually-hidden">Chargement...</span>
+            </div>
+            <p class="mt-2">Préparation du message...</p>
+        </div>
+    `;
+    
+    // Appel AJAX
+    fetch(`{% url 'paiements:apercu_whatsapp_recu' %}?paiement_id=${paiementId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                afficherApercuWhatsAppRecu(data);
+                if (data.whatsapp_link) {
+                    currentWhatsAppLink = data.whatsapp_link;
+                    btnOuvrir.disabled = false;
+                }
+            } else {
+                content.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle me-2"></i>
+                        <strong>Erreur:</strong> ${data.error}
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            content.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    <strong>Erreur:</strong> Erreur de connexion
+                </div>
+            `;
+        });
+}
+
+function afficherApercuWhatsAppRecu(data) {
+    const content = document.getElementById('whatsappRecuContent');
+    
+    content.innerHTML = `
+        <div class="row">
+            <div class="col-md-5">
+                <h6><i class="fas fa-receipt me-2"></i>Informations du reçu</h6>
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <p><strong>Élève:</strong> ${data.eleve_nom}</p>
+                        <p><strong>N° Reçu:</strong> ${data.numero_recu}</p>
+                        <p><strong>Montant:</strong> <span class="badge bg-success">${data.montant} GNF</span></p>
+                        <p><strong>Type:</strong> ${data.type_paiement}</p>
+                        <p><strong>Date:</strong> ${data.date_paiement}</p>
+                        <p class="mb-0"><strong>Statut:</strong> ${data.statut}</p>
+                    </div>
+                </div>
+                
+                ${data.pdf_url ? `
+                <div class="alert alert-success mt-3">
+                    <i class="fas fa-file-pdf me-2"></i>
+                    <strong>Reçu PDF inclus !</strong><br>
+                    <small>Le lien de téléchargement du reçu PDF sera inclus dans le message.</small>
+                </div>
+                ` : ''}
+                
+                ${!data.telephone ? `
+                <div class="alert alert-warning mt-3">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Attention:</strong> Aucun numéro WhatsApp trouvé.
+                    <br><small>Veuillez renseigner le numéro du responsable dans la fiche élève.</small>
+                </div>
+                ` : `
+                <div class="alert alert-info mt-3">
+                    <i class="fas fa-phone me-2"></i>
+                    <strong>Destinataire:</strong> ${data.telephone}
+                </div>
+                `}
+            </div>
+            
+            <div class="col-md-7">
+                <h6><i class="fab fa-whatsapp me-2"></i>Aperçu du message</h6>
+                <div class="card">
+                    <div class="card-body" style="background: #e7ffdb; font-family: 'Segoe UI', sans-serif; max-height: 350px; overflow-y: auto;">
+                        <div style="white-space: pre-line; font-size: 13px;">${data.message}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+</script>
+
+<!-- Modal Relance avec canal et message -->
+<div class="modal fade" id="relanceModal" tabindex="-1" aria-labelledby="relanceModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="relanceModalLabel">Envoyer une relance</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="post" action="{% url 'paiements:relancer_eleve' paiement.eleve.id %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{% url 'paiements:detail_paiement' paiement.id %}">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Canal</label>
+            <select class="form-select" name="canal" required>
+              <option value="SMS">SMS</option>
+              <option value="WHATSAPP">WhatsApp</option>
+              <option value="EMAIL">Email</option>
+              <option value="APPEL">Appel</option>
+              <option value="AUTRE" selected>Autre</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Message</label>
+            <textarea class="form-control" name="message" rows="4" placeholder="Votre message de relance..."></textarea>
+            <div class="form-text">Laissez vide pour utiliser le message automatique avec le solde estimé.</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-primary">Envoyer la relance</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

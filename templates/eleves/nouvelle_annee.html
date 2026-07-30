@@ -1,0 +1,512 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titre_page }} - {{ block.super }}{% endblock %}
+
+{% block breadcrumb_items %}
+    <li class="breadcrumb-item"><a href="{% url 'eleves:liste_eleves' %}">Élèves</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'eleves:gestion_classes' %}">Classes</a></li>
+    <li class="breadcrumb-item active">Nouvelle Année</li>
+{% endblock %}
+
+{% block page_actions %}
+    <a href="{% url 'eleves:gestion_classes' %}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-1"></i>Retour aux classes
+    </a>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+    <!-- En-tête -->
+    <div class="card border-0 shadow-sm mb-4" style="background: linear-gradient(135deg,#1a6fc4,#0d47a1);">
+        <div class="card-body py-4 text-white d-flex align-items-center gap-3">
+            <div style="font-size:3rem;"><i class="fas fa-calendar-plus"></i></div>
+            <div>
+                <h2 class="mb-1 fw-bold">Nouvelle Année Scolaire</h2>
+                <p class="mb-0 opacity-75">
+                    Transition de <strong>{{ annee_courante }}</strong>
+                    vers <strong>{{ annee_nouvelle }}</strong>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    {% if deja_existante %}
+    <div class="alert alert-warning d-flex align-items-center gap-2">
+        <i class="fas fa-exclamation-triangle fa-lg"></i>
+        <div>
+            <strong>Attention :</strong> Des classes pour l'année <strong>{{ annee_nouvelle }}</strong>
+            existent déjà. La création ne créera que les éléments manquants (sans écraser l'existant).
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Résumé des données actuelles -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-primary h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-school fa-2x text-primary mb-2"></i>
+                    <h3 class="mb-0 text-primary">{{ preview_classes|length }}</h3>
+                    <small class="text-muted">Classes à dupliquer</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-success h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-users fa-2x text-success mb-2"></i>
+                    <h3 class="mb-0 text-success">{{ nb_total_eleves }}</h3>
+                    <small class="text-muted">Élèves actifs</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-warning h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-money-bill-wave fa-2x text-warning mb-2"></i>
+                    <h3 class="mb-0 text-warning">{{ grilles|length }}</h3>
+                    <small class="text-muted">Grilles tarifaires</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-info h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-book fa-2x text-info mb-2"></i>
+                    <h3 class="mb-0 text-info">{{ preview_notes|length }}</h3>
+                    <small class="text-muted">Classes (Notes)</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Formulaire de configuration -->
+    <form method="post" action="{% url 'eleves:nouvelle_annee_creer' %}" id="form-nouvelle-annee">
+        {% csrf_token %}
+        <input type="hidden" name="annee_courante" value="{{ annee_courante }}">
+        <input type="hidden" name="annee_nouvelle" value="{{ annee_nouvelle }}">
+
+        <div class="row g-4">
+            <!-- Options -->
+            <div class="col-lg-4">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-dark text-white">
+                        <i class="fas fa-cogs me-2"></i>Options de duplication
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-3">
+                            Choisissez ce qui sera copié vers <strong>{{ annee_nouvelle }}</strong>.
+                        </p>
+
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="dupliquer_classes"
+                                   name="dupliquer_classes" value="1" checked disabled>
+                            <label class="form-check-label fw-bold" for="dupliquer_classes">
+                                <i class="fas fa-school text-primary me-1"></i>
+                                Dupliquer les classes
+                            </label>
+                            <div class="text-muted small">Toujours effectué (obligatoire)</div>
+                        </div>
+
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="dupliquer_grilles"
+                                   name="dupliquer_grilles" value="1" checked>
+                            <label class="form-check-label fw-bold" for="dupliquer_grilles">
+                                <i class="fas fa-money-bill-wave text-warning me-1"></i>
+                                Copier les grilles tarifaires
+                            </label>
+                            <div class="text-muted small">Frais de scolarité, tranches de paiement</div>
+                        </div>
+
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="dupliquer_notes_classes"
+                                   name="dupliquer_notes_classes" value="1" checked>
+                            <label class="form-check-label fw-bold" for="dupliquer_notes_classes">
+                                <i class="fas fa-book text-info me-1"></i>
+                                Copier les classes & matières (Notes)
+                            </label>
+                            <div class="text-muted small">Structure des matières avec coefficients</div>
+                        </div>
+
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="faire_passer_eleves"
+                                   name="faire_passer_eleves" value="1" checked>
+                            <label class="form-check-label fw-bold" for="faire_passer_eleves">
+                                <i class="fas fa-graduation-cap text-success me-1"></i>
+                                Faire passer les élèves admis
+                            </label>
+                            <div class="text-muted small">Détection intelligente de la classe supérieure</div>
+                        </div>
+
+                        <hr>
+                        <div class="alert alert-info py-2 small mb-0">
+                            <i class="fas fa-robot me-1"></i>
+                            <strong>Transfert intelligent :</strong> Le système détecte automatiquement
+                            la classe supérieure en préservant les sections (A, B, C…) et gère
+                            les séries du Lycée (Littéraire, Scientifique).
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Aperçu des classes -->
+            <div class="col-lg-8">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-exchange-alt me-2"></i>Aperçu du passage en classe supérieure</span>
+                        <span class="badge bg-white text-primary">{{ preview_classes|length }} classes</span>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive" style="max-height:460px;overflow-y:auto;">
+                            <table class="table table-hover table-sm mb-0">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th style="width:40%">Classe actuelle ({{ annee_courante }})</th>
+                                        <th class="text-center" style="width:15%">Élèves actifs</th>
+                                        <th style="width:45%"><i class="fas fa-arrow-right me-1"></i> Classe {{ annee_nouvelle }}</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for p in preview_classes %}
+                                    <tr>
+                                        <td>
+                                            <span class="fw-semibold">{{ p.classe.nom }}</span>
+                                            <div class="text-muted small">{{ p.classe.get_niveau_display }}</div>
+                                        </td>
+                                        <td class="text-center">
+                                            {% if p.nb_eleves > 0 %}
+                                            <span class="badge bg-success">{{ p.nb_eleves }}</span>
+                                            {% else %}
+                                            <span class="badge bg-secondary">0</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if p.classe_superieure %}
+                                                <span class="text-success fw-semibold">
+                                                    <i class="fas fa-arrow-up me-1"></i>{{ p.classe_superieure }}
+                                                </span>
+                                            {% else %}
+                                                <span class="text-danger">
+                                                    <i class="fas fa-sign-out-alt me-1"></i>Sortie / Archivage BAC
+                                                </span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="3" class="text-center text-muted py-3">
+                                            Aucune classe trouvée
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                {% if preview_notes %}
+                <div class="card shadow-sm mt-3">
+                    <div class="card-header bg-info text-white">
+                        <i class="fas fa-book me-2"></i>Classes & Matières (module Notes)
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive" style="max-height:200px;overflow-y:auto;">
+                            <table class="table table-sm mb-0">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>Classe Notes</th>
+                                        <th class="text-center">Matières</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for n in preview_notes %}
+                                    <tr>
+                                        <td>{{ n.classe_note.nom }}</td>
+                                        <td class="text-center">
+                                            <span class="badge bg-info">{{ n.nb_matieres }}</span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% for examen in eleves_examens %}
+        <!-- Section {{ examen.diplome }} -->
+        <div class="col-12 mt-4">
+            <div class="card shadow-sm border-info">
+                <div class="card-header text-white d-flex justify-content-between align-items-center"
+                     style="background: linear-gradient(135deg, {% if examen.diplome == 'CEP' %}#2e7d32, #43a047{% else %}#1565c0, #1e88e5{% endif %});">
+                    <span>
+                        <i class="fas fa-award me-2"></i>{{ examen.label }} &mdash; {{ annee_courante }}
+                    </span>
+                    <span class="badge bg-white text-dark">{{ examen.eleves|length }} élève(s)</span>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info py-2 small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        <strong>Cochez les élèves qui ont obtenu le {{ examen.diplome }}</strong>.
+                        Le diplôme sera enregistré dans leur historique.
+                        <strong>Tous les élèves passent en classe supérieure</strong> quel que soit le résultat.
+                    </div>
+
+                    <div class="mb-2">
+                        <button type="button" class="btn btn-sm btn-outline-success me-1"
+                                onclick="cocherTous('.cb-{{ examen.diplome|lower }}', true)">
+                            <i class="fas fa-check-double me-1"></i>Tout cocher
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                onclick="cocherTous('.cb-{{ examen.diplome|lower }}', false)">
+                            <i class="fas fa-times me-1"></i>Tout décocher
+                        </button>
+                    </div>
+
+                    <div class="table-responsive" style="max-height:300px;overflow-y:auto;">
+                        <table class="table table-hover table-sm mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th style="width:50px;" class="text-center">{{ examen.diplome }}</th>
+                                    <th>Matricule</th>
+                                    <th>Nom complet</th>
+                                    <th>Classe</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in examen.eleves %}
+                                <tr>
+                                    <td class="text-center">
+                                        <input type="checkbox" name="eleves_{{ examen.diplome|lower }}"
+                                               value="{{ item.eleve.id }}"
+                                               class="form-check-input cb-{{ examen.diplome|lower }}"
+                                               style="width:1.3em;height:1.3em;">
+                                    </td>
+                                    <td><span class="badge bg-secondary">{{ item.eleve.matricule }}</span></td>
+                                    <td class="fw-semibold">{{ item.eleve.nom }} {{ item.eleve.prenom }}</td>
+                                    <td>{{ item.classe_nom }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        {% if eleves_terminale %}
+        <!-- Section BAC / Archivage des élèves de Terminale -->
+        <div class="col-12 mt-4">
+            <div class="card shadow-sm border-warning">
+                <div class="card-header text-white d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #e65100, #ff8f00);">
+                    <span><i class="fas fa-graduation-cap me-2"></i>Gestion des Terminales &mdash; BAC {{ annee_courante }}</span>
+                    <span class="badge bg-white text-dark">{{ eleves_terminale|length }} élève(s)</span>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info py-2 small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        <strong>Cochez les élèves qui ont obtenu le BAC</strong> pour les archiver avec le statut <em>Diplômé</em>.
+                        Leurs notes, bulletins et données seront conservés mais ils ne compteront plus dans l'effectif.
+                        <br>Les élèves <strong>non cochés</strong> seront marqués comme <em>sortis du système</em> (fin de cycle).
+                    </div>
+
+                    <div class="mb-2">
+                        <button type="button" class="btn btn-sm btn-outline-success me-1" onclick="cocherTousBAC(true)">
+                            <i class="fas fa-check-double me-1"></i>Tout cocher
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="cocherTousBAC(false)">
+                            <i class="fas fa-times me-1"></i>Tout décocher
+                        </button>
+                    </div>
+
+                    <div class="table-responsive" style="max-height:350px;overflow-y:auto;">
+                        <table class="table table-hover table-sm mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th style="width:50px;" class="text-center">BAC</th>
+                                    <th>Matricule</th>
+                                    <th>Nom complet</th>
+                                    <th>Classe</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in eleves_terminale %}
+                                <tr>
+                                    <td class="text-center">
+                                        <input type="checkbox" name="eleves_bac" value="{{ item.eleve.id }}"
+                                               class="form-check-input cb-bac" style="width:1.3em;height:1.3em;">
+                                    </td>
+                                    <td><span class="badge bg-secondary">{{ item.eleve.matricule }}</span></td>
+                                    <td class="fw-semibold">{{ item.eleve.nom }} {{ item.eleve.prenom }}</td>
+                                    <td>{{ item.classe_nom }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if eleves_non_admis %}
+        <!-- Section élèves non admis (passage par convention) -->
+        <div class="col-12 mt-4">
+            <div class="card shadow-sm border-danger">
+                <div class="card-header text-white d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #c62828, #e53935);">
+                    <span><i class="fas fa-exclamation-circle me-2"></i>Élèves sans la moyenne &mdash; Passage par convention</span>
+                    <span class="badge bg-white text-dark">{{ eleves_non_admis|length }} élève(s)</span>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning py-2 small mb-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        <strong>Ces élèves n'ont pas la moyenne suffisante pour passer en classe supérieure.</strong>
+                        Cochez ceux qui doivent être promus <strong>par convention entre la direction et les parents</strong>.
+                        <br>Les élèves <strong>non cochés</strong> resteront dans la même classe (<em>redoublants</em>).
+                    </div>
+
+                    <div class="mb-2">
+                        <button type="button" class="btn btn-sm btn-outline-success me-1"
+                                onclick="cocherTous('.cb-convention', true)">
+                            <i class="fas fa-check-double me-1"></i>Tout cocher
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                onclick="cocherTous('.cb-convention', false)">
+                            <i class="fas fa-times me-1"></i>Tout décocher
+                        </button>
+                    </div>
+
+                    <div class="table-responsive" style="max-height:400px;overflow-y:auto;">
+                        <table class="table table-hover table-sm mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th style="width:50px;" class="text-center">Convention</th>
+                                    <th>Matricule</th>
+                                    <th>Nom complet</th>
+                                    <th>Classe</th>
+                                    <th class="text-center">Moyenne</th>
+                                    <th class="text-center">Seuil</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in eleves_non_admis %}
+                                <tr>
+                                    <td class="text-center">
+                                        <input type="checkbox" name="eleves_convention"
+                                               value="{{ item.eleve.id }}"
+                                               class="form-check-input cb-convention"
+                                               style="width:1.3em;height:1.3em;">
+                                    </td>
+                                    <td><span class="badge bg-secondary">{{ item.eleve.matricule }}</span></td>
+                                    <td class="fw-semibold">{{ item.eleve.nom }} {{ item.eleve.prenom }}</td>
+                                    <td>{{ item.classe_nom }}</td>
+                                    <td class="text-center">
+                                        {% if item.moyenne != None %}
+                                            <span class="badge bg-danger">{{ item.moyenne }}/{{ item.sur }}</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Non évalué</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="text-muted">{{ item.seuil }}/{{ item.sur }}</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Bouton de confirmation -->
+        <div class="card mt-4 border-danger">
+            <div class="card-body d-flex align-items-center justify-content-between flex-wrap gap-3">
+                <div>
+                    <h5 class="mb-1 text-danger fw-bold">
+                        <i class="fas fa-exclamation-triangle me-2"></i>Confirmer la création
+                    </h5>
+                    <p class="mb-0 text-muted">
+                        Cette action va créer l'année scolaire <strong>{{ annee_nouvelle }}</strong>
+                        et déplacer les élèves actifs selon les options choisies ci-dessus.
+                        {% if eleves_terminale %}
+                        <br><strong class="text-warning">{{ eleves_terminale|length }} élève(s) de Terminale</strong>
+                        seront archivés (BAC) ou sortis du système selon votre sélection ci-dessus.
+                        {% endif %}
+                        {% if eleves_non_admis %}
+                        <br><strong class="text-danger">{{ eleves_non_admis|length }} élève(s) sans la moyenne</strong>
+                        redoubleront sauf ceux cochés pour promotion par convention.
+                        {% endif %}
+                    </p>
+                </div>
+                <button type="submit" id="btn-lancer" class="btn btn-danger btn-lg px-4"
+                        onclick="return lancerAnnee(this)">
+                    <i class="fas fa-play-circle me-2"></i>
+                    Oui, créer {{ annee_nouvelle }}
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+function lancerAnnee(btn) {
+    var msg = "Confirmer la création de l'année scolaire {{ annee_nouvelle }} ?\n";
+    msg += "\n\u2022 {{ preview_classes|length }} classes seront dupliquées";
+    msg += "\n\u2022 {{ nb_total_eleves }} élèves seront transférés intelligemment";
+    msg += "\n\u2022 Les notes de {{ annee_courante }} restent intactes";
+
+    // CEP
+    var nbCep = document.querySelectorAll('.cb-cep:checked').length;
+    var totalCep = document.querySelectorAll('.cb-cep').length;
+    if (totalCep > 0) {
+        msg += '\n\u2022 ' + nbCep + '/' + totalCep + ' élève(s) de 6ème avec CEP';
+    }
+
+    // BEPC
+    var nbBepc = document.querySelectorAll('.cb-bepc:checked').length;
+    var totalBepc = document.querySelectorAll('.cb-bepc').length;
+    if (totalBepc > 0) {
+        msg += '\n\u2022 ' + nbBepc + '/' + totalBepc + ' élève(s) de 10ème avec BEPC';
+    }
+
+    // BAC
+    var nbBac = document.querySelectorAll('.cb-bac:checked').length;
+    var totalTerm = document.querySelectorAll('.cb-bac').length;
+    if (totalTerm > 0) {
+        msg += '\n\u2022 ' + nbBac + '/' + totalTerm + ' élève(s) de Terminale archivé(s) (BAC)';
+        msg += '\n\u2022 ' + (totalTerm - nbBac) + ' élève(s) sorti(s) du système';
+    }
+
+    // Convention (élèves non admis)
+    var nbConvention = document.querySelectorAll('.cb-convention:checked').length;
+    var totalNonAdmis = document.querySelectorAll('.cb-convention').length;
+    if (totalNonAdmis > 0) {
+        msg += '\n\u2022 ' + nbConvention + ' élève(s) promu(s) par convention (sans la moyenne)';
+        msg += '\n\u2022 ' + (totalNonAdmis - nbConvention) + ' élève(s) redoublant(s)';
+    }
+
+    if (!confirm(msg)) {
+        return false;
+    }
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Création en cours…';
+    return true;
+}
+
+function cocherTous(selector, etat) {
+    document.querySelectorAll(selector).forEach(function(cb) { cb.checked = etat; });
+}
+
+function cocherTousBAC(etat) {
+    cocherTous('.cb-bac', etat);
+}
+</script>
+{% endblock %}

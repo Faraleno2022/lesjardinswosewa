@@ -1,0 +1,246 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Gérer les Élèves{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stats-card {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        border-radius: 15px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 15px rgba(0, 123, 255, 0.2);
+    }
+    
+    .stats-card h3 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin: 0;
+    }
+    
+    .stats-card p {
+        margin: 0;
+        opacity: 0.9;
+    }
+    
+    .table-card, .selection-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        margin-bottom: 2rem;
+    }
+    
+    .table thead {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+    }
+    
+    .table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .btn-primary {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        border: none;
+        box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+    }
+    
+    .btn-primary:hover {
+        background: linear-gradient(135deg, #0056b3 0%, #003d82 100%);
+        box-shadow: 0 6px 16px rgba(0, 123, 255, 0.4);
+        transform: translateY(-2px);
+        transition: all 0.3s ease;
+    }
+    
+    .classe-selector {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 10px;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .no-selection {
+        text-align: center;
+        padding: 3rem;
+        color: #6c757d;
+    }
+    
+    .no-selection i {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        opacity: 0.3;
+    }
+    
+    .eleve-card {
+        border-left: 4px solid #007bff;
+        transition: all 0.3s ease;
+    }
+    
+    .eleve-card:hover {
+        border-left-color: #0056b3;
+        box-shadow: 0 4px 12px rgba(0, 123, 255, 0.2);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3"><i class="fas fa-users me-2"></i>Gérer les Élèves</h1>
+        <a href="{% url 'notes:tableau_bord' %}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left me-2"></i>Retour
+        </a>
+    </div>
+
+    <!-- Sélection de classe -->
+    <div class="selection-card">
+        <h4 class="mb-3"><i class="fas fa-filter me-2"></i>Sélectionner une classe</h4>
+        <div class="classe-selector">
+            {% if classes %}
+                <div class="row">
+                    {% for classe in classes %}
+                        <div class="col-md-3 col-sm-6 mb-2">
+                            <a href="?classe_id={{ classe.id }}" 
+                               class="btn {% if classe_selectionnee and classe.id == classe_selectionnee.id %}btn-primary{% else %}btn-outline-primary{% endif %} w-100">
+                                <i class="fas fa-school me-2"></i>{{ classe.nom }}
+                                <br><small>{{ classe.get_niveau_display }}</small>
+                            </a>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="alert alert-warning mb-0">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Aucune classe disponible. Veuillez d'abord créer des classes dans la section "Gérer les Classes".
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if classe_selectionnee %}
+        <!-- Statistiques -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="stats-card">
+                    <h3>{{ total_eleves }}</h3>
+                    <p><i class="fas fa-users me-2"></i>Élèves dans la classe</p>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="stats-card" style="background: linear-gradient(135deg, #0d6efd 0%, #003d82 100%);">
+                    <h3>{{ eleves_avec_notes }}</h3>
+                    <p><i class="fas fa-clipboard-check me-2"></i>Élèves avec notes</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Liste des élèves -->
+        <div class="table-card">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="mb-0"><i class="fas fa-list me-2"></i>Liste des élèves de {{ classe_selectionnee.nom }}</h4>
+                <a href="{% url 'eleves:liste_eleves' %}?classe={{ classe_selectionnee.id }}" class="btn btn-outline-primary" target="_blank">
+                    <i class="fas fa-external-link-alt me-2"></i>Voir dans le module Élèves
+                </a>
+            </div>
+            
+            {% if eleves %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Photo</th>
+                            <th>Matricule</th>
+                            <th>Nom & Prénom</th>
+                            <th>Genre</th>
+                            <th>Date de naissance</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for eleve in eleves %}
+                        <tr>
+                            <td>
+                                {% if eleve.photo %}
+                                    <img src="{{ eleve.photo.url }}" alt="{{ eleve.nom }}" 
+                                         class="rounded-circle" width="40" height="40" style="object-fit: cover;">
+                                {% else %}
+                                    <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center" 
+                                         style="width: 40px; height: 40px;">
+                                        <i class="fas fa-user text-white"></i>
+                                    </div>
+                                {% endif %}
+                            </td>
+                            <td><strong>{{ eleve.matricule }}</strong></td>
+                            <td>{{ eleve.prenom }} {{ eleve.nom }}</td>
+                            <td>
+                                {% if eleve.sexe == 'M' %}
+                                    <span class="badge bg-primary"><i class="fas fa-mars me-1"></i>Garçon</span>
+                                {% elif eleve.sexe == 'F' %}
+                                    <span class="badge bg-danger"><i class="fas fa-venus me-1"></i>Fille</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">-</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ eleve.date_naissance|date:"d/m/Y" }}</td>
+                            <td>
+                                <a href="{% url 'eleves:detail_eleve' eleve.id %}" class="btn btn-sm btn-outline-primary" 
+                                   title="Voir le détail" target="_blank">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <button class="btn btn-sm btn-outline-success" 
+                                        title="Saisir des notes" 
+                                        onclick="alert('Fonctionnalité de saisie de notes à venir')">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-warning">
+                <h5><i class="fas fa-exclamation-triangle me-2"></i>Aucun élève actif trouvé pour cette classe</h5>
+                {% if classe_selectionnee %}
+                    <p class="mb-2">
+                        <strong>Classe recherchée :</strong> "{{ classe_selectionnee.nom }}" ({{ classe_selectionnee.annee_scolaire }})
+                    </p>
+                    
+                    {% if classes_disponibles %}
+                        <p class="mb-2">
+                            <strong>Classes disponibles dans le module Élèves pour l'année {{ classe_selectionnee.annee_scolaire }} :</strong>
+                        </p>
+                        <ul class="mb-3">
+                            {% for classe_dispo in classes_disponibles %}
+                                <li>{{ classe_dispo }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                    
+                    <hr>
+                    <p class="mb-2"><strong>Solutions possibles :</strong></p>
+                    <ol class="mb-0">
+                        <li>Vérifiez que la classe existe dans le <a href="{% url 'eleves:liste_eleves' %}" target="_blank">module Élèves</a></li>
+                        <li>Assurez-vous que le nom de la classe correspond exactement (ex: "7ème Année" vs "Collège 7ème")</li>
+                        <li>Vérifiez que l'année scolaire est la même ({{ classe_selectionnee.annee_scolaire }})</li>
+                        <li>Assurez-vous qu'il y a des élèves avec le statut "ACTIF" dans cette classe</li>
+                        <li>Si le problème persiste, contactez l'administrateur FARA LENO AU +224622613559 pour synchroniser les classes</li>
+                    </ol>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    {% else %}
+        <!-- Message si aucune classe sélectionnée -->
+        <div class="no-selection">
+            <i class="fas fa-hand-pointer"></i>
+            <h4>Sélectionnez une classe</h4>
+            <p>Choisissez une classe ci-dessus pour voir ses élèves</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

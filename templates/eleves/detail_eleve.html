@@ -1,0 +1,433 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}{{ eleve.nom_complet }} - myschool{% endblock %}
+
+{% block extra_css %}
+<style>
+    .profile-header {
+        background: linear-gradient(135deg, #007bff, #0056b3);
+        color: white;
+        border-radius: 15px;
+        padding: 30px;
+        margin-bottom: 30px;
+    }
+    .profile-photo {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        border: 4px solid white;
+        object-fit: cover;
+    }
+    .info-card {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        border-left: 4px solid #007bff;
+    }
+    .info-card h5 {
+        color: #007bff;
+        margin-bottom: 15px;
+        font-weight: 600;
+    }
+    .stat-card {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        text-align: center;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        border-top: 4px solid #28a745;
+    }
+    .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #28a745;
+    }
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+    .status-badge {
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-weight: 500;
+        font-size: 0.9rem;
+    }
+    .status-actif { background: #d4edda; color: #155724; }
+    .status-suspendu { background: #f8d7da; color: #721c24; }
+    .status-exclu { background: #f5c6cb; color: #721c24; }
+    .status-diplome { background: #d1ecf1; color: #0c5460; }
+    .timeline-item {
+        border-left: 2px solid #007bff;
+        padding-left: 20px;
+        margin-bottom: 20px;
+        position: relative;
+    }
+    .timeline-item::before {
+        content: '';
+        position: absolute;
+        left: -6px;
+        top: 0;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #007bff;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête du profil -->
+    <div class="profile-header">
+        <div class="row align-items-center">
+            <div class="col-md-2 text-center">
+                {% if eleve.photo %}
+                    <img src="{{ eleve.photo.url }}" alt="Photo de {{ eleve.nom_complet }}" class="profile-photo">
+                {% else %}
+                    <div class="profile-photo d-flex align-items-center justify-content-center" style="background: rgba(255,255,255,0.2);">
+                        <i class="fas fa-user fa-3x"></i>
+                    </div>
+                {% endif %}
+            </div>
+            <div class="col-md-7">
+                <h2 class="mb-2">{{ eleve.nom_complet }}</h2>
+                <p class="mb-1"><i class="fas fa-id-card"></i> Matricule: {{ eleve.matricule }}</p>
+                <p class="mb-1"><i class="fas fa-school"></i> {{ eleve.classe.ecole.nom }}</p>
+                <p class="mb-1"><i class="fas fa-users"></i> {{ eleve.classe.nom }}</p>
+                <p class="mb-0"><i class="fas fa-birthday-cake"></i> {{ eleve.age }} ans (né{{ eleve.sexe|yesno:"e," }} le {{ eleve.date_naissance|date:"d/m/Y" }})</p>
+            </div>
+            <div class="col-md-3 text-end">
+                <div class="mb-3">
+                    <span class="status-badge status-{{ eleve.statut|lower }}">
+                        {{ eleve.get_statut_display }}
+                    </span>
+                </div>
+                <div class="btn-group-vertical d-grid gap-2">
+                    <a href="{% url 'eleves:modifier_eleve' eleve.pk %}" class="btn btn-light">
+                        <i class="fas fa-edit"></i> Modifier
+                    </a>
+                    <a href="{% url 'paiements:generer_note_rappel_pdf' eleve.pk %}" class="btn btn-warning">
+                        <i class="fas fa-file-pdf"></i> Note de rappel
+                    </a>
+                    {% if eleve.statut != 'EXCLU' %}
+                    <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#confirmDeleteModal">
+                        <i class="fas fa-trash"></i> Supprimer
+                    </button>
+                    {% endif %}
+                    <a href="{% url 'eleves:liste_eleves' %}" class="btn btn-outline-light">
+                        <i class="fas fa-arrow-left"></i> Retour
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Colonne principale -->
+        <div class="col-lg-8">
+            <!-- Informations personnelles -->
+            <div class="info-card">
+                <h5><i class="fas fa-user"></i> Informations personnelles</h5>
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Prénom:</strong> {{ eleve.prenom }}</p>
+                        <p><strong>Nom:</strong> {{ eleve.nom }}</p>
+                        <p><strong>Sexe:</strong> {{ eleve.get_sexe_display }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Date de naissance:</strong> {{ eleve.date_naissance|date:"d/m/Y" }}</p>
+                        <p><strong>Lieu de naissance:</strong> {{ eleve.lieu_naissance }}</p>
+                        <p><strong>Âge:</strong> {{ eleve.age }} ans</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Informations scolaires -->
+            <div class="info-card">
+                <h5><i class="fas fa-graduation-cap"></i> Informations scolaires</h5>
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>École:</strong> {{ eleve.classe.ecole.nom }}</p>
+                        <p><strong>Classe:</strong> {{ eleve.classe.nom }}</p>
+                        <p><strong>Niveau:</strong> {{ eleve.classe.get_niveau_display }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Année scolaire:</strong> {{ eleve.classe.annee_scolaire }}</p>
+                        <p><strong>Statut:</strong> {{ eleve.get_statut_display }}</p>
+                        <p><strong>Date d'inscription:</strong> {{ eleve.date_inscription|date:"d/m/Y" }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Responsables -->
+            <div class="info-card">
+                <h5><i class="fas fa-users"></i> Responsables</h5>
+                
+                <!-- Responsable principal -->
+                <div class="mb-4">
+                    <h6 class="text-primary">Responsable principal</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Nom:</strong> {{ eleve.responsable_principal.nom_complet }}</p>
+                            <p><strong>Relation:</strong> {{ eleve.responsable_principal.get_relation_display }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Téléphone:</strong> 
+                                <a href="tel:{{ eleve.responsable_principal.telephone }}">
+                                    {{ eleve.responsable_principal.telephone }}
+                                </a>
+                            </p>
+                            {% if eleve.responsable_principal.email %}
+                                <p><strong>Email:</strong> 
+                                    <a href="mailto:{{ eleve.responsable_principal.email }}">
+                                        {{ eleve.responsable_principal.email }}
+                                    </a>
+                                </p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if eleve.responsable_principal.adresse %}
+                        <p><strong>Adresse:</strong> {{ eleve.responsable_principal.adresse }}</p>
+                    {% endif %}
+                    {% if eleve.responsable_principal.profession %}
+                        <p><strong>Profession:</strong> {{ eleve.responsable_principal.profession }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Responsable secondaire -->
+                {% if eleve.responsable_secondaire %}
+                    <div class="mb-4">
+                        <h6 class="text-secondary">Responsable secondaire</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Nom:</strong> {{ eleve.responsable_secondaire.nom_complet }}</p>
+                                <p><strong>Relation:</strong> {{ eleve.responsable_secondaire.get_relation_display }}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Téléphone:</strong> 
+                                    <a href="tel:{{ eleve.responsable_secondaire.telephone }}">
+                                        {{ eleve.responsable_secondaire.telephone }}
+                                    </a>
+                                </p>
+                                {% if eleve.responsable_secondaire.email %}
+                                    <p><strong>Email:</strong> 
+                                        <a href="mailto:{{ eleve.responsable_secondaire.email }}">
+                                            {{ eleve.responsable_secondaire.email }}
+                                        </a>
+                                    </p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if eleve.responsable_secondaire.adresse %}
+                            <p><strong>Adresse:</strong> {{ eleve.responsable_secondaire.adresse }}</p>
+                        {% endif %}
+                        {% if eleve.responsable_secondaire.profession %}
+                            <p><strong>Profession:</strong> {{ eleve.responsable_secondaire.profession }}</p>
+                        {% endif %}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Historique des modifications -->
+            {% if historique %}
+                <div class="info-card">
+                    <h5><i class="fas fa-history"></i> Historique des modifications</h5>
+                    <div class="timeline">
+                        {% for entry in historique %}
+                            <div class="timeline-item">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <strong>{{ entry.action }}</strong>
+                                        {% if entry.details %}
+                                            <p class="mb-1 text-muted small">{{ entry.details }}</p>
+                                        {% endif %}
+                                        <small class="text-muted">
+                                            {{ entry.date_modification|date:"d/m/Y à H:i" }}
+                                            {% if entry.modifie_par %}
+                                                par {{ entry.modifie_par.get_full_name|default:entry.modifie_par.username }}
+                                            {% endif %}
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Colonne latérale -->
+        <div class="col-lg-4">
+            <!-- Statistiques de paiement -->
+            <div class="row mb-4">
+                <div class="col-6">
+                    <div class="stat-card">
+                        <div class="stat-number">{{ stats_paiements.total_paye|floatformat:0|intcomma }}</div>
+                        <div class="stat-label">GNF payés</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="stat-card">
+                        <div class="stat-number">{{ stats_paiements.total_restant|floatformat:0|intcomma }}</div>
+                        <div class="stat-label">GNF restants</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions rapides -->
+            <div class="info-card">
+                <h5><i class="fas fa-bolt"></i> Actions rapides</h5>
+                <div class="d-grid gap-2">
+                    <a href="{% url 'eleves:modifier_eleve' eleve.pk %}" class="btn btn-primary">
+                        <i class="fas fa-edit"></i> Modifier l'élève
+                    </a>
+                    <a href="{% url 'paiements:ajouter_paiement_eleve' eleve.pk %}" class="btn btn-success">
+                        <i class="fas fa-money-bill"></i> Enregistrer un paiement
+                    </a>
+                    <a href="{% url 'eleves:fiche_inscription_pdf' eleve.pk %}" class="btn btn-info" target="_blank">
+                        <i class="fas fa-file-pdf"></i> Fiche d'inscription PDF
+                    </a>
+                    <!-- Bulletins et cartes scolaires : fonctionnalités à venir dans le module Notes -->
+                    {% with paiements_eleve=eleve.paiement_set.all %}
+                    {% if paiements_eleve %}
+                    <div class="card p-2">
+                        <label for="selectPaiement" class="form-label mb-1"><i class="fas fa-receipt me-1"></i>Choisir un reçu à imprimer</label>
+                        <select id="selectPaiement" class="form-select form-select-sm mb-2">
+                            {% for p in paiements_eleve %}
+                                <option value="{{ p.id }}">
+                                    {{ p.date_paiement|date:"d/m/Y" }} — {{ p.type_paiement.nom|default:p.type_paiement }} — {{ p.montant|floatformat:0|intcomma }} GNF
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <div class="d-grid gap-2">
+                            <a id="btnVoirRecu" href="{% url 'paiements:detail_paiement' paiements_eleve.0.id %}" class="btn btn-info btn-sm">
+                                <i class="fas fa-file-alt"></i> Voir le reçu (HTML)
+                            </a>
+                            <a id="btnImprimerRecu" href="{% url 'paiements:generer_recu_pdf' paiements_eleve.0.id %}" class="btn btn-warning btn-sm">
+                                <i class="fas fa-print"></i> Imprimer le reçu (PDF)
+                            </a>
+                        </div>
+                        <small class="text-muted mt-1">Par défaut, le dernier paiement est sélectionné.</small>
+                    </div>
+                    {% else %}
+                        <a href="{% url 'paiements:liste_paiements' %}?eleve={{ eleve.pk }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-list"></i> Aucun reçu à imprimer (voir paiements)
+                        </a>
+                    {% endif %}
+                    {% endwith %}
+                </div>
+            </div>
+
+            <!-- Informations système -->
+            <div class="info-card">
+                <h5><i class="fas fa-cog"></i> Informations système</h5>
+                <p><strong>Créé le:</strong> {{ eleve.date_creation|date:"d/m/Y à H:i" }}</p>
+                {% if eleve.cree_par %}
+                    <p><strong>Créé par:</strong> {{ eleve.cree_par.get_full_name|default:eleve.cree_par.username }}</p>
+                {% endif %}
+                <p><strong>Modifié le:</strong> {{ eleve.date_modification|date:"d/m/Y à H:i" }}</p>
+                <p><strong>ID système:</strong> {{ eleve.id }}</p>
+            </div>
+
+            <!-- Grille tarifaire applicable -->
+            {% if grille_tarifaire %}
+                <div class="info-card">
+                    <h5><i class="fas fa-money-check-alt"></i> Grille tarifaire</h5>
+                    <p><strong>Année:</strong> {{ grille_tarifaire.annee_scolaire }}</p>
+                    <p><strong>Niveau:</strong> {{ grille_tarifaire.get_niveau_display }}</p>
+                    <hr>
+                    <div class="small">
+                        <p><strong>1ère tranche:</strong> {{ grille_tarifaire.tranche_1|floatformat:0|intcomma }} GNF</p>
+                        <p><strong>2ème tranche:</strong> {{ grille_tarifaire.tranche_2|floatformat:0|intcomma }} GNF</p>
+                        <p><strong>3ème tranche:</strong> {{ grille_tarifaire.tranche_3|floatformat:0|intcomma }} GNF</p>
+                        <hr>
+                        <p><strong>Total:</strong> {{ grille_tarifaire.total|floatformat:0|intcomma }} GNF</p>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Formatage des nombres
+    const numbers = document.querySelectorAll('.stat-number');
+    numbers.forEach(function(element) {
+        const value = parseFloat(element.textContent);
+        if (!isNaN(value)) {
+            element.textContent = value.toLocaleString('fr-FR');
+        }
+    });
+
+    // Synchroniser les liens Voir/Imprimer reçu avec la sélection
+    const selectPaiement = document.getElementById('selectPaiement');
+    const btnVoirRecu = document.getElementById('btnVoirRecu');
+    const btnImprimerRecu = document.getElementById('btnImprimerRecu');
+    if (selectPaiement && btnVoirRecu && btnImprimerRecu) {
+        const baseVoir = btnVoirRecu.getAttribute('href').replace(/\d+\/$/, '');
+        const baseImprimer = btnImprimerRecu.getAttribute('href').replace(/\d+\/$/, '');
+        const updateLinks = (id) => {
+            btnVoirRecu.setAttribute('href', baseVoir + id + '/');
+            btnImprimerRecu.setAttribute('href', baseImprimer + id + '/');
+        };
+        // Initialiser et écouter les changements
+        updateLinks(selectPaiement.value);
+        selectPaiement.addEventListener('change', function() {
+            updateLinks(this.value);
+        });
+    }
+});
+</script>
+
+<!-- Modal de confirmation de suppression -->
+<div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-labelledby="confirmDeleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="confirmDeleteModalLabel">
+                    <i class="fas fa-exclamation-triangle"></i> Confirmer la suppression
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3">
+                    <strong>Attention !</strong> Vous êtes sur le point de supprimer l'élève :
+                </p>
+                <div class="alert alert-warning">
+                    <i class="fas fa-user"></i> <strong>{{ eleve.prenom }} {{ eleve.nom }}</strong><br>
+                    <small>Matricule : {{ eleve.matricule }}</small>
+                </div>
+                <p class="text-muted">
+                    <i class="fas fa-info-circle"></i> 
+                    Cette action changera le statut de l'élève vers "Exclu". L'élève ne sera pas définitivement supprimé de la base de données.
+                </p>
+                {% if eleve.paiements.exists %}
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i> 
+                    <strong>Attention :</strong> Cet élève a des paiements associés. La suppression pourrait être bloquée.
+                </div>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times"></i> Annuler
+                </button>
+                <form method="post" action="{% url 'eleves:supprimer_eleve' eleve.pk %}" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Confirmer la suppression
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

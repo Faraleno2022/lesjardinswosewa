@@ -1,0 +1,442 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Gestion des Rappels de Paiement{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stats-card {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: white;
+        border-radius: 15px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 15px rgba(40, 167, 69, 0.2);
+    }
+    
+    .stats-card h3 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin: 0;
+    }
+    
+    .stats-card p {
+        margin: 0;
+        opacity: 0.9;
+    }
+    
+    .rappel-card {
+        background: white;
+        border-radius: 15px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        margin-bottom: 1rem;
+        border-left: 4px solid #007bff;
+    }
+    
+    .rappel-card.urgent {
+        border-left-color: #dc3545;
+    }
+    
+    .rappel-card.warning {
+        border-left-color: #ffc107;
+    }
+    
+    .badge-envoye {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        color: white;
+    }
+    
+    .badge-echec {
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        color: white;
+    }
+    
+    .badge-attente {
+        background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);
+        color: white;
+    }
+    
+    .message-preview {
+        background: #f8f9fa;
+        border-radius: 10px;
+        padding: 1rem;
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        max-height: 150px;
+        overflow-y: auto;
+    }
+    
+    .btn-rappel {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        border: none;
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 25px;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-rappel:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+        color: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="h3 mb-0">
+                <i class="fas fa-bell me-2"></i>{{ titre_page }}
+            </h1>
+            <p class="text-muted">Gérez les rappels de paiement pour les élèves en retard</p>
+        </div>
+    </div>
+    
+    <!-- Statistiques -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stats-card">
+                <h3>{{ stats.total_rappels }}</h3>
+                <p><i class="fas fa-bell me-1"></i>Total rappels (30j)</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);">
+                <h3>{{ nb_eleves_retard }}</h3>
+                <p><i class="fas fa-exclamation-triangle me-1"></i>Élèves en retard</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card" style="background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);">
+                <h3>{{ stats.montant_total_impaye|floatformat:0 }}</h3>
+                <p><i class="fas fa-money-bill-wave me-1"></i>GNF impayés</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card" style="background: linear-gradient(135deg, #6f42c1 0%, #5a32a3 100%);">
+                <h3>{{ stats.eleves_concernes }}</h3>
+                <p><i class="fas fa-users me-1"></i>Élèves concernés</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Actions rapides -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="fas fa-magic me-2"></i>Actions Rapides
+                    </h5>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <form method="post" action="{% url 'paiements:creer_rappels_automatiques' %}" class="d-inline">
+                                {% csrf_token %}
+                                <div class="row g-3 align-items-end">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Canal</label>
+                                        <select name="canal" class="form-select">
+                                            {% for value, label in canal_choices %}
+                                            <option value="{{ value }}">{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Limite</label>
+                                        <input type="number" name="limite" class="form-control" value="50" min="1" max="200">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <button type="submit" class="btn btn-rappel w-100" 
+                                                onclick="return confirm('Créer des rappels automatiques pour tous les élèves en retard ?')">
+                                            <i class="fas fa-robot me-1"></i>Rappels Auto
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="d-flex gap-2">
+                                <a href="{% url 'paiements:eleves_en_retard' %}" class="btn btn-warning">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>Élèves en Retard
+                                </a>
+                                <a href="{% url 'paiements:statistiques_rappels' %}" class="btn btn-info">
+                                    <i class="fas fa-chart-bar me-1"></i>Statistiques
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Filtres -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <form method="get" class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label">Statut</label>
+                            <select name="statut" class="form-select">
+                                <option value="">Tous les statuts</option>
+                                {% for value, label in statut_choices %}
+                                <option value="{{ value }}" {% if statut_filtre == value %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Canal</label>
+                            <select name="canal" class="form-select">
+                                <option value="">Tous les canaux</option>
+                                {% for value, label in canal_choices %}
+                                <option value="{{ value }}" {% if canal_filtre == value %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Rechercher</label>
+                            <input type="text" name="search" class="form-control" 
+                                   placeholder="Nom, prénom, matricule..." value="{{ search }}">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">&nbsp;</label>
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="fas fa-search me-1"></i>Filtrer
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Liste des rappels -->
+    <div class="row">
+        <div class="col-12">
+            {% if rappels %}
+            {% for rappel in rappels %}
+            <div class="rappel-card {% if rappel.statut == 'ECHEC' %}urgent{% elif rappel.statut == 'ENREGISTREE' %}warning{% endif %}">
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h6 class="mb-0">
+                                <i class="fas fa-user me-1"></i>
+                                <strong>{{ rappel.eleve.nom_complet }}</strong>
+                                {% if rappel.eleve.classe %}
+                                <span class="badge bg-secondary ms-2">{{ rappel.eleve.classe.nom }}</span>
+                                {% endif %}
+                            </h6>
+                            <div class="d-flex gap-2">
+                                {% if rappel.statut == 'ENVOYEE' %}
+                                <span class="badge badge-envoye">
+                                    <i class="fas fa-check me-1"></i>Envoyé
+                                </span>
+                                {% elif rappel.statut == 'ECHEC' %}
+                                <span class="badge badge-echec">
+                                    <i class="fas fa-times me-1"></i>Échec
+                                </span>
+                                {% else %}
+                                <span class="badge badge-attente">
+                                    <i class="fas fa-clock me-1"></i>En attente
+                                </span>
+                                {% endif %}
+                                
+                                <span class="badge bg-info">
+                                    <i class="fas fa-{{ rappel.canal|lower == 'sms' and 'sms' or rappel.canal|lower == 'whatsapp' and 'whatsapp' or rappel.canal|lower == 'email' and 'envelope' or 'phone' }} me-1"></i>
+                                    {{ rappel.get_canal_display }}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div class="message-preview mb-2">
+                            {{ rappel.message|truncatechars:200 }}
+                        </div>
+                        
+                        <div class="row text-muted small">
+                            <div class="col-md-6">
+                                <i class="fas fa-calendar me-1"></i>
+                                {{ rappel.date_creation|date:"d/m/Y H:i" }}
+                                {% if rappel.cree_par %}
+                                par {{ rappel.cree_par.get_full_name|default:rappel.cree_par.username }}
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                {% if rappel.date_envoi %}
+                                <i class="fas fa-paper-plane me-1"></i>
+                                Envoyé le {{ rappel.date_envoi|date:"d/m/Y H:i" }}
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4 text-end">
+                        <div class="mb-2">
+                            <h5 class="text-danger mb-0">
+                                {{ rappel.solde_estime|floatformat:0 }} GNF
+                            </h5>
+                            <small class="text-muted">Solde estimé</small>
+                        </div>
+                        
+                        <div class="btn-group" role="group">
+                            {% if rappel.statut == 'ENREGISTREE' %}
+                            <button class="btn btn-sm btn-success btn-marquer-envoye" 
+                                    data-relance-id="{{ rappel.id }}" 
+                                    data-succes="true"
+                                    title="Marquer comme envoyé">
+                                <i class="fas fa-check"></i>
+                            </button>
+                            <button class="btn btn-sm btn-danger btn-marquer-envoye" 
+                                    data-relance-id="{{ rappel.id }}" 
+                                    data-succes="false"
+                                    title="Marquer comme échec">
+                                <i class="fas fa-times"></i>
+                            </button>
+                            {% endif %}
+                            
+                            <button class="btn btn-sm btn-info btn-voir-message" 
+                                    data-message="{{ rappel.message|escapejs }}"
+                                    title="Voir le message complet">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            
+                            <a href="{% url 'paiements:supprimer_rappel' rappel.id %}" 
+                               class="btn btn-sm btn-outline-danger"
+                               onclick="return confirm('Supprimer ce rappel ?')"
+                               title="Supprimer">
+                                <i class="fas fa-trash"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            
+            <!-- Pagination -->
+            {% if page_obj.has_other_pages %}
+            <nav aria-label="Navigation des rappels">
+                <ul class="pagination justify-content-center">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if statut_filtre %}&statut={{ statut_filtre }}{% endif %}{% if canal_filtre %}&canal={{ canal_filtre }}{% endif %}{% if search %}&search={{ search }}{% endif %}">
+                            Précédent
+                        </a>
+                    </li>
+                    {% endif %}
+                    
+                    {% for num in page_obj.paginator.page_range %}
+                    {% if page_obj.number == num %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ num }}</span>
+                    </li>
+                    {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ num }}{% if statut_filtre %}&statut={{ statut_filtre }}{% endif %}{% if canal_filtre %}&canal={{ canal_filtre }}{% endif %}{% if search %}&search={{ search }}{% endif %}">
+                            {{ num }}
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% endfor %}
+                    
+                    {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if statut_filtre %}&statut={{ statut_filtre }}{% endif %}{% if canal_filtre %}&canal={{ canal_filtre }}{% endif %}{% if search %}&search={{ search }}{% endif %}">
+                            Suivant
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+            
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-bell-slash fa-3x text-muted mb-3"></i>
+                <h4 class="text-muted">Aucun rappel trouvé</h4>
+                <p class="text-muted">Aucun rappel ne correspond à vos critères de recherche.</p>
+                <a href="{% url 'paiements:eleves_en_retard' %}" class="btn btn-primary">
+                    <i class="fas fa-plus me-1"></i>Créer des rappels
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal pour voir le message complet -->
+<div class="modal fade" id="messageModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Message de Rappel</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="messageContent" class="message-preview" style="max-height: none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Gestionnaire pour marquer les rappels comme envoyés
+    document.querySelectorAll('.btn-marquer-envoye').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const relanceId = this.dataset.relanceId;
+            const succes = this.dataset.succes === 'true';
+            
+            if (!confirm(succes ? 'Marquer ce rappel comme envoyé ?' : 'Marquer ce rappel comme échec ?')) {
+                return;
+            }
+            
+            fetch(`/paiements/rappels/${relanceId}/marquer-envoye/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({
+                    succes: succes
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Erreur: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                alert('Erreur lors de la mise à jour');
+            });
+        });
+    });
+    
+    // Gestionnaire pour voir les messages
+    document.querySelectorAll('.btn-voir-message').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            const message = this.dataset.message;
+            document.getElementById('messageContent').textContent = message;
+            new bootstrap.Modal(document.getElementById('messageModal')).show();
+        });
+    });
+});
+</script>
+{% endblock %}

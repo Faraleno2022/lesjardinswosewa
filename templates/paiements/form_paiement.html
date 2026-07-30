@@ -1,0 +1,1521 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }} - myschool{% endblock %}
+
+{% block breadcrumb_items %}
+    <li class="breadcrumb-item"><a href="{% url 'paiements:tableau_bord' %}">Paiements</a></li>
+    <li class="breadcrumb-item active">{{ action }} Paiement</li>
+{% endblock %}
+
+{# Assure l'affichage des actions même si titre_page n'est pas fourni par la vue #}
+{% block page_header %}
+    {% if titre_page %}
+        {{ block.super }}
+    {% else %}
+        <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap" style="gap: .5rem 1rem;">
+            <h1 class="h3 mb-0">{{ action|default:"Paiement" }}</h1>
+            <div class="page-actions d-flex flex-wrap justify-content-end" style="gap: .5rem;">
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                    <a href="{% url 'paiements:ajouter_paiement' %}" class="btn btn-primary">
+                        <i class="fas fa-plus me-1"></i>Nouveau Paiement
+                    </a>
+                    <a href="{% url 'paiements:liste_paiements' %}" class="btn btn-outline-info">
+                        <i class="fas fa-list me-1"></i>Liste des paiements
+                    </a>
+                    <a href="{% url 'paiements:liste_relances' %}" class="btn btn-outline-warning">
+                        <i class="fas fa-bell me-1"></i>Relances
+                    </a>
+                    {% if perms.utilisateurs.peut_consulter_rapports %}
+                    <a href="{% url 'paiements:rapport_remises' %}" class="btn btn-outline-success">
+                        <i class="fas fa-percent me-1"></i>Rapport des remises
+                    </a>
+                    {% endif %}
+                    <a href="{% url 'paiements:tableau_bord' %}" class="btn btn-secondary">
+                        <i class="fas fa-chart-line me-1"></i>Tableau de bord
+                    </a>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+{% endblock %}
+
+{% block page_actions %}
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        <a href="{% url 'paiements:ajouter_paiement' %}" class="btn btn-primary">
+            <i class="fas fa-plus me-1"></i>Nouveau Paiement
+        </a>
+        <a href="{% url 'paiements:liste_paiements' %}" class="btn btn-outline-info">
+            <i class="fas fa-list me-1"></i>Liste des paiements
+        </a>
+        <a href="{% url 'paiements:liste_relances' %}" class="btn btn-outline-warning">
+            <i class="fas fa-bell me-1"></i>Relances
+        </a>
+        {% if perms.utilisateurs.peut_consulter_rapports %}
+        <a href="{% url 'paiements:rapport_remises' %}" class="btn btn-outline-success">
+            <i class="fas fa-percent me-1"></i>Rapport des remises
+        </a>
+        {% endif %}
+        <a href="{% url 'paiements:tableau_bord' %}" class="btn btn-secondary">
+            <i class="fas fa-chart-line me-1"></i>Tableau de bord
+        </a>
+    </div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-section {
+        background: white;
+        border-radius: 10px;
+        padding: 25px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .form-section h5 {
+        color: #007bff;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #e9ecef;
+    }
+    .required-field {
+        color: #dc3545;
+    }
+    .eleve-info {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-left: 4px solid #007bff;
+    }
+    .montant-display {
+        font-size: 1.1rem; /* reduced from 1.5rem */
+        font-weight: 500;   /* reduced from 600 */
+        color: #155724;
+        background: #eaf7ee;
+        border: 1px solid #d8efe0;
+        border-radius: 6px;
+        padding: 6px 10px; /* reduced padding */
+        text-align: center;
+        margin-top: 6px;
+    }
+    /* Barre récap collée en bas */
+    .sticky-summary {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #fff;
+        border-top: 1px solid #e9ecef;
+        z-index: 1030;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+        padding: 12px 0; /* plus d'espace vertical */
+        text-align: center;
+    }
+    .sticky-summary .label {
+        font-size: 1.05rem; /* un peu plus grand */
+        color: #6c757d;
+        margin-right: 8px;
+    }
+    .sticky-summary .value {
+        font-weight: 900; /* plus gras */
+        font-size: 1.4rem; /* plus grand */
+        line-height: 1.4; /* espacement vertical amélioré */
+    }
+    .sticky-summary .value.final {
+        color: #155724;
+    }
+    .sticky-summary .value.raw {
+        color: #0d6efd;
+    }
+    /* Augmenter l'espacement entre les éléments de la barre */
+    .sticky-summary .container > .d-flex {
+        gap: 14px 28px; /* row-gap, column-gap */
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <form method="post" id="paiementForm">
+                {% csrf_token %}
+                
+                <!-- Informations de l'élève -->
+                {% if eleve %}
+                <div class="eleve-info">
+                    <h6><i class="fas fa-user me-2"></i>Paiement pour :</h6>
+                    <div class="row">
+                        <div class="col-md-8">
+                            <p class="mb-1"><strong>{{ eleve.prenom }} {{ eleve.nom }}</strong></p>
+                            <p class="mb-1"><small class="text-muted">Matricule : {{ eleve.matricule }}</small></p>
+                            <p class="mb-1"><small class="text-muted">Classe : {{ eleve.classe.nom }} - {{ eleve.classe.ecole.nom }}</small></p>
+                            <div class="d-flex flex-wrap align-items-center gap-2">
+                                <span class="badge bg-secondary">ID élève: {{ eleve.id }}</span>
+                                {% if eleve.classe and eleve.classe.ecole %}
+                                    {% if user.is_superuser %}
+                                        <a href="{% url 'admin:eleves_ecole_change' eleve.classe.ecole.id %}"
+                                           class="badge bg-info text-dark text-decoration-none"
+                                           title="Ouvrir l'école dans l'admin Django">
+                                            <i class="fas fa-school me-1"></i>
+                                            École: {{ eleve.classe.ecole.nom }}
+                                        </a>
+                                    {% else %}
+                                        <span class="badge bg-info text-dark">
+                                            <i class="fas fa-school me-1"></i>
+                                            École: {{ eleve.classe.ecole.nom }}
+                                        </span>
+                                    {% endif %}
+                                    {% if eleve.classe.annee_scolaire %}
+                                        <span class="badge bg-light text-dark border">
+                                            <i class="fas fa-calendar me-1"></i>
+                                            Année: {{ eleve.classe.annee_scolaire }}
+                                        </span>
+                                    {% endif %}
+                                {% endif %}
+                                <a href="{% url 'paiements:echeancier_eleve' eleve.id %}" class="btn btn-sm btn-outline-info">
+                                    <i class="fas fa-calendar-alt me-1"></i> Voir échéancier
+                                </a>
+                                <a href="{% url 'eleves:detail_eleve' eleve.id %}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-user me-1"></i> Profil élève
+                                </a>
+                            </div>
+                            <!-- Mini-récap des restants par poste -->
+                            <div class="mt-2">
+                                <div class="d-flex flex-wrap small" style="gap: 10px 18px;">
+                                    <div><span class="text-muted">FI restant:</span> <strong id="hdrFiRest">—</strong></div>
+                                    <div><span class="text-muted">T1 restant:</span> <strong id="hdrT1Rest">—</strong></div>
+                                    <div><span class="text-muted">T2 restant:</span> <strong id="hdrT2Rest">—</strong></div>
+                                    <div><span class="text-muted">T3 restant:</span> <strong id="hdrT3Rest">—</strong></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-end">
+                            {% if eleve.photo %}
+                                <img src="{{ eleve.photo.url }}" alt="Photo" class="rounded-circle" width="60" height="60">
+                            {% else %}
+                                <div class="bg-secondary rounded-circle d-flex align-items-center justify-content-center mx-auto" style="width: 60px; height: 60px;">
+                                    <i class="fas fa-user text-white fa-2x"></i>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Détails du paiement -->
+                <div class="form-section">
+                    <h5 class="d-flex align-items-center">
+                        <i class="fas fa-money-bill-wave me-2"></i>
+                        Détails du paiement
+                        <span id="montantSuggestionBadge" class="badge bg-info text-dark ms-2" style="display:none;">
+                            Montant suggéré: <span id="montantSuggestionValue">0</span> GNF
+                        </span>
+                    </h5>
+                    
+                    <div class="row">
+                        {% if not eleve %}
+                        <!-- Recherche par matricule -->
+                        <div class="col-md-6 mb-3">
+                            <label for="matriculeInput" class="form-label">
+                                Matricule de l'élève <span class="required-field">*</span>
+                            </label>
+                            <div class="input-group">
+                                <input type="text" id="matriculeInput" class="form-control" placeholder="Ex: 1CE00048" maxlength="20">
+                                <button type="button" id="rechercherBtn" class="btn btn-outline-primary">
+                                    <i class="fas fa-search"></i> Rechercher
+                                </button>
+                            </div>
+                            <div id="matriculeHelp" class="form-text">Saisissez le matricule et cliquez sur Rechercher pour charger les informations de l'élève.</div>
+                            <div id="matriculeError" class="text-danger small" style="display:none;"></div>
+                        </div>
+                        
+                        <!-- Sélection manuelle (alternative) -->
+                        <div class="col-md-6 mb-3">
+                            <label for="eleveInput" class="form-label">
+                                Ou sélectionner manuellement
+                            </label>
+                            <!-- Saisie libre avec liste -->
+                            <input type="text" id="eleveInput" class="form-control" list="elevesList" placeholder="Tapez: nom, prénom, classe...">
+                            <datalist id="elevesList">
+                                {% for e in form.eleve.field.queryset %}
+                                    <option value="{{ e.prenom }} {{ e.nom }} ({{ e.matricule }}) - {{ e.classe.nom }} / {{ e.classe.ecole.nom }}" data-id="{{ e.id }}"></option>
+                                {% endfor %}
+                            </datalist>
+                            <div id="eleveHelp" class="form-text">Alternative: choisissez depuis la liste.</div>
+                        </div>
+                        
+                        <!-- Informations de l'élève chargées -->
+                        <div class="col-md-12 mb-3" id="eleveInfoSection" style="display:none;">
+                            <div class="eleve-info">
+                                <h6><i class="fas fa-user me-2"></i>Élève sélectionné :</h6>
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <p class="mb-1" id="eleveNomPrenom"><strong></strong></p>
+                                        <p class="mb-1" id="eleveMatricule"><small class="text-muted"></small></p>
+                                        <p class="mb-0" id="eleveClasse"><small class="text-muted"></small></p>
+                                    </div>
+                                    <div class="col-md-4 text-end">
+                                        <div id="elevePhotoContainer">
+                                            <div class="bg-secondary rounded-circle d-flex align-items-center justify-content-center mx-auto" style="width: 60px; height: 60px;">
+                                                <i class="fas fa-user text-white fa-2x"></i>
+                                            </div>
+                                        </div>
+                                        <div class="mt-2">
+                                            <small class="text-muted">Scolarité annuelle (hors inscription) : <strong id="scolariteAnnuelleTxt">—</strong></small>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Échéancier résumé -->
+                                <div id="echeancierResume" class="mt-3" style="display:none;">
+                                    <h6><i class="fas fa-money-bill-wave me-2"></i>Situation financière :</h6>
+                                    <div class="row text-center">
+                                        <div class="col-md-3">
+                                            <div class="bg-light p-2 rounded">
+                                                <small class="text-muted">Total dû</small><br>
+                                                <strong id="totalDu">0 GNF</strong>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="bg-light p-2 rounded">
+                                                <small class="text-muted">Déjà payé</small><br>
+                                                <strong class="text-success" id="totalPaye">0 GNF</strong>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="bg-light p-2 rounded">
+                                                <small class="text-muted">Reste à payer</small><br>
+                                                <strong class="text-danger" id="resteAPayer">0 GNF</strong>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" id="changerEleveBtn">
+                                                <i class="fas fa-edit"></i> Changer
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Select réel masqué pour la soumission -->
+                        <div class="d-none">
+                            {{ form.eleve }}
+                        </div>
+                        <div id="eleveError" class="text-danger small" style="display:none;">Veuillez sélectionner un élève.</div>
+                        {% if form.eleve.errors %}
+                            <div class="text-danger small">{{ form.eleve.errors.0 }}</div>
+                        {% endif %}
+                        {% else %}
+                            {{ form.eleve.as_hidden }}
+                        {% endif %}
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="{{ form.type_paiement.id_for_label }}" class="form-label">
+                                Type de paiement <span class="required-field">*</span>
+                            </label>
+                            {% if form.type_paiement.field.queryset|length == 0 %}
+                            <div class="alert alert-warning py-2 d-flex align-items-center" role="alert">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                <div>
+                                    Aucun type de paiement disponible. Créez-en dans l'administration.
+                                    <a class="alert-link ms-1" href="{% url 'admin:paiements_typepaiement_add' %}">Ajouter un type</a>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {{ form.type_paiement }}
+                            {% if form.type_paiement.errors %}
+                                <div class="text-danger small">{{ form.type_paiement.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="{{ form.mode_paiement.id_for_label }}" class="form-label">
+                                Mode de paiement <span class="required-field">*</span>
+                            </label>
+                            {% if form.mode_paiement.field.queryset|length == 0 %}
+                            <div class="alert alert-warning py-2 d-flex align-items-center" role="alert">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                <div>
+                                    Aucun mode de paiement disponible. Créez-en dans l'administration.
+                                    <a class="alert-link ms-1" href="{% url 'admin:paiements_modepaiement_add' %}">Ajouter un mode</a>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {{ form.mode_paiement }}
+                            {% if form.mode_paiement.errors %}
+                                <div class="text-danger small">{{ form.mode_paiement.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="{{ form.montant.id_for_label }}" class="form-label">
+                                Montant <span class="required-field">*</span>
+                            </label>
+                            <div class="input-group">
+                                {{ form.montant }}
+                                <span class="input-group-text">GNF</span>
+                            </div>
+                            <div class="mt-2">
+                                <button type="button" id="btnFillSuggested" class="btn btn-sm btn-outline-info">
+                                    <i class="fas fa-magic me-1"></i>Remplir le montant suggéré
+                                </button>
+                            </div>
+                            {% if form.montant.errors %}
+                                <div class="text-danger small">{{ form.montant.errors.0 }}</div>
+                            {% endif %}
+                            <div id="montantDisplay" class="montant-display mt-2">0 GNF</div>
+                            <div class="mt-2 small text-muted">
+                                <span>Montant final (après remise): </span>
+                                <strong id="finalAmountDisplay">0 GNF</strong>
+                                <span id="remiseInfo" class="ms-2" style="display:none;"></span>
+                            </div>
+                            <!-- Détail de la suggestion (FI/T1/T2/T3) -->
+                            <div id="suggestionBreakdown" class="mt-2" style="display:none;">
+                                <div class="card border-info">
+                                    <div class="card-body py-2">
+                                        <div class="d-flex flex-wrap small" style="gap: 12px 24px;">
+                                            <div><span class="text-muted">FI restant:</span> <strong id="sbFi">0 GNF</strong></div>
+                                            <div><span class="text-muted">T1 restant:</span> <strong id="sbT1">0 GNF</strong></div>
+                                            <div><span class="text-muted">T2 restant:</span> <strong id="sbT2">0 GNF</strong></div>
+                                            <div><span class="text-muted">T3 restant:</span> <strong id="sbT3">0 GNF</strong></div>
+                                        </div>
+                                        <div class="small text-muted mt-1">
+                                            <i class="fas fa-info-circle me-1"></i>
+                                            <span id="sbDesc">Suggestion calculée selon le type sélectionné.</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="{{ form.date_paiement.id_for_label }}" class="form-label">
+                                Date de paiement <span class="required-field">*</span>
+                            </label>
+                            {{ form.date_paiement }}
+                            {% if form.date_paiement.errors %}
+                                <div class="text-danger small">{{ form.date_paiement.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="{{ form.reference_externe.id_for_label }}" class="form-label">
+                                Référence externe
+                            </label>
+                            {{ form.reference_externe }}
+                            {% if form.reference_externe.errors %}
+                                <div class="text-danger small">{{ form.reference_externe.errors.0 }}</div>
+                            {% endif %}
+                            <small class="form-text text-muted">Numéro de transaction, chèque, etc.</small>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="{{ form.observations.id_for_label }}" class="form-label">
+                            <i class="fas fa-comment me-1"></i>Observations
+                        </label>
+                        {{ form.observations }}
+                        {% if form.observations.errors %}
+                            <div class="text-danger small">{{ form.observations.errors.0 }}</div>
+                        {% endif %}
+                        <small class="form-text text-muted">Informations complémentaires sur le paiement</small>
+                    </div>
+                </div>
+
+                <!-- Résumé et validation -->
+                <div class="form-section">
+                    <h5><i class="fas fa-check-circle me-2"></i>Résumé</h5>
+                    
+                    <div class="alert alert-info">
+                        <h6><i class="fas fa-info-circle me-2"></i>Informations importantes</h6>
+                        <ul class="mb-0">
+                            <li>Un numéro de reçu sera généré automatiquement</li>
+                            <li>Le paiement sera en statut "En attente" jusqu'à validation</li>
+                            <li>L'échéancier de l'élève sera mis à jour automatiquement</li>
+                        </ul>
+                    </div>
+                    
+                    <!-- Confirmation pour paiement partiel -->
+                    {% if show_partial_confirmation %}
+                    <div class="alert alert-danger mt-3" style="border: 2px solid #dc3545;">
+                        <h6 style="color: #dc3545; font-weight: bold;"><i class="fas fa-exclamation-triangle me-2"></i>⚠️ CONFIRMATION REQUISE - PAIEMENT PARTIEL</h6>
+                        <p class="mb-3" style="color: #721c24; font-weight: bold; font-size: 1.05em;">
+                            Le montant saisi (<span style="color: #dc3545;">{{ montant_saisi|floatformat:0 }} GNF</span>) est inférieur au montant standard 
+                            pour {{ type_description }} (<span style="color: #dc3545;">{{ montant_attendu|floatformat:0 }} GNF</span>).
+                        </p>
+                        <div class="form-check p-3" style="background-color: #f8d7da; border-radius: 5px; border: 1px solid #dc3545;">
+                            <input class="form-check-input" type="checkbox" name="confirmation_paiement_partiel" id="confirmationPartiel" value="1" required>
+                            <label class="form-check-label" for="confirmationPartiel" style="color: #721c24; font-weight: bold;">
+                                <i class="fas fa-check-square me-2"></i>Je confirme qu'il s'agit d'un paiement partiel et je souhaite procéder à l'enregistrement.
+                            </label>
+                        </div>
+                        <div class="mt-3">
+                            <button type="button" class="btn btn-outline-danger me-2" onclick="showConfirmationDialog()">
+                                <i class="fas fa-exclamation-circle me-1"></i>Confirmer le paiement partiel
+                            </button>
+                            <small class="text-muted">ou cochez la case ci-dessus et soumettez le formulaire</small>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Confirmation pour paiement partiel vers tranche suivante -->
+                    {% if show_partial_next_confirmation %}
+                    <div class="alert alert-warning mt-3" style="border: 2px solid #f39c12;">
+                        <h6 style="color: #f39c12; font-weight: bold;"><i class="fas fa-exclamation-triangle me-2"></i>⚠️ MONTANT SUPÉRIEUR À LA TRANCHE</h6>
+                        <div class="mb-3">
+                            <p style="color: #856404; font-weight: bold; font-size: 1.05em; margin-bottom: 10px;">
+                                {% if tranche_source == 'T2' %}
+                                    Le montant saisi dépasse ce qui est dû pour la 2ème tranche.
+                                {% else %}
+                                    Le montant saisi dépasse ce qui est dû pour la 1ère tranche.
+                                {% endif %}
+                            </p>
+                            <div class="row text-center mb-3">
+                                <div class="col-md-4">
+                                    <div class="bg-light p-2 rounded border">
+                                        {% if tranche_source == 'T2' %}
+                                            <small class="text-muted">Montant T2 max</small><br>
+                                            <strong class="text-primary">{{ montant_t2_max|floatformat:0|default:0 }} GNF</strong>
+                                        {% else %}
+                                            <small class="text-muted">Montant T1 max</small><br>
+                                            <strong class="text-primary">{{ montant_t1_max|floatformat:0|default:0 }} GNF</strong>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="bg-light p-2 rounded border">
+                                        <small class="text-muted">Excédent</small><br>
+                                        <strong class="text-warning">{{ excedent|floatformat:0|default:0 }} GNF</strong>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="bg-light p-2 rounded border">
+                                        <small class="text-muted">Répartition suggérée</small><br>
+                                        {% if tranche_source == 'T2' and t3_remaining > 0 %}
+                                            <strong class="text-success">T2 + Acompte T3</strong>
+                                        {% elif t2_remaining > 0 %}
+                                            <strong class="text-success">T1 + Acompte T2</strong>
+                                        {% elif t3_remaining > 0 %}
+                                            <strong class="text-success">T1 + Acompte T3</strong>
+                                        {% else %}
+                                            <strong class="text-muted">Aucune tranche disponible</strong>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {% if t2_remaining > 0 or t3_remaining > 0 %}
+                            <div class="bg-info bg-opacity-10 p-3 rounded border border-info">
+                                <h6 class="text-info mb-2"><i class="fas fa-lightbulb me-2"></i>Proposition intelligente :</h6>
+                                {% if tranche_source == 'T2' %}
+                                <p class="mb-2">
+                                    <strong>{{ montant_t2_max|floatformat:0|default:0 }} GNF</strong> seront alloués à la <strong>2ème tranche</strong>
+                                </p>
+                                <p class="mb-0">
+                                    <strong>{{ excedent|floatformat:0|default:0 }} GNF</strong> seront utilisés comme <strong>acompte sur la 3ème tranche</strong>
+                                    <small class="text-muted">(reste T3 : {{ t3_remaining|floatformat:0|default:0 }} GNF)</small>
+                                </p>
+                                {% else %}
+                                <p class="mb-2">
+                                    <strong>{{ montant_t1_max|floatformat:0|default:0 }} GNF</strong> seront alloués à la <strong>1ère tranche</strong>
+                                </p>
+                                {% if t2_remaining > 0 %}
+                                <p class="mb-0">
+                                    <strong>{{ excedent|floatformat:0|default:0 }} GNF</strong> seront utilisés comme <strong>acompte sur la 2ème tranche</strong>
+                                    <small class="text-muted">(reste T2 : {{ t2_remaining|floatformat:0|default:0 }} GNF)</small>
+                                </p>
+                                {% elif t3_remaining > 0 %}
+                                <p class="mb-0">
+                                    <strong>{{ excedent|floatformat:0|default:0 }} GNF</strong> seront utilisés comme <strong>acompte sur la 3ème tranche</strong>
+                                    <small class="text-muted">(reste T3 : {{ t3_remaining|floatformat:0|default:0 }} GNF)</small>
+                                </p>
+                                {% endif %}
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="form-check p-3" style="background-color: #fff3cd; border-radius: 5px; border: 1px solid #f39c12;">
+                            <input class="form-check-input" type="checkbox" name="confirmation_paiement_partiel_suivant" id="confirmationPartielSuivant" value="1" required>
+                            <label class="form-check-label" for="confirmationPartielSuivant" style="color: #856404; font-weight: bold;">
+                                <i class="fas fa-check-square me-2"></i>Je confirme vouloir utiliser l'excédent comme acompte sur la tranche suivante
+                            </label>
+                        </div>
+                        
+                        <div class="mt-3 d-flex gap-2 flex-wrap">
+                            <button type="button" class="btn btn-outline-warning" onclick="document.getElementById('confirmationPartielSuivant').checked = true;">
+                                <i class="fas fa-check me-1"></i>Confirmer la répartition
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="history.back();">
+                                <i class="fas fa-arrow-left me-1"></i>Modifier le montant
+                            </button>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <a href="{% if eleve %}{% url 'paiements:echeancier_eleve' eleve.id %}{% else %}{% url 'paiements:tableau_bord' %}{% endif %}" 
+                               class="btn btn-secondary">
+                                <i class="fas fa-arrow-left me-2"></i>Annuler
+                            </a>
+                        </div>
+                        <div>
+                            <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
+                                <i class="fas fa-save me-2"></i>{{ action }} le paiement
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+        
+        <!-- Aide contextuelle -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-question-circle me-2"></i>Aide
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <h6>Types de paiements</h6>
+                    <ul class="small">
+                        <li><strong>Frais d'inscription :</strong> Paiement initial (30 000 GNF)</li>
+                        <li><strong>Tranche 1, 2, 3 :</strong> Paiements échelonnés</li>
+                        <li><strong>Frais divers :</strong> Autres frais scolaires</li>
+                        <li><strong>Inscription + 1ère tranche :</strong> Paiement combiné</li>
+                        <li><strong>Inscription + 1ère + 2ème tranche :</strong> Paiement combiné</li>
+                        <li><strong>Inscription + Annuel :</strong> Paiement complet</li>
+                    </ul>
+                    
+                    <h6 class="mt-3">Modes de paiement</h6>
+                    <ul class="small">
+                        <li><strong>Espèces :</strong> Paiement en liquide</li>
+                        <li><strong>Mobile Money :</strong> Orange Money, MTN, etc.</li>
+                        <li><strong>Chèque :</strong> Paiement par chèque bancaire</li>
+                        <li><strong>Virement :</strong> Virement bancaire</li>
+                    </ul>
+                    
+                    <div class="alert alert-warning mt-3">
+                        <small>
+                            <i class="fas fa-exclamation-triangle me-1"></i>
+                            Vérifiez bien les informations avant de valider le paiement.
+                        </small>
+                    </div>
+                </div>
+            </div>
+            
+            {% if eleve %}
+            <!-- Échéancier de l'élève -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="fas fa-calendar-alt me-2"></i>Échéancier
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if eleve.echeancier %}
+                        <p class="small mb-2">
+                            <strong>Total dû :</strong> {{ eleve.echeancier.total_du|floatformat:0|intcomma }} GNF
+                        </p>
+                        <p class="small mb-2">
+                            <strong>Déjà payé :</strong> {{ eleve.echeancier.total_paye|floatformat:0|intcomma }} GNF
+                        </p>
+                        <p class="small mb-0">
+                            <strong>Reste à payer :</strong> 
+                            <span class="text-danger">{{ eleve.echeancier.solde_restant|floatformat:0|intcomma }} GNF</span>
+                        </p>
+                        
+                        <div class="progress mt-2">
+                            <div class="progress-bar" role="progressbar" 
+                                 style="width: {{ eleve.echeancier.pourcentage_paye }}%"
+                                 aria-valuenow="{{ eleve.echeancier.pourcentage_paye }}" 
+                                 aria-valuemin="0" aria-valuemax="100">
+                                {{ eleve.echeancier.pourcentage_paye|floatformat:1 }}%
+                            </div>
+                        </div>
+                        
+                        <a href="{% url 'paiements:echeancier_eleve' eleve.id %}" 
+                           class="btn btn-sm btn-outline-info mt-2">
+                            <i class="fas fa-eye me-1"></i>Voir détails
+                        </a>
+                    {% else %}
+                        <p class="text-muted small">Aucun échéancier défini</p>
+                        <a href="{% url 'paiements:creer_echeancier' eleve.id %}" 
+                           class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-plus me-1"></i>Créer échéancier
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    <!-- Barre récap collée en bas -->
+    <div class="sticky-summary">
+        <div class="container">
+            <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-md-between gap-2">
+                <div>
+                    <span class="label">Montant saisi:</span>
+                    <span id="stickyMontant" class="value raw">0 GNF</span>
+                </div>
+                <div>
+                    <span class="label">Montant final:</span>
+                    <span id="stickyFinal" class="value final">0 GNF</span>
+                </div>
+                <div class="text-muted small d-none d-md-block">
+                    <i class="fas fa-info-circle me-1"></i>Vérifiez avant d'enregistrer
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Test immédiat pour vérifier que le JS se charge
+console.log('=== PAYMENT FORM JS LOADING ===');
+
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('=== DOM CONTENT LOADED ===');
+    let montantInput = document.getElementById('id_montant');
+    console.log('montantInput found:', !!montantInput, montantInput);
+    
+    const montantDisplay = document.getElementById('montantDisplay');
+    const stickyMontant = document.getElementById('stickyMontant');
+    console.log('montantDisplay found:', !!montantDisplay);
+    // Initialiser l'affichage du montant au chargement
+    if (montantDisplay) {
+        try {
+            const initVal = parseFloat(montantInput && montantInput.value ? montantInput.value : 0) || 0;
+            const init = (isNaN(initVal) ? 0 : initVal).toLocaleString('fr-FR') + ' GNF';
+            montantDisplay.textContent = init;
+            if (stickyMontant) stickyMontant.textContent = init;
+        } catch(_) {
+            montantDisplay.textContent = '0 GNF';
+            if (stickyMontant) stickyMontant.textContent = '0 GNF';
+        }
+    }
+
+    // Helpers and shared elements
+    const badge = document.getElementById('montantSuggestionBadge');
+    const badgeValue = document.getElementById('montantSuggestionValue');
+    const csrfInput = document.querySelector('#paiementForm input[name="csrfmiddlewaretoken"]');
+
+    function fmtGNF(v) {
+        try { return Number(v||0).toLocaleString('fr-FR') + ' GNF'; } catch(_) { return String(v||0) + ' GNF'; }
+    }
+
+    function roundNearest1000(v) {
+        const n = Number(v||0);
+        if (!isFinite(n)) return 0;
+        return Math.round(n / 1000) * 1000;
+    }
+
+    function getEcheancierSafe() {
+        try { return (typeof getEcheancier === 'function') ? getEcheancier() : null; } catch(_) { return null; }
+    }
+
+    // Renvoie la base scolarité hors inscription
+    function getTuitionBase() {
+        const ech = getEcheancierSafe();
+        if (!ech) return null;
+        const due = (Number(ech.t1_du||0) + Number(ech.t2_du||0) + Number(ech.t3_du||0));
+        const paye = (Number(ech.t1_paye||0) + Number(ech.t2_paye||0) + Number(ech.t3_paye||0));
+        const rest = Math.max(0, due - paye);
+        return { due, paye, rest };
+    }
+
+    // Optionnel: point d'accroche pour afficher un hint 1%
+    function updateOnePercentHint() { /* no-op if UI not present */ }
+    
+    // Mettre à jour l'affichage du montant lors de la saisie
+    if (montantInput) {
+        montantInput.addEventListener('input', function(){
+            try {
+                const v = parseFloat(montantInput.value || 0) || 0;
+                const txt = v.toLocaleString('fr-FR') + ' GNF';
+                if (montantDisplay) montantDisplay.textContent = txt;
+                if (stickyMontant) stickyMontant.textContent = txt;
+            } catch(_) {}
+        });
+        montantInput.addEventListener('change', function(){});
+    }
+    // Remise désactivée: aucun écouteur ni calcul de remise
+    
+    const submitBtn = document.getElementById('submitBtn');
+    const form = document.getElementById('paiementForm');
+    let typeSelect = document.getElementById('id_type_paiement');
+    console.log('typeSelect found:', !!typeSelect, typeSelect);
+    // Pré-remplir la date du jour si le champ est vide (sécurité côté front)
+    const dateInput = document.getElementById('id_date_paiement');
+    if (dateInput && !dateInput.value) {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        dateInput.value = yyyy + '-' + mm + '-' + dd; // format YYYY-MM-DD requis
+    }
+    
+    // Données d'échéancier côté serveur si un élève est déjà sélectionné
+    let serverEcheancier = null;
+    {% if eleve %}
+        try {
+            {% if eleve.echeancier %}
+            serverEcheancier = {
+                inscription_du: {{ eleve.echeancier.frais_inscription_du|default:0|stringformat:"d" }},
+                inscription_paye: {{ eleve.echeancier.frais_inscription_paye|default:0|stringformat:"d" }},
+                tranche_1_du: {{ eleve.echeancier.tranche_1_due|default:0|stringformat:"d" }},
+                tranche_1_payee: {{ eleve.echeancier.tranche_1_payee|default:0|stringformat:"d" }},
+                tranche_2_du: {{ eleve.echeancier.tranche_2_due|default:0|stringformat:"d" }},
+                tranche_2_payee: {{ eleve.echeancier.tranche_2_payee|default:0|stringformat:"d" }},
+                tranche_3_du: {{ eleve.echeancier.tranche_3_due|default:0|stringformat:"d" }},
+                tranche_3_payee: {{ eleve.echeancier.tranche_3_payee|default:0|stringformat:"d" }},
+                total_du: {{ eleve.echeancier.total_du|default:0|stringformat:"d" }},
+                total_paye: {{ eleve.echeancier.total_paye|default:0|stringformat:"d" }},
+                reste: Math.max(0, ({{ eleve.echeancier.total_du|default:0|stringformat:"d" }}-( {{ eleve.echeancier.total_paye|default:0|stringformat:"d" }})))
+            };
+            console.log('Server echeancier loaded:', serverEcheancier);
+            {% else %}
+            console.log('Eleve exists but no echeancier found - will try AJAX with matricule {{ eleve.matricule }}');
+            {% endif %}
+        } catch(e) {
+            console.error('Error loading server echeancier:', e);
+        }
+    {% else %}
+        console.log('No eleve in server context');
+    {% endif %}
+
+    // URL AJAX pour récupérer les infos élève
+    const ajaxEleveInfoUrl = '{% url "paiements:ajax_eleve_info" %}';
+    const ajaxMontantSuggereUrl = '{% url "paiements:ajax_montant_suggere" %}';
+
+    // Récupérer l'échéancier courant (AJAX ou serveur)
+    function getEcheancier() {
+        try {
+            // Supporte la variable locale (dans le bloc {% templatetag openblock %} if not eleve {% templatetag closeblock %})
+            // et la variable globale window.currentEleveData (utilisée par ensureEcheancierLoaded)
+            const src = (typeof currentEleveData !== 'undefined' && currentEleveData)
+                        ? currentEleveData
+                        : (window.currentEleveData || null);
+            if (src && src.echeancier) {
+                const e = src.echeancier;
+                return {
+                    inscription_du: e.inscription_du || 0,
+                    inscription_paye: e.inscription_paye || 0,
+                    tranche_1_du: e.tranche_1_du || 0,
+                    tranche_1_payee: e.tranche_1_payee || 0,
+                    tranche_2_du: e.tranche_2_du || 0,
+                    tranche_2_payee: e.tranche_2_payee || 0,
+                    tranche_3_du: e.tranche_3_du || 0,
+                    tranche_3_payee: e.tranche_3_payee || 0,
+                    total_du: e.total_du || 0,
+                    total_paye: e.total_paye || 0,
+                    reste: Math.max(0, (e.total_du||0)-(e.total_paye||0))
+                };
+            }
+        } catch(_) {}
+        return serverEcheancier;
+    }
+
+    // Extraire le matricule depuis la saisie libre (format: "Prenom Nom (MAT) - Classe / École")
+    function extractMatriculeFromInput() {
+        const el = document.getElementById('eleveInput');
+        if (!el || !el.value) return null;
+        const m = el.value.match(/\(([^)]+)\)/);
+        return m ? m[1] : null;
+    }
+
+    // Charger l'échéancier via AJAX si possible
+    async function ensureEcheancierLoaded() {
+        if (getEcheancier()) return true;
+        try {
+            let matricule = extractMatriculeFromInput();
+            // Si pas de matricule depuis l'input, essayer le matricule de l'élève serveur
+            {% if eleve %}
+            if (!matricule) {
+                matricule = '{{ eleve.matricule }}';
+                console.log('Using server eleve matricule:', matricule);
+            }
+            {% endif %}
+            if (!matricule) return false;
+            
+            console.log('Fetching echeancier via AJAX for matricule:', matricule);
+            const url = new URL(ajaxEleveInfoUrl, window.location.origin);
+            url.searchParams.set('matricule', matricule);
+            const resp = await fetch(url.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const data = await resp.json();
+            console.log('AJAX response:', data);
+            if (data && data.success) {
+                // Enregistrer globalement pour les cas où la variable locale n'existe pas
+                window.currentEleveData = data;
+                // Si la variable locale existe (cas {% templatetag openblock %} if not eleve {% templatetag closeblock %}), la mettre aussi à jour
+                try { currentEleveData = data; } catch(_) {}
+                console.log('AJAX echeancier loaded successfully');
+                return true;
+            }
+        } catch (e) {
+            console.error('Error loading echeancier via AJAX:', e);
+        }
+        return false;
+    }
+
+    function updateMontantSuggestion() {
+        console.log('updateMontantSuggestion called');
+        if (!typeSelect || !montantInput) {
+            console.log('Missing elements - typeSelect:', !!typeSelect, 'montantInput:', !!montantInput);
+            return;
+        }
+        
+        const ech = getEcheancier();
+        if (!ech) {
+            console.log('No echeancier available');
+            return;
+        }
+
+        console.log('Echeancier data:', ech);
+        // Afficher la scolarité annuelle (hors inscription)
+        try {
+            const elTxt = document.getElementById('scolariteAnnuelleTxt');
+            const tuition = getTuitionBase();
+            if (elTxt && tuition) elTxt.textContent = fmtGNF(roundNearest1000(tuition.due));
+        } catch(_) {}
+
+        // Restes par poste
+        const remIns = Math.max(0, (ech.inscription_du||0) - (ech.inscription_paye||0));
+        const rem1 = Math.max(0, (ech.tranche_1_du||0) - (ech.tranche_1_payee||0));
+        const rem2 = Math.max(0, (ech.tranche_2_du||0) - (ech.tranche_2_payee||0));
+        const rem3 = Math.max(0, (ech.tranche_3_du||0) - (ech.tranche_3_payee||0));
+        const reste = Math.max(0, (ech.total_du||0)-(ech.total_paye||0));
+
+        console.log('Remaining amounts - Ins:', remIns, 'T1:', rem1, 'T2:', rem2, 'T3:', rem3, 'Total:', reste);
+        // Rafraîchir l'aperçu après MAJ des données
+        updateOnePercentHint();
+        if (typeof updateFinalAmount === 'function') updateFinalAmount();
+
+        // Normaliser le libellé du type
+        let selectedText = '';
+        if (typeSelect.selectedIndex >= 0 && typeSelect.options[typeSelect.selectedIndex]) {
+            selectedText = typeSelect.options[typeSelect.selectedIndex].text.toLowerCase();
+            selectedText = selectedText.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            selectedText = selectedText.replace(/\s+/g, ' ').trim();
+        }
+
+        console.log('Selected type text:', selectedText);
+
+        var amount = 0;
+
+        const hasIns = selectedText.includes('inscription') || selectedText.includes('insc');
+        const hasAnn = selectedText.includes('annuel') || selectedText.includes('annuelle');
+        var nearTranche = function(n) { 
+            return new RegExp('(tranche\\\\D{0,8}' + n + '|' + n + '\\\\D{0,8}tranche)').test(selectedText);
+        };
+        const hasT1 = /tranche\s*1|1ere|1er|premiere|\bt1\b/.test(selectedText) || nearTranche(1);
+        const hasT2 = /tranche\s*2|2eme|deuxieme|\bt2\b/.test(selectedText) || nearTranche(2);
+        const hasT3 = /tranche\s*3|3eme|troisieme|\bt3\b/.test(selectedText) || nearTranche(3);
+
+        console.log('Type detection - Ins:', hasIns, 'Ann:', hasAnn, 'T1:', hasT1, 'T2:', hasT2, 'T3:', hasT3);
+
+        if (hasIns && hasT1 && hasT2) {
+            amount = remIns + rem1 + rem2;
+        } else if (hasIns && hasT1) {
+            amount = remIns + rem1;
+        } else if (hasIns && hasAnn) {
+            amount = reste;
+        } else if (hasAnn) {
+            amount = reste;
+        } else if (hasT1) {
+            amount = rem1;
+        } else if (hasT2) {
+            amount = rem2;
+        } else if (hasT3) {
+            amount = rem3;
+        } else if (hasIns) {
+            amount = remIns;
+        } else {
+            amount = reste;
+        }
+
+        console.log('Calculated amount:', amount);
+
+        // Toujours renseigner le champ
+        var suggested = Math.floor(amount);
+        if (suggested > 0) {
+            // Ne pas forcer 0 dans le champ, seulement une suggestion positive
+            montantInput.value = suggested;
+            // Mettre à jour le badge
+            if (badge && badgeValue) {
+                badgeValue.textContent = Number(suggested).toLocaleString('fr-FR');
+                badge.style.display = 'inline-flex';
+            }
+        } else {
+            // Pas de suggestion positive: ne rien écraser et masquer le badge
+            if (badge) {
+                badge.style.display = 'none';
+            }
+        }
+         montantInput.dispatchEvent(new Event('input', { bubbles: true }));
+        
+        console.log('Montant field updated to:', montantInput.value);
+    }
+
+    // Écouteurs d'événements
+    if (typeSelect) {
+        typeSelect.addEventListener('change', updateMontantSuggestion);
+        // Déclencher aussi sur focus pour s'assurer que ça marche
+        typeSelect.addEventListener('focus', updateMontantSuggestion);
+    }
+
+    // Bouton pour remplir le montant suggéré à la demande
+    const btnFillSuggested = document.getElementById('btnFillSuggested');
+    if (btnFillSuggested) {
+        btnFillSuggested.addEventListener('click', updateMontantSuggestion);
+    }
+
+    // Auto-sélection d'un type par défaut si aucun n'est choisi
+    function autoSelectDefaultType() {
+        try {
+            const sel = document.getElementById('id_type_paiement');
+            if (!sel) return;
+            const currentVal = sel.value;
+            if (currentVal) return; // déjà choisi
+            const options = Array.from(sel.options || []);
+            // Forcer en priorité l'option exacte 'Frais d'inscription + Tranche 1' si présente
+            let targetIndex = -1;
+            const exactLabel = "frais d'inscription + tranche 1";
+            for (let i=0; i<options.length; i++) {
+                const txt = (options[i].text || '').trim().toLowerCase();
+                if (txt === exactLabel) { targetIndex = i; break; }
+            }
+            // Sinon, fallback heuristique: 'Inscription + Tranche 1' (variantes), puis 'Tranche 1', puis 'Inscription'
+            const findBy = (fn) => {
+                for (let i=0; i<options.length; i++) {
+                    const txt = (options[i].text || '').toLowerCase();
+                    if (fn(txt)) return i;
+                }
+                return -1;
+            };
+            if (targetIndex < 0) targetIndex = findBy(txt => txt.includes("inscription") && (txt.includes("tranche 1") || txt.includes("1ère tranche") || txt.includes("1ere tranche")));
+            if (targetIndex < 0) targetIndex = findBy(txt => (txt.includes("tranche 1") || txt.includes("1ère tranche") || txt.includes("1ere tranche")));
+            if (targetIndex < 0) targetIndex = findBy(txt => txt.includes("inscription"));
+            if (targetIndex > 0) { // éviter l'option '---------'
+                sel.selectedIndex = targetIndex;
+                sel.dispatchEvent(new Event('change'));
+            }
+        } catch(e) { console.warn('autoSelectDefaultType error', e); }
+    }
+
+    // Exécuter après chargement si on a déjà un élève
+    {% if eleve %}
+    setTimeout(autoSelectDefaultType, 0);
+    {% endif %}
+
+    // Déclenchement immédiat et répété pour s'assurer que ça marche
+    async function tryUpdateMontant() {
+        console.log('tryUpdateMontant called');
+        
+        // Si pas d'échéancier, essayer de le charger via AJAX
+        if (!getEcheancier()) {
+            console.log('No echeancier found, trying AJAX...');
+            const loaded = await ensureEcheancierLoaded();
+            if (!loaded) {
+                console.log('Failed to load echeancier via AJAX');
+                return;
+            }
+        }
+        
+        updateMontantSuggestion();
+        
+        // Réessayer dans 500ms si le montant n'est toujours pas rempli
+        setTimeout(async () => {
+            if (montantInput && !montantInput.value) {
+                console.log('Retrying montant update...');
+                if (!getEcheancier()) {
+                    await ensureEcheancierLoaded();
+                }
+                updateMontantSuggestion();
+                // Fallback: si toujours vide, appeler le serveur pour une suggestion exacte
+                setTimeout(async () => {
+                    if (montantInput && !montantInput.value) {
+                        console.log('Fallback to server ajax_montant_suggere');
+                        try {
+                            const csrfInput = document.querySelector('#paiementForm input[name="csrfmiddlewaretoken"]');
+                            const eleveHidden = document.getElementById('id_eleve');
+                            const typeSelectEl = document.getElementById('id_type_paiement');
+                            const eleveId = eleveHidden && eleveHidden.value ? eleveHidden.value : null;
+                            const typeId = typeSelectEl && typeSelectEl.value ? typeSelectEl.value : null;
+                            if (!eleveId || !typeId) return;
+                            const resp = await fetch('{% url "paiements:ajax_montant_suggere" %}', {
+                                method: 'POST',
+                                headers: {
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    'Content-Type': 'application/x-www-form-urlencoded',
+                                    'X-CSRFToken': csrfInput ? csrfInput.value : ''
+                                },
+                                body: new URLSearchParams({ eleve_id: eleveId, type_id: typeId }).toString()
+                            });
+                            const data = await resp.json();
+                            if (data && data.ok) {
+                                const suggested = Number(data.suggested || 0);
+                                if (suggested > 0) {
+                                    montantInput.value = suggested;
+                                    const txt = suggested.toLocaleString('fr-FR') + ' GNF';
+                                    if (montantDisplay) montantDisplay.textContent = txt;
+                                    const stickyMontant = document.getElementById('stickyMontant');
+                                    if (stickyMontant) stickyMontant.textContent = txt;
+                                    const finalDisp = document.getElementById('finalAmountDisplay');
+                                    const stickyFinal = document.getElementById('stickyFinal');
+                                    if (finalDisp) finalDisp.textContent = txt;
+                                    if (stickyFinal) stickyFinal.textContent = txt;
+                                    if (badge && badgeValue) {
+                                        badge.style.display = 'inline-flex';
+                                        badgeValue.textContent = Number(suggested).toLocaleString('fr-FR');
+                                    }
+                                    // Mettre à jour le breakdown si disponible
+                                    const bd = data.breakdown || {};
+                                    const sb = document.getElementById('suggestionBreakdown');
+                                    const fmt = (v) => { try { return Number(v||0).toLocaleString('fr-FR') + ' GNF'; } catch(_) { return String(v||0) + ' GNF'; } };
+                                    if (sb) {
+                                        const sbFi = document.getElementById('sbFi');
+                                        const sbT1 = document.getElementById('sbT1');
+                                        const sbT2 = document.getElementById('sbT2');
+                                        const sbT3 = document.getElementById('sbT3');
+                                        const sbDesc = document.getElementById('sbDesc');
+                                        if (sbFi) sbFi.textContent = fmt(bd.fi_restant);
+                                        if (sbT1) sbT1.textContent = fmt(bd.t1_restant);
+                                        if (sbT2) sbT2.textContent = fmt(bd.t2_restant);
+                                        if (sbT3) sbT3.textContent = fmt(bd.t3_restant);
+                                        if (sbDesc) sbDesc.textContent = bd.description || '';
+                                        sb.style.display = '';
+                                    }
+                                }
+                            }
+                        } catch(e) {
+                            console.warn('ajax_montant_suggere fallback failed', e);
+                        }
+                    }
+                }, 400);
+            }
+        }, 500);
+    }
+    
+    // Déclencher immédiatement
+    tryUpdateMontant();
+    
+    // Déclencher aussi après un délai
+    setTimeout(() => tryUpdateMontant(), 100);
+
+    // Helpers format
+    function formatGNF(v) {
+        try { return Number(v||0).toLocaleString('fr-FR') + ' GNF'; } catch(_) { return String(v||0) + ' GNF'; }
+    }
+
+    function updateFinalAmount() {
+        const v = parseFloat(montantInput && montantInput.value ? montantInput.value : 0) || 0;
+        const remiseEl = document.getElementById('id_remise_pourcentage');
+        const pct = parseFloat(remiseEl && remiseEl.value ? remiseEl.value : 0) || 0;
+        const remise = Math.max(0, Math.min(100, pct));
+        const remiseAmount = Math.max(0, v * remise / 100.0);
+        const final = Math.max(0, v - remiseAmount);
+        const fad = document.getElementById('finalAmountDisplay');
+        const rinfo = document.getElementById('remiseInfo');
+        if (fad) {
+            fad.textContent = formatGNF(Math.floor(final));
+        }
+        if (rinfo) {
+            if (remise > 0 && v > 0) {
+                rinfo.style.display = 'block';
+                rinfo.textContent = `Remise déduite: ${formatGNF(Math.floor(remiseAmount))} (−${remise.toFixed(2)}%)`;
+            } else {
+                rinfo.style.display = 'none';
+                rinfo.textContent = '';
+            }
+        }
+        // maj barre sticky
+        const stickyFinal = document.getElementById('stickyFinal');
+        if (stickyFinal) {
+            stickyFinal.textContent = formatGNF(Math.floor(final));
+        }
+    }
+
+    // Formatage du montant en temps réel et maj badge (toujours visible)
+    montantInput.addEventListener('input', function() {
+        const value = parseFloat(this.value);
+        const v = isNaN(value) ? 0 : Math.max(0, value);
+        try {
+            montantDisplay.textContent = v.toLocaleString('fr-FR') + ' GNF';
+        } catch(_) {
+            montantDisplay.textContent = String(v) + ' GNF';
+        }
+        if (badge && badgeValue) {
+            const vb = isNaN(value) ? 0 : Math.max(0, Math.floor(value));
+            try { badgeValue.textContent = vb.toLocaleString('fr-FR'); }
+            catch(_) { badgeValue.textContent = String(vb); }
+            badge.style.display = 'inline-flex';
+        }
+        // maj barre sticky (montant brut)
+        const stickyMontant = document.getElementById('stickyMontant');
+        if (stickyMontant) {
+            try { stickyMontant.textContent = v.toLocaleString('fr-FR') + ' GNF'; }
+            catch(_) { stickyMontant.textContent = String(v) + ' GNF'; }
+        }
+        updateFinalAmount();
+    })
+
+    // Mise à jour quand la remise change
+    const remisePctEl = document.getElementById('id_remise_pourcentage');
+    if (remisePctEl) {
+        remisePctEl.addEventListener('input', updateFinalAmount);
+        remisePctEl.addEventListener('change', updateFinalAmount);
+    }
+
+    // Init
+    updateFinalAmount();
+    // Init sticky avec les valeurs actuelles
+    (function initSticky() {
+        const initVal = parseFloat(montantInput && montantInput.value ? montantInput.value : 0) || 0;
+        const stickyMontant = document.getElementById('stickyMontant');
+        const stickyFinal = document.getElementById('stickyFinal');
+        if (stickyMontant) {
+            try { stickyMontant.textContent = initVal.toLocaleString('fr-FR') + ' GNF'; }
+            catch(_) { stickyMontant.textContent = String(initVal) + ' GNF'; }
+        }
+        if (stickyFinal) {
+            const fad = document.getElementById('finalAmountDisplay');
+            if (fad && fad.textContent) {
+                stickyFinal.textContent = fad.textContent;
+            }
+        }
+    })();
+    
+    // Validation du formulaire
+    form.addEventListener('submit', function(e) {
+        // Récupérer de manière robuste le champ élève (input hidden ou select visible)
+        const eleveSelect = document.querySelector('[name="eleve"]');
+        const eleveError = document.getElementById('eleveError');
+        
+        // Vérifier qu'un élève est sélectionné (soit via AJAX, soit via sélection manuelle)
+        if (!eleveSelect.value) {
+            // Si aucun élève n'est sélectionné, essayer de valider la sélection manuelle
+            const eleveInput = document.getElementById('eleveInput');
+            if (eleveInput && eleveInput.value.trim()) {
+                const options = Array.from(document.querySelectorAll('#elevesList option'));
+                const match = options.find(opt => opt.value.trim() === eleveInput.value.trim());
+                if (match) {
+                    eleveSelect.value = match.getAttribute('data-id');
+                    eleveError && (eleveError.style.display = 'none');
+                } else {
+                    e.preventDefault();
+                    if (eleveError) {
+                        eleveError.textContent = 'Sélection invalide. Veuillez choisir un élève depuis la liste ou rechercher par matricule.';
+                        eleveError.style.display = 'block';
+                    }
+                    eleveInput.focus();
+                    return;
+                }
+            } else {
+                // Aucun élève sélectionné du tout
+                e.preventDefault();
+                if (eleveError) {
+                    eleveError.textContent = 'Veuillez sélectionner un élève (recherche par matricule ou sélection manuelle).';
+                    eleveError.style.display = 'block';
+                }
+                // Focus sur le champ matricule s'il est visible
+                const matriculeInput = document.getElementById('matriculeInput');
+                if (matriculeInput && matriculeInput.parentElement.parentElement.style.display !== 'none') {
+                    matriculeInput.focus();
+                } else if (eleveInput) {
+                    eleveInput.focus();
+                }
+                return;
+            }
+        } else {
+            // Un élève est sélectionné, masquer les erreurs
+            if (eleveError) eleveError.style.display = 'none';
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enregistrement...';
+        
+        // Réactiver le bouton après 5 secondes en cas de problème
+        setTimeout(function() {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-save me-2"></i>{{ action }} le paiement';
+        }, 5000);
+    });
+    
+    // Fonctionnalité de recherche par matricule
+    {% if not eleve %}
+    const matriculeInput = document.getElementById('matriculeInput');
+    const rechercherBtn = document.getElementById('rechercherBtn');
+    const matriculeError = document.getElementById('matriculeError');
+    const eleveInfoSection = document.getElementById('eleveInfoSection');
+    const eleveSelectInit = document.getElementById('{{ form.eleve.id_for_label }}');
+    const eleveInputInit = document.getElementById('eleveInput');
+    const changerEleveBtn = document.getElementById('changerEleveBtn');
+    
+    // Variables pour stocker les données de l'élève
+    let currentEleveData = null;
+    
+    // Fonction pour formater les montants
+    function formatMontant(montant) {
+        let v = Number(montant);
+        if (!isFinite(v) || isNaN(v)) v = 0;
+        v = Math.max(0, Math.floor(v));
+        try {
+            return new Intl.NumberFormat('fr-FR').format(v) + ' GNF';
+        } catch(_) {
+            return String(v) + ' GNF';
+        }
+    }
+    
+    // Fonction pour afficher les informations de l'élève
+    function afficherEleveInfo(data) {
+        currentEleveData = data;
+        
+        // Remplir les informations de base
+        document.getElementById('eleveNomPrenom').innerHTML = `<strong>${data.eleve.prenom} ${data.eleve.nom}</strong>`;
+        document.getElementById('eleveMatricule').innerHTML = `<small class="text-muted">Matricule : ${data.eleve.matricule}</small>`;
+        document.getElementById('eleveClasse').innerHTML = `<small class="text-muted">Classe : ${data.eleve.classe} - ${data.eleve.ecole}</small>`;
+        
+        // Gérer la photo
+        const photoContainer = document.getElementById('elevePhotoContainer');
+        if (data.eleve.photo_url) {
+            photoContainer.innerHTML = `<img src="${data.eleve.photo_url}" alt="Photo" class="rounded-circle" width="60" height="60">`;
+        } else {
+            photoContainer.innerHTML = `<div class="bg-secondary rounded-circle d-flex align-items-center justify-content-center mx-auto" style="width: 60px; height: 60px;">
+                <i class="fas fa-user text-white fa-2x"></i>
+            </div>`;
+        }
+        
+        // Afficher l'échéancier si disponible
+        if (data.has_echeancier) {
+            document.getElementById('totalDu').textContent = formatMontant(data.echeancier.total_du);
+            document.getElementById('totalPaye').textContent = formatMontant(data.echeancier.total_paye);
+            document.getElementById('resteAPayer').textContent = formatMontant(data.echeancier.reste_a_payer);
+            document.getElementById('echeancierResume').style.display = 'block';
+        } else {
+            document.getElementById('echeancierResume').style.display = 'none';
+        }
+        
+        // Mettre à jour le select caché
+        eleveSelectInit.value = data.eleve.id;
+        
+        // Afficher la section
+        eleveInfoSection.style.display = 'block';
+        
+        // Masquer les champs de recherche
+        matriculeInput.parentElement.parentElement.style.display = 'none';
+        eleveInputInit.parentElement.style.display = 'none';
+        
+        // Effacer les erreurs
+        matriculeError.style.display = 'none';
+        const eleveErrorElement = document.getElementById('eleveError');
+        if (eleveErrorElement) {
+            eleveErrorElement.style.display = 'none';
+            eleveErrorElement.textContent = '';
+        }
+
+        // Mettre à jour la suggestion de montant en fonction du type choisi
+        updateMontantSuggestion();
+    }
+    
+    // Fonction pour réinitialiser la sélection
+    function reinitialiserSelection() {
+        currentEleveData = null;
+        eleveInfoSection.style.display = 'none';
+        matriculeInput.parentElement.parentElement.style.display = 'block';
+        eleveInputInit.parentElement.style.display = 'block';
+        eleveSelectInit.value = '';
+        matriculeInput.value = '';
+        eleveInputInit.value = '';
+        matriculeError.style.display = 'none';
+    }
+    
+    // Recherche par matricule
+    function rechercherParMatricule() {
+        const matricule = matriculeInput.value.trim();
+        if (!matricule) {
+            matriculeError.textContent = 'Veuillez saisir un matricule';
+            matriculeError.style.display = 'block';
+            return;
+        }
+        
+        // Désactiver le bouton pendant la recherche
+        rechercherBtn.disabled = true;
+        rechercherBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Recherche...';
+        matriculeError.style.display = 'none';
+        
+        // Appel AJAX
+        fetch(`{% url 'paiements:ajax_eleve_info' %}?matricule=${encodeURIComponent(matricule)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    afficherEleveInfo(data);
+                } else {
+                    matriculeError.textContent = data.error;
+                    matriculeError.style.display = 'block';
+                }
+            })
+            .catch(error => {
+                matriculeError.textContent = 'Erreur de connexion : ' + error.message;
+                matriculeError.style.display = 'block';
+            })
+            .finally(() => {
+                // Réactiver le bouton
+                rechercherBtn.disabled = false;
+                rechercherBtn.innerHTML = '<i class="fas fa-search"></i> Rechercher';
+            });
+    }
+    
+    // Event listeners
+    rechercherBtn.addEventListener('click', rechercherParMatricule);
+    
+    // Recherche en appuyant sur Entrée
+    matriculeInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            rechercherParMatricule();
+        }
+    });
+    
+    // Bouton changer élève
+    changerEleveBtn.addEventListener('click', reinitialiserSelection);
+    
+    // Auto-complétion pour la sélection manuelle d'élève
+    if (eleveInputInit && eleveSelectInit) {
+        eleveInputInit.addEventListener('change', function() {
+            const options = Array.from(document.querySelectorAll('#elevesList option'));
+            const match = options.find(opt => opt.value.trim() === this.value.trim());
+            if (match) {
+                const eleveId = match.getAttribute('data-id');
+                eleveSelectInit.value = eleveId;
+                
+                // Simuler les données pour affichage (extraction depuis l'option)
+                const optionText = match.value;
+                const parts = optionText.match(/^(.+) \((.+)\) - (.+) \/ (.+)$/);
+                if (parts) {
+                    const fakeData = {
+                        success: true,
+                        eleve: {
+                            id: eleveId,
+                            nom: parts[1].split(' ').slice(1).join(' '),
+                            prenom: parts[1].split(' ')[0],
+                            matricule: parts[2],
+                            classe: parts[3],
+                            ecole: parts[4],
+                            photo_url: null
+                        },
+                        has_echeancier: false,
+                        echeancier: {}
+                    };
+                    afficherEleveInfo(fakeData);
+                }
+                
+                const err = document.getElementById('eleveError');
+                if (err) err.style.display = 'none';
+            }
+        });
+    }
+    {% endif %}
+    
+    // Calcul du montant final après remise (aperçu)
+    function updateFinalAmount() {
+        try {
+            const montant = Number((montantInput && montantInput.value) ? montantInput.value : 0) || 0;
+            const remiseEl = document.getElementById('id_remise_pourcentage');
+            const pct = Number(remiseEl && remiseEl.value ? remiseEl.value : 0) || 0;
+            const tuition = getTuitionBase();
+            let base_remise = tuition ? tuition.rest : montant;
+            if (base_remise < 0) base_remise = 0;
+            const remise_montant = Math.max(0, (base_remise * pct) / 100.0);
+            const final_montant = Math.max(0, montant - remise_montant);
+            const final_disp = roundNearest1000(final_montant);
+            const info = document.getElementById('remiseInfo');
+            if (info) {
+                info.style.display = 'inline';
+                info.textContent = 'Base remise: ' + fmtGNF(roundNearest1000(base_remise)) + ' • Remise: ' + fmtGNF(roundNearest1000(remise_montant));
+            }
+            const finalDisplay = document.getElementById('finalAmountDisplay');
+            if (finalDisplay) finalDisplay.textContent = fmtGNF(final_disp);
+            const stickyFinal = document.getElementById('stickyFinal');
+            if (stickyFinal) stickyFinal.textContent = fmtGNF(final_disp);
+        } catch(e) { console.error('erreur updateFinalAmount', e); }
+    }
+
+    // Initial UI sync
+    updateFinalAmount();
+});
+
+// Fonction pour afficher la boîte de dialogue de confirmation
+function showConfirmationDialog() {
+    const montantSaisi = '{{ montant_saisi|default:"0" }}';
+    const montantAttendu = '{{ montant_attendu|default:"0" }}';
+    const typeDescription = '{{ type_description|default:"" }}';
+    
+    const message = `⚠️ CONFIRMATION DE PAIEMENT PARTIEL\n\n` +
+                   `Montant saisi: ${parseInt(montantSaisi).toLocaleString()} GNF\n` +
+                   `Montant standard pour ${typeDescription}: ${parseInt(montantAttendu).toLocaleString()} GNF\n\n` +
+                   `Voulez-vous vraiment enregistrer ce paiement partiel ?\n\n` +
+                   `⚠️ Cette action est irréversible une fois validée.`;
+    
+    if (confirm(message)) {
+        // Cocher automatiquement la case de confirmation
+        const checkbox = document.getElementById('confirmationPartiel');
+        if (checkbox) {
+            checkbox.checked = true;
+            
+            // Soumettre automatiquement le formulaire
+            const form = document.getElementById('paiementForm');
+            if (form) {
+                // Changer le texte du bouton pour indiquer l'action
+                const submitBtn = document.getElementById('submitBtn');
+                if (submitBtn) {
+                    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enregistrement du paiement partiel...';
+                    submitBtn.disabled = true;
+                }
+                
+                // Soumettre le formulaire
+                form.submit();
+            }
+        }
+    }
+}
+
+// Améliorer l'affichage des messages d'erreur
+document.addEventListener('DOMContentLoaded', function() {
+    // Styliser tous les messages d'erreur Django
+    const errorMessages = document.querySelectorAll('.alert-danger .messages li, .alert-error .messages li');
+    errorMessages.forEach(function(message) {
+        message.style.color = '#dc3545';
+        message.style.fontWeight = 'bold';
+        message.style.fontSize = '1.1em';
+    });
+    
+    // Ajouter une animation pour attirer l'attention sur la section de confirmation
+    const confirmationSection = document.querySelector('.alert-danger[style*="border: 2px solid #dc3545"]');
+    if (confirmationSection) {
+        confirmationSection.style.animation = 'pulse 2s infinite';
+        
+        // Ajouter le CSS pour l'animation pulse
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes pulse {
+                0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+                70% { box-shadow: 0 0 0 10px rgba(220, 53, 69, 0); }
+                100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+});
+</script>
+
+{% endblock %}

@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-exclamation-triangle"></i> {{ title }}
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>Attention !</strong> Cette action est irréversible. La dépense et tout son historique seront supprimés définitivement.
+                    </div>
+
+                    <h5 class="mb-3">Êtes-vous sûr de vouloir supprimer définitivement cette dépense ?</h5>
+
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <dl class="row mb-0">
+                                <dt class="col-sm-3">Numéro de facture :</dt>
+                                <dd class="col-sm-9"><strong>{{ depense.numero_facture }}</strong></dd>
+
+                                <dt class="col-sm-3">Libellé :</dt>
+                                <dd class="col-sm-9">{{ depense.libelle }}</dd>
+
+                                <dt class="col-sm-3">Fournisseur :</dt>
+                                <dd class="col-sm-9">{{ depense.fournisseur.nom }}</dd>
+
+                                <dt class="col-sm-3">Catégorie :</dt>
+                                <dd class="col-sm-9">{{ depense.categorie.nom }}</dd>
+
+                                <dt class="col-sm-3">Montant TTC :</dt>
+                                <dd class="col-sm-9"><strong>{{ depense.montant_ttc|floatformat:0 }} GNF</strong></dd>
+
+                                <dt class="col-sm-3">Date de facture :</dt>
+                                <dd class="col-sm-9">{{ depense.date_facture|date:"d/m/Y" }}</dd>
+
+                                <dt class="col-sm-3">Statut :</dt>
+                                <dd class="col-sm-9">
+                                    <span class="badge 
+                                        {% if depense.statut == 'PAYEE' %}bg-success
+                                        {% elif depense.statut == 'VALIDEE' %}bg-info
+                                        {% elif depense.statut == 'EN_ATTENTE' %}bg-warning
+                                        {% elif depense.statut == 'REJETEE' %}bg-danger
+                                        {% elif depense.statut == 'ANNULEE' %}bg-secondary
+                                        {% else %}bg-secondary{% endif %}">
+                                        {{ depense.get_statut_display }}
+                                    </span>
+                                </dd>
+
+                                {% if depense.description %}
+                                <dt class="col-sm-3">Description :</dt>
+                                <dd class="col-sm-9">{{ depense.description }}</dd>
+                                {% endif %}
+
+                                <dt class="col-sm-3">Créé par :</dt>
+                                <dd class="col-sm-9">{{ depense.cree_par.get_full_name|default:depense.cree_par.username }}</dd>
+
+                                <dt class="col-sm-3">Date de création :</dt>
+                                <dd class="col-sm-9 mb-0">{{ depense.date_creation|date:"d/m/Y H:i" }}</dd>
+                            </dl>
+                        </div>
+                    </div>
+
+                    {% if depense.pieces_justificatives.count > 0 %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-paperclip"></i> 
+                        Cette dépense contient <strong>{{ depense.pieces_justificatives.count }}</strong> pièce(s) justificative(s) qui seront également supprimée(s).
+                    </div>
+                    {% endif %}
+
+                    {% if depense.historique.count > 0 %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-history"></i> 
+                        L'historique de cette dépense (<strong>{{ depense.historique.count }}</strong> entrée(s)) sera également supprimé.
+                    </div>
+                    {% endif %}
+
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'depenses:detail_depense' depense.id %}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Annuler
+                            </a>
+                            <button type="submit" class="btn btn-danger">
+                                <i class="fas fa-trash"></i> Confirmer la Suppression Définitive
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

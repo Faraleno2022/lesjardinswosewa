@@ -1,0 +1,512 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-container {
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+    
+    .form-header {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 12px 12px 0 0;
+        margin: -2rem -2rem 2rem -2rem;
+        text-align: center;
+    }
+    
+    .form-section {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .form-section h6 {
+        color: #495057;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #dee2e6;
+    }
+    
+    .form-group {
+        margin-bottom: 1rem;
+    }
+    
+    .form-label {
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 0.5rem;
+    }
+    
+    .required-field {
+        color: #dc3545;
+    }
+    
+    .form-control, .form-select {
+        border: 1px solid #ced4da;
+        border-radius: 6px;
+        padding: 0.75rem;
+        transition: all 0.3s ease;
+    }
+    
+    .form-control:focus, .form-select:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+    }
+    
+    .salary-fields {
+        display: none;
+    }
+    
+    .salary-fields.show {
+        display: block;
+        animation: fadeIn 0.3s ease;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .btn-submit {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        border: none;
+        color: white;
+        padding: 0.75rem 2rem;
+        border-radius: 25px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-submit:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+        color: white;
+    }
+    
+    .btn-cancel {
+        background: #6c757d;
+        border: none;
+        color: white;
+        padding: 0.75rem 2rem;
+        border-radius: 25px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-cancel:hover {
+        background: #5a6268;
+        color: white;
+    }
+    
+    .alert {
+        border-radius: 8px;
+        border: none;
+        padding: 1rem 1.5rem;
+    }
+    
+    .help-text {
+        font-size: 0.875rem;
+        color: #6c757d;
+        margin-top: 0.25rem;
+    }
+    
+    .error-list {
+        list-style: none;
+        padding: 0;
+        margin: 0.5rem 0 0 0;
+    }
+    
+    .error-list li {
+        color: #dc3545;
+        font-size: 0.875rem;
+        margin-bottom: 0.25rem;
+    }
+    
+    .error-list li:before {
+        content: "⚠ ";
+        margin-right: 0.25rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">
+                <i class="fas fa-user-plus text-primary"></i>
+                {{ title }}
+            </h1>
+            <p class="text-muted mb-0">
+                {% if enseignant %}
+                    Modification des informations de l'enseignant
+                {% else %}
+                    Ajout d'un nouvel enseignant au système
+                {% endif %}
+            </p>
+        </div>
+        <div>
+            <a href="{% url 'salaires:liste_enseignants' %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Retour à la liste
+            </a>
+        </div>
+    </div>
+
+    <!-- Messages -->
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <!-- Formulaire -->
+    <div class="form-container">
+        <div class="form-header">
+            <h4 class="mb-0">
+                <i class="fas fa-user-tie me-2"></i>
+                {{ title }}
+            </h4>
+        </div>
+
+        <form method="post" novalidate>
+            {% csrf_token %}
+            
+            <!-- Informations Personnelles -->
+            <div class="form-section">
+                <h6><i class="fas fa-user me-2 text-primary"></i>Informations Personnelles</h6>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="{{ form.nom.id_for_label }}" class="form-label">
+                                {{ form.nom.label }}
+                                {% if form.nom.field.required %}<span class="required-field">*</span>{% endif %}
+                            </label>
+                            {{ form.nom }}
+                            {% if form.nom.errors %}
+                                <ul class="error-list">
+                                    {% for error in form.nom.errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="{{ form.prenoms.id_for_label }}" class="form-label">
+                                {{ form.prenoms.label }}
+                                {% if form.prenoms.field.required %}<span class="required-field">*</span>{% endif %}
+                            </label>
+                            {{ form.prenoms }}
+                            {% if form.prenoms.errors %}
+                                <ul class="error-list">
+                                    {% for error in form.prenoms.errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="{{ form.telephone.id_for_label }}" class="form-label">
+                                {{ form.telephone.label }}
+                            </label>
+                            {{ form.telephone }}
+                            {% if form.telephone.help_text %}
+                                <div class="help-text">{{ form.telephone.help_text }}</div>
+                            {% endif %}
+                            {% if form.telephone.errors %}
+                                <ul class="error-list">
+                                    {% for error in form.telephone.errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="{{ form.email.id_for_label }}" class="form-label">
+                                {{ form.email.label }}
+                            </label>
+                            {{ form.email }}
+                            {% if form.email.errors %}
+                                <ul class="error-list">
+                                    {% for error in form.email.errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="{{ form.adresse.id_for_label }}" class="form-label">
+                        {{ form.adresse.label }}
+                    </label>
+                    {{ form.adresse }}
+                    {% if form.adresse.errors %}
+                        <ul class="error-list">
+                            {% for error in form.adresse.errors %}
+                                <li>{{ error }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Informations Professionnelles -->
+            <div class="form-section">
+                <h6><i class="fas fa-briefcase me-2 text-success"></i>Informations Professionnelles</h6>
+                
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="{{ form.ecole.id_for_label }}" class="form-label">
+                                {{ form.ecole.label }}
+                                {% if form.ecole.field.required %}<span class="required-field">*</span>{% endif %}
+                            </label>
+                            {{ form.ecole }}
+                            {% if form.ecole.errors %}
+                                <ul class="error-list">
+                                    {% for error in form.ecole.errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="{{ form.type_enseignant.id_for_label }}" class="form-label">
+                                {{ form.type_enseignant.label }}
+                                {% if form.type_enseignant.field.required %}<span class="required-field">*</span>{% endif %}
+                            </label>
+                            {{ form.type_enseignant }}
+                            {% if form.type_enseignant.errors %}
+                                <ul class="error-list">
+                                    {% for error in form.type_enseignant.errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="{{ form.statut.id_for_label }}" class="form-label">
+                                {{ form.statut.label }}
+                            </label>
+                            {{ form.statut }}
+                            {% if form.statut.errors %}
+                                <ul class="error-list">
+                                    {% for error in form.statut.errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="{{ form.date_embauche.id_for_label }}" class="form-label">
+                        {{ form.date_embauche.label }}
+                        {% if form.date_embauche.field.required %}<span class="required-field">*</span>{% endif %}
+                    </label>
+                    {{ form.date_embauche }}
+                    {% if form.date_embauche.help_text %}
+                        <div class="help-text">{{ form.date_embauche.help_text }}</div>
+                    {% endif %}
+                    {% if form.date_embauche.errors %}
+                        <ul class="error-list">
+                            {% for error in form.date_embauche.errors %}
+                                <li>{{ error }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Rémunération -->
+            <div class="form-section">
+                <h6><i class="fas fa-money-bill-wave me-2 text-warning"></i>Rémunération</h6>
+                
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group salary-fields" id="salaire-fixe-field">
+                            <label for="{{ form.salaire_fixe.id_for_label }}" class="form-label">
+                                {{ form.salaire_fixe.label }}
+                            </label>
+                            {{ form.salaire_fixe }}
+                            {% if form.salaire_fixe.help_text %}
+                                <div class="help-text">{{ form.salaire_fixe.help_text }}</div>
+                            {% endif %}
+                            {% if form.salaire_fixe.errors %}
+                                <ul class="error-list">
+                                    {% for error in form.salaire_fixe.errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="form-group salary-fields" id="taux-horaire-field">
+                            <label for="{{ form.taux_horaire.id_for_label }}" class="form-label">
+                                {{ form.taux_horaire.label }}
+                            </label>
+                            {{ form.taux_horaire }}
+                            {% if form.taux_horaire.help_text %}
+                                <div class="help-text">{{ form.taux_horaire.help_text }}</div>
+                            {% endif %}
+                            {% if form.taux_horaire.errors %}
+                                <ul class="error-list">
+                                    {% for error in form.taux_horaire.errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="form-group" id="heures-mensuelles-field">
+                            <label for="{{ form.heures_mensuelles.id_for_label }}" class="form-label">
+                                {{ form.heures_mensuelles.label }}
+                                <i class="fas fa-clock text-info ms-1" title="Heures de travail par mois"></i>
+                            </label>
+                            {{ form.heures_mensuelles }}
+                            {% if form.heures_mensuelles.help_text %}
+                                <div class="help-text">{{ form.heures_mensuelles.help_text }}</div>
+                            {% endif %}
+                            {% if form.heures_mensuelles.errors %}
+                                <ul class="error-list">
+                                    {% for error in form.heures_mensuelles.errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Erreurs générales du formulaire -->
+            {% if form.non_field_errors %}
+                <div class="alert alert-danger">
+                    <h6><i class="fas fa-exclamation-triangle me-2"></i>Erreurs de validation :</h6>
+                    <ul class="error-list">
+                        {% for error in form.non_field_errors %}
+                            <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+
+            <!-- Boutons d'action -->
+            <div class="text-center mt-4">
+                <button type="submit" class="btn btn-submit me-3">
+                    <i class="fas fa-save me-2"></i>{{ submit_text }}
+                </button>
+                <a href="{% url 'salaires:liste_enseignants' %}" class="btn btn-cancel">
+                    <i class="fas fa-times me-2"></i>Annuler
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const typeEnseignantSelect = document.getElementById('{{ form.type_enseignant.id_for_label }}');
+    const salaireFixeField = document.getElementById('salaire-fixe-field');
+    const tauxHoraireField = document.getElementById('taux-horaire-field');
+    const heuresMensuellesField = document.getElementById('heures-mensuelles-field');
+    
+    function toggleSalaryFields() {
+        const selectedType = typeEnseignantSelect.value;
+        
+        if (selectedType === 'SECONDAIRE') {
+            // Enseignant du secondaire : taux horaire + heures mensuelles
+            salaireFixeField.classList.remove('show');
+            tauxHoraireField.classList.add('show');
+            heuresMensuellesField.classList.add('show');
+            
+            // Vider le champ salaire fixe
+            document.getElementById('{{ form.salaire_fixe.id_for_label }}').value = '';
+            
+            // Mettre une valeur par défaut pour les heures mensuelles si vide
+            const heuresMensuellesInput = document.getElementById('{{ form.heures_mensuelles.id_for_label }}');
+            if (!heuresMensuellesInput.value) {
+                heuresMensuellesInput.value = '120'; // 120 heures par mois par défaut
+            }
+        } else if (selectedType) {
+            // Autres types : salaire fixe + heures mensuelles optionnelles
+            tauxHoraireField.classList.remove('show');
+            salaireFixeField.classList.add('show');
+            heuresMensuellesField.classList.add('show');
+            
+            // Vider le champ taux horaire
+            document.getElementById('{{ form.taux_horaire.id_for_label }}').value = '';
+            
+            // Mettre une valeur par défaut pour les heures mensuelles si vide
+            const heuresMensuellesInput = document.getElementById('{{ form.heures_mensuelles.id_for_label }}');
+            if (!heuresMensuellesInput.value) {
+                heuresMensuellesInput.value = '160'; // 160 heures par mois par défaut pour salaire fixe
+            }
+        } else {
+            // Aucun type sélectionné
+            salaireFixeField.classList.remove('show');
+            tauxHoraireField.classList.remove('show');
+            heuresMensuellesField.classList.remove('show');
+        }
+    }
+    
+    // Initialiser l'affichage
+    toggleSalaryFields();
+    
+    // Écouter les changements
+    typeEnseignantSelect.addEventListener('change', toggleSalaryFields);
+    
+    // Animation d'apparition du formulaire
+    const formContainer = document.querySelector('.form-container');
+    formContainer.style.opacity = '0';
+    formContainer.style.transform = 'translateY(20px)';
+    
+    setTimeout(() => {
+        formContainer.style.transition = 'all 0.5s ease';
+        formContainer.style.opacity = '1';
+        formContainer.style.transform = 'translateY(0)';
+    }, 100);
+});
+</script>
+{% endblock %}

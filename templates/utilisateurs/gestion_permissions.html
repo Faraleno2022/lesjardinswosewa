@@ -1,0 +1,356 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Gestion des Permissions{% endblock %}
+
+{% block extra_css %}
+<style>
+    .permission-card {
+        border: 1px solid #dee2e6;
+        border-radius: 10px;
+        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+    }
+    
+    .permission-card:hover {
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    
+    .permission-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1rem;
+        border-radius: 10px 10px 0 0;
+    }
+    
+    .permission-body {
+        padding: 1.5rem;
+    }
+    
+    .permission-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+        border-left: 4px solid transparent;
+    }
+    
+    .permission-allowed {
+        border-left-color: #28a745;
+        background: #d4edda;
+    }
+    
+    .permission-denied {
+        border-left-color: #dc3545;
+        background: #f8d7da;
+    }
+    
+    .permission-icon {
+        font-size: 1.2rem;
+        margin-right: 0.5rem;
+    }
+    
+    .permission-toggle {
+        transform: scale(1.2);
+    }
+    
+    .user-role-badge {
+        font-size: 0.8rem;
+        padding: 0.25rem 0.75rem;
+        border-radius: 15px;
+    }
+    
+    .alert-security {
+        background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+        color: white;
+        border: none;
+        border-radius: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-shield-alt me-2"></i>Gestion des Permissions</h2>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-primary" onclick="toggleAllPermissions(true)" title="Cocher toutes les permissions visibles (visuel)">
+                <i class="fas fa-unlock me-2"></i>Tout cocher (visuel)
+            </button>
+            <button class="btn btn-outline-danger" onclick="toggleAllPermissions(false)" title="Décocher toutes les permissions visibles (visuel)">
+                <i class="fas fa-lock me-2"></i>Tout décocher (visuel)
+            </button>
+            <div class="vr"></div>
+            <button class="btn btn-success" onclick="bulkApply('allow_all')" title="Appliquer à tous les comptables listés">
+                <i class="fas fa-check-double me-2"></i>Autoriser TOUT (bulk)
+            </button>
+            <button class="btn btn-warning" onclick="bulkApply('default_safe')" title="Configuration par défaut sécurisée">
+                <i class="fas fa-shield-alt me-2"></i>Défaut sécurisé (bulk)
+            </button>
+            <button class="btn btn-outline-danger" onclick="bulkApply('restrict_all')" title="Restreindre toutes les permissions">
+                <i class="fas fa-ban me-2"></i>Restreindre TOUT (bulk)
+            </button>
+        </div>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="alert alert-security mb-4">
+        <i class="fas fa-exclamation-triangle me-2"></i>
+        <strong>Sécurité :</strong> Par défaut, les comptables ne peuvent pas ajouter de paiements, dépenses ou enseignants. 
+        Modifiez ces permissions uniquement si nécessaire et avec prudence.
+    </div>
+
+    <div class="row">
+        {% for comptable in comptables %}
+        <div class="col-lg-6 col-xl-4 mb-4">
+            <div class="permission-card" data-comptable-id="{{ comptable.id }}">
+                <div class="permission-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-1">
+                                <i class="fas fa-user me-2"></i>
+                                {{ comptable.user.get_full_name|default:comptable.user.username }}
+                            </h5>
+                            <small class="opacity-75">{{ comptable.user.email }}</small>
+                        </div>
+                        <span class="user-role-badge bg-light text-dark">
+                            {{ comptable.get_role_display }}
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="permission-body">
+                    <form method="post" action="{% url 'utilisateurs:update_permissions' comptable.id %}">
+                        {% csrf_token %}
+                        
+                        <!-- Permissions d'ajout -->
+                        <h6 class="text-primary mb-3">
+                            <i class="fas fa-plus-circle me-2"></i>Permissions d'Ajout
+                        </h6>
+                        
+                        <div class="permission-item {% if comptable.peut_ajouter_paiements %}permission-allowed{% else %}permission-denied{% endif %}">
+                            <div>
+                                <i class="fas fa-money-bill-wave permission-icon"></i>
+                                Ajouter des paiements
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input permission-toggle" type="checkbox" 
+                                       name="peut_ajouter_paiements" 
+                                       {% if comptable.peut_ajouter_paiements %}checked{% endif %}>
+                            </div>
+                        </div>
+                        
+                        <div class="permission-item {% if comptable.peut_ajouter_depenses %}permission-allowed{% else %}permission-denied{% endif %}">
+                            <div>
+                                <i class="fas fa-receipt permission-icon"></i>
+                                Ajouter des dépenses
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input permission-toggle" type="checkbox" 
+                                       name="peut_ajouter_depenses" 
+                                       {% if comptable.peut_ajouter_depenses %}checked{% endif %}>
+                            </div>
+                        </div>
+                        
+                        <div class="permission-item {% if comptable.peut_ajouter_enseignants %}permission-allowed{% else %}permission-denied{% endif %}">
+                            <div>
+                                <i class="fas fa-chalkboard-teacher permission-icon"></i>
+                                Ajouter des enseignants
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input permission-toggle" type="checkbox" 
+                                       name="peut_ajouter_enseignants" 
+                                       {% if comptable.peut_ajouter_enseignants %}checked{% endif %}>
+                            </div>
+                        </div>
+                        
+                        <!-- Permissions de modification -->
+                        <h6 class="text-warning mb-3 mt-4">
+                            <i class="fas fa-edit me-2"></i>Permissions de Modification
+                        </h6>
+                        
+                        <div class="permission-item {% if comptable.peut_modifier_paiements %}permission-allowed{% else %}permission-denied{% endif %}">
+                            <div>
+                                <i class="fas fa-edit permission-icon"></i>
+                                Modifier les paiements
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input permission-toggle" type="checkbox" 
+                                       name="peut_modifier_paiements" 
+                                       {% if comptable.peut_modifier_paiements %}checked{% endif %}>
+                            </div>
+                        </div>
+                        
+                        <div class="permission-item {% if comptable.peut_modifier_depenses %}permission-allowed{% else %}permission-denied{% endif %}">
+                            <div>
+                                <i class="fas fa-edit permission-icon"></i>
+                                Modifier les dépenses
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input permission-toggle" type="checkbox" 
+                                       name="peut_modifier_depenses" 
+                                       {% if comptable.peut_modifier_depenses %}checked{% endif %}>
+                            </div>
+                        </div>
+                        
+                        <!-- Permissions de suppression -->
+                        <h6 class="text-danger mb-3 mt-4">
+                            <i class="fas fa-trash me-2"></i>Permissions de Suppression
+                        </h6>
+                        
+                        <div class="permission-item {% if comptable.peut_supprimer_paiements %}permission-allowed{% else %}permission-denied{% endif %}">
+                            <div>
+                                <i class="fas fa-trash permission-icon"></i>
+                                Supprimer les paiements
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input permission-toggle" type="checkbox" 
+                                       name="peut_supprimer_paiements" 
+                                       {% if comptable.peut_supprimer_paiements %}checked{% endif %}>
+                            </div>
+                        </div>
+                        
+                        <div class="permission-item {% if comptable.peut_supprimer_depenses %}permission-allowed{% else %}permission-denied{% endif %}">
+                            <div>
+                                <i class="fas fa-trash permission-icon"></i>
+                                Supprimer les dépenses
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input permission-toggle" type="checkbox" 
+                                       name="peut_supprimer_depenses" 
+                                       {% if comptable.peut_supprimer_depenses %}checked{% endif %}>
+                            </div>
+                        </div>
+                        
+                        <!-- Menus visibles -->
+                        <h6 class="text-info mb-3 mt-4">
+                            <i class="fas fa-eye me-2"></i>Menus visibles pour ce comptable
+                        </h6>
+                        <div class="row g-2 mb-3">
+                            {% with allowed=comptable.allowed_menus %}
+                                {% if not allowed %}
+                                    <div class="small text-muted mb-2">Aucune restriction enregistrée: tous les menus restent visibles. Cochez pour restreindre.</div>
+                                {% endif %}
+                                {% for key,label in MENUS %}
+                                <div class="col-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="menu_{{ key }}_{{ comptable.id }}" name="allowed_menus" value="{{ key }}"
+                                               {% if not allowed or key in allowed %}checked{% endif %}>
+                                        <label class="form-check-label" for="menu_{{ key }}_{{ comptable.id }}">
+                                            {{ label }}
+                                        </label>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% endwith %}
+                        </div>
+
+                        <div class="text-center mt-4">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i>Sauvegarder
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="alert alert-info text-center">
+                <i class="fas fa-info-circle me-2"></i>
+                Aucun comptable trouvé. <a href="{% url 'utilisateurs:comptable_create' %}">Créer un comptable</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleAllPermissions(allow) {
+    const checkboxes = document.querySelectorAll('.permission-toggle');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = allow;
+        updatePermissionItem(checkbox);
+    });
+}
+
+// Mise à jour visuelle en temps réel
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('.permission-toggle');
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            updatePermissionItem(this);
+        });
+    });
+});
+
+function updatePermissionItem(checkbox) {
+    const permissionItem = checkbox.closest('.permission-item');
+    if (checkbox.checked) {
+        permissionItem.classList.remove('permission-denied');
+        permissionItem.classList.add('permission-allowed');
+    } else {
+        permissionItem.classList.remove('permission-allowed');
+        permissionItem.classList.add('permission-denied');
+    }
+}
+
+// Confirmation pour les actions sensibles
+document.querySelectorAll('form').forEach(form => {
+    form.addEventListener('submit', function(e) {
+        const dangerousPerms = this.querySelectorAll('input[name*="supprimer"]:checked, input[name*="ajouter"]:checked');
+        if (dangerousPerms.length > 0) {
+            if (!confirm('Vous accordez des permissions sensibles. Êtes-vous sûr de vouloir continuer ?')) {
+                e.preventDefault();
+            }
+        }
+    });
+});
+
+// Application BULK via endpoint backend
+async function bulkApply(action) {
+    if (!['allow_all','restrict_all','default_safe'].includes(action)) return;
+    const confirmMsg = action === 'allow_all'
+        ? "Confirmez-vous l'autorisation de TOUTES les permissions pour les comptables listés ?"
+        : action === 'restrict_all'
+            ? "Confirmez-vous la RESTRICTION de toutes les permissions pour les comptables listés ?"
+            : "Appliquer la configuration par défaut sécurisée à tous les comptables listés ?";
+    if (!confirm(confirmMsg)) return;
+    // Collecter les IDs visibles sur la page
+    const cards = document.querySelectorAll('.permission-card[data-comptable-id]');
+    if (!cards.length) { alert('Aucun comptable sur cette page.'); return; }
+    const fd = new FormData();
+    fd.append('action', action);
+    cards.forEach(card => { fd.append('comptable_ids', card.getAttribute('data-comptable-id')); });
+    try {
+        const resp = await window.csrfFetch('{% url "utilisateurs:bulk_update_permissions" %}', {
+            method: 'POST',
+            body: fd
+        });
+        if (resp.ok) {
+            // Recharger pour refléter
+            window.location.reload();
+        } else {
+            const data = await resp.json().catch(() => ({}));
+            alert('Erreur lors de la mise à jour en masse: ' + (data.error || resp.statusText));
+        }
+    } catch (e) {
+        alert('Erreur réseau: ' + e.message);
+    }
+}
+</script>
+{% endblock %}

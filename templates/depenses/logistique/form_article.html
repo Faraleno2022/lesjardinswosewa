@@ -1,0 +1,169 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-10 offset-md-1">
+            <!-- En-tête -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="fas fa-box text-primary"></i> {{ titre_page }}</h2>
+                </div>
+                <div>
+                    <a href="{% url 'depenses:liste_articles' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Retour
+                    </a>
+                </div>
+            </div>
+
+            <!-- Formulaire -->
+            <div class="card">
+                <div class="card-body">
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Code article</label>
+                                {{ form.code_article }}
+                                <small class="text-muted">Laissez vide pour génération automatique</small>
+                                {% if form.code_article.errors %}
+                                <div class="text-danger">{{ form.code_article.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Nom de l'article *</label>
+                                {{ form.nom }}
+                                {% if form.nom.errors %}
+                                <div class="text-danger">{{ form.nom.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Catégorie *</label>
+                                {{ form.categorie }}
+                                <small class="text-muted">
+                                    Aucune catégorie ?
+                                    <a href="{% url 'depenses:gestion_categories_articles' %}">En créer une</a>
+                                </small>
+                                {% if form.categorie.errors %}
+                                <div class="text-danger">{{ form.categorie.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">Unité de mesure</label>
+                                {{ form.unite_mesure }}
+                                {% if form.unite_mesure.errors %}
+                                <div class="text-danger">{{ form.unite_mesure.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">État</label>
+                                {{ form.etat }}
+                                {% if form.etat.errors %}
+                                <div class="text-danger">{{ form.etat.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            {{ form.description }}
+                            {% if form.description.errors %}
+                            <div class="text-danger">{{ form.description.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Marque</label>
+                                {{ form.marque }}
+                                {% if form.marque.errors %}
+                                <div class="text-danger">{{ form.marque.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Référence</label>
+                                {{ form.reference }}
+                                {% if form.reference.errors %}
+                                <div class="text-danger">{{ form.reference.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Stock minimum</label>
+                                {{ form.stock_minimum }}
+                                {% if form.stock_minimum.errors %}
+                                <div class="text-danger">{{ form.stock_minimum.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Stock maximum</label>
+                                {{ form.stock_maximum }}
+                                {% if form.stock_maximum.errors %}
+                                <div class="text-danger">{{ form.stock_maximum.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Prix unitaire (GNF)</label>
+                                {{ form.prix_unitaire }}
+                                {% if form.prix_unitaire.errors %}
+                                <div class="text-danger">{{ form.prix_unitaire.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {% if not article %}
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            Le <strong>stock actuel</strong> démarre à 0. Utilisez un
+                            <strong>mouvement d'entrée</strong> pour alimenter le stock après la création.
+                        </div>
+                        {% endif %}
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Emplacement</label>
+                                {{ form.emplacement }}
+                                {% if form.emplacement.errors %}
+                                <div class="text-danger">{{ form.emplacement.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Photo</label>
+                                {{ form.photo }}
+                                {% if form.photo.errors %}
+                                <div class="text-danger">{{ form.photo.errors }}</div>
+                                {% endif %}
+                                {% if article and article.photo %}
+                                <div class="mt-2">
+                                    <img src="{{ article.photo.url }}" alt="Photo actuelle" class="img-thumbnail" style="max-width: 200px;">
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'depenses:liste_articles' %}" class="btn btn-secondary">
+                                <i class="fas fa-times"></i> Annuler
+                            </a>
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="fas fa-save"></i> Enregistrer
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

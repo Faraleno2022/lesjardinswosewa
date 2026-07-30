@@ -1,0 +1,332 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Calculateur de remises{% endblock %}
+
+{% block extra_css %}
+<style>
+    .remise-card {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        background-color: #f8f9fa;
+    }
+    .calcul-result {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-top: 20px;
+    }
+    .montant-original {
+        color: #ffc107;
+        font-size: 1.1em;
+    }
+    .montant-remise {
+        color: #dc3545;
+        font-size: 1.2em;
+        font-weight: bold;
+    }
+    .montant-final {
+        color: #28a745;
+        font-size: 1.4em;
+        font-weight: bold;
+    }
+    .remise-preview {
+        background-color: #e3f2fd;
+        border: 1px solid #2196f3;
+        border-radius: 5px;
+        padding: 15px;
+        margin-top: 15px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-calculator me-2"></i>
+                        Calculateur de remises
+                    </h5>
+                    <small class="text-muted">Simulez l'application de remises sur vos paiements</small>
+                </div>
+                
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <!-- Formulaire de calcul -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Simulation de remise</h6>
+                                </div>
+                                <div class="card-body">
+                                    <form method="post" id="calculForm">
+                                        {% csrf_token %}
+                                        
+                                        <div class="mb-3">
+                                            <label for="{{ form.montant.id_for_label }}" class="form-label">
+                                                {{ form.montant.label }}
+                                            </label>
+                                            {{ form.montant }}
+                                            {% if form.montant.help_text %}
+                                                <div class="form-text">{{ form.montant.help_text }}</div>
+                                            {% endif %}
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="{{ form.remise_id.id_for_label }}" class="form-label">
+                                                {{ form.remise_id.label }}
+                                            </label>
+                                            {{ form.remise_id }}
+                                            {% if form.remise_id.help_text %}
+                                                <div class="form-text">{{ form.remise_id.help_text }}</div>
+                                            {% endif %}
+                                        </div>
+                                        
+                                        <div class="d-grid">
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="fas fa-calculator me-1"></i>Calculer la remise
+                                            </button>
+                                        </div>
+                                    </form>
+                                    
+                                    <!-- Calcul en temps réel via AJAX -->
+                                    <div class="mt-4">
+                                        <h6>Calcul en temps réel</h6>
+                                        <div class="input-group mb-2">
+                                            <span class="input-group-text">Montant</span>
+                                            <input type="number" class="form-control" id="montantAjax" 
+                                                   placeholder="Montant en GNF" min="0" step="1000">
+                                            <span class="input-group-text">GNF</span>
+                                        </div>
+                                        <select class="form-select mb-2" id="remiseAjax">
+                                            <option value="">Sélectionner une remise</option>
+                                            {% for remise in remises_actives %}
+                                            <option value="{{ remise.id }}">{{ remise.nom }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <div id="resultatAjax" class="remise-preview" style="display: none;"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {% if resultat %}
+                            <!-- Résultat du calcul -->
+                            <div class="calcul-result">
+                                <h5 class="mb-3">
+                                    <i class="fas fa-chart-line me-2"></i>Résultat du calcul
+                                </h5>
+                                
+                                <div class="row text-center">
+                                    <div class="col-4">
+                                        <div class="mb-2">
+                                            <i class="fas fa-money-bill-wave fa-2x mb-2"></i>
+                                            <h6>Montant original</h6>
+                                            <div class="montant-original">
+                                                {{ resultat.montant_original|floatformat:0 }} GNF
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="mb-2">
+                                            <i class="fas fa-minus-circle fa-2x mb-2"></i>
+                                            <h6>Remise appliquée</h6>
+                                            <div class="montant-remise">
+                                                -{{ resultat.montant_remise|floatformat:0 }} GNF
+                                            </div>
+                                            <small>({{ resultat.pourcentage_remise|floatformat:1 }}%)</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="mb-2">
+                                            <i class="fas fa-check-circle fa-2x mb-2"></i>
+                                            <h6>Montant final</h6>
+                                            <div class="montant-final">
+                                                {{ resultat.montant_final|floatformat:0 }} GNF
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="mt-3 text-center">
+                                    <small>
+                                        <i class="fas fa-tag me-1"></i>
+                                        Remise: {{ resultat.remise_nom }} ({{ resultat.remise_type }})
+                                    </small>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <!-- Liste des remises disponibles -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Remises disponibles aujourd'hui</h6>
+                                </div>
+                                <div class="card-body">
+                                    {% if remises_actives %}
+                                        {% for remise in remises_actives %}
+                                        <div class="remise-card">
+                                            <div class="d-flex justify-content-between align-items-start">
+                                                <div>
+                                                    <h6 class="mb-1">{{ remise.nom }}</h6>
+                                                    <small class="text-muted">
+                                                        <i class="fas fa-tag me-1"></i>{{ remise.get_motif_display }}
+                                                    </small>
+                                                </div>
+                                                <span class="badge bg-primary">
+                                                    {% if remise.type_remise == 'POURCENTAGE' %}
+                                                        {{ remise.valeur }}%
+                                                    {% else %}
+                                                        {{ remise.valeur|floatformat:0 }} GNF
+                                                    {% endif %}
+                                                </span>
+                                            </div>
+                                            
+                                            {% if remise.description %}
+                                            <div class="mt-2">
+                                                <small class="text-muted">{{ remise.description }}</small>
+                                            </div>
+                                            {% endif %}
+                                            
+                                            <div class="mt-2">
+                                                <small class="text-muted">
+                                                    <i class="fas fa-calendar me-1"></i>
+                                                    Valide du {{ remise.date_debut|date:"d/m/Y" }} au {{ remise.date_fin|date:"d/m/Y" }}
+                                                </small>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    {% else %}
+                                        <div class="alert alert-info">
+                                            <i class="fas fa-info-circle me-2"></i>
+                                            Aucune remise active disponible aujourd'hui.
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <!-- Guide d'utilisation -->
+                            <div class="card mt-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0">
+                                        <i class="fas fa-question-circle me-1"></i>Guide d'utilisation
+                                    </h6>
+                                </div>
+                                <div class="card-body">
+                                    <ul class="list-unstyled mb-0">
+                                        <li class="mb-2">
+                                            <i class="fas fa-check text-success me-2"></i>
+                                            <strong>Remise en pourcentage:</strong> Réduction basée sur un pourcentage du montant
+                                        </li>
+                                        <li class="mb-2">
+                                            <i class="fas fa-check text-success me-2"></i>
+                                            <strong>Remise fixe:</strong> Réduction d'un montant fixe en GNF
+                                        </li>
+                                        <li class="mb-2">
+                                            <i class="fas fa-check text-success me-2"></i>
+                                            <strong>Calcul temps réel:</strong> Utilisez les champs ci-dessus pour un calcul instantané
+                                        </li>
+                                        <li class="mb-0">
+                                            <i class="fas fa-check text-success me-2"></i>
+                                            <strong>Application:</strong> Appliquez les remises depuis la page de détail d'un paiement
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const montantAjax = document.getElementById('montantAjax');
+    const remiseAjax = document.getElementById('remiseAjax');
+    const resultatAjax = document.getElementById('resultatAjax');
+    
+    function calculerRemiseAjax() {
+        const montant = montantAjax.value;
+        const remiseId = remiseAjax.value;
+        
+        if (!montant || !remiseId || montant <= 0) {
+            resultatAjax.style.display = 'none';
+            return;
+        }
+        
+        // Appel AJAX pour calculer la remise
+        fetch(`{% url 'paiements:ajax_calculer_remise' %}?montant=${montant}&remise_id=${remiseId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const calcul = data.calcul;
+                    resultatAjax.innerHTML = `
+                        <div class="row text-center">
+                            <div class="col-4">
+                                <small class="text-muted">Original</small><br>
+                                <strong>${calcul.montant_original.toLocaleString('fr-FR')} GNF</strong>
+                            </div>
+                            <div class="col-4">
+                                <small class="text-muted">Remise</small><br>
+                                <strong class="text-danger">-${calcul.montant_remise.toLocaleString('fr-FR')} GNF</strong><br>
+                                <small>(${calcul.pourcentage_remise}%)</small>
+                            </div>
+                            <div class="col-4">
+                                <small class="text-muted">Final</small><br>
+                                <strong class="text-success">${calcul.montant_final.toLocaleString('fr-FR')} GNF</strong>
+                            </div>
+                        </div>
+                        <div class="mt-2 text-center">
+                            <small class="text-muted">
+                                <i class="fas fa-tag me-1"></i>${calcul.remise_nom} (${calcul.remise_type})
+                            </small>
+                        </div>
+                    `;
+                    resultatAjax.style.display = 'block';
+                } else {
+                    resultatAjax.innerHTML = `
+                        <div class="alert alert-danger mb-0">
+                            <i class="fas fa-exclamation-triangle me-1"></i>${data.error}
+                        </div>
+                    `;
+                    resultatAjax.style.display = 'block';
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                resultatAjax.innerHTML = `
+                    <div class="alert alert-danger mb-0">
+                        <i class="fas fa-exclamation-triangle me-1"></i>Erreur de calcul
+                    </div>
+                `;
+                resultatAjax.style.display = 'block';
+            });
+    }
+    
+    // Écouter les changements pour le calcul en temps réel
+    montantAjax.addEventListener('input', calculerRemiseAjax);
+    remiseAjax.addEventListener('change', calculerRemiseAjax);
+    
+    // Formatage automatique du montant
+    montantAjax.addEventListener('blur', function() {
+        if (this.value) {
+            const value = parseFloat(this.value);
+            if (!isNaN(value)) {
+                this.value = Math.round(value);
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-tags text-primary"></i> {{ titre_page }}</h2>
+                    <p class="text-muted">Les catégories sont nécessaires pour classer les livres du catalogue.</p>
+                </div>
+                <div>
+                    <a href="{% url 'depenses:catalogue_livres' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Catalogue
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Formulaire de création -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <i class="fas fa-plus-circle"></i> Nouvelle catégorie
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{% url 'depenses:gestion_categories_livres' %}">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label class="form-label">Nom <span class="text-danger">*</span></label>
+                            <input type="text" name="nom" class="form-control" placeholder="Ex : Romans, Sciences, Manuels…" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Code</label>
+                            <input type="text" name="code" class="form-control" placeholder="Laisser vide = généré automatiquement">
+                            <div class="form-text">Code court unique (ex : ROM, SCI). Généré si vide.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <textarea name="description" class="form-control" rows="2"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-save"></i> Créer la catégorie
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Liste des catégories -->
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <i class="fas fa-list"></i> Catégories existantes ({{ categories|length }})
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Nom</th>
+                                    <th class="text-center">Livres</th>
+                                    <th class="text-center">Statut</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for cat in categories %}
+                                <tr>
+                                    <td><span class="badge bg-secondary">{{ cat.code }}</span></td>
+                                    <td>{{ cat.nom }}</td>
+                                    <td class="text-center">{{ cat.nb_livres }}</td>
+                                    <td class="text-center">
+                                        {% if cat.actif %}
+                                            <span class="badge bg-success">Actif</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">Inactif</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <a href="{% url 'depenses:modifier_categorie_livre' cat.id %}" class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        <form method="post" action="{% url 'depenses:supprimer_categorie_livre' cat.id %}" class="d-inline"
+                                              onsubmit="return confirm('Supprimer la catégorie « {{ cat.nom|escapejs }} » ?');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-4">
+                                        Aucune catégorie. Créez-en une pour commencer votre catalogue.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

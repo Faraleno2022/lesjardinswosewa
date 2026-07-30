@@ -1,0 +1,153 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titre_page }} - {{ block.super }}{% endblock %}
+
+{% block breadcrumb_items %}
+    <li class="breadcrumb-item"><a href="{% url 'eleves:liste_eleves' %}">Élèves</a></li>
+    <li class="breadcrumb-item active">Classes</li>
+{% endblock %}
+
+{% block page_actions %}
+    <div>
+        <a href="{% url 'eleves:liste_eleves' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i>Retour aux élèves
+        </a>
+    </div>
+{% endblock %}
+
+{% block content %}
+    <!-- Statistiques générales -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-0">Total Classes</h6>
+                            <h2 class="mb-0">{{ stats.total_classes }}</h2>
+                        </div>
+                        <i class="fas fa-school fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-0">Total Élèves</h6>
+                            <h2 class="mb-0">{{ stats.total_eleves }}</h2>
+                        </div>
+                        <i class="fas fa-users fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-0">Moyenne/Classe</h6>
+                            <h2 class="mb-0">
+                                {% if stats.total_classes > 0 %}
+                                    {{ stats.total_eleves|floatformat:0 }}
+                                {% else %}
+                                    0
+                                {% endif %}
+                            </h2>
+                        </div>
+                        <i class="fas fa-chart-bar fa-2x opacity-50"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Liste des classes -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-list me-2"></i>Liste des Classes
+            </h5>
+        </div>
+        <div class="card-body">
+            {% if classes %}
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Classe</th>
+                                <th>Niveau</th>
+                                <th>École</th>
+                                <th>Année Scolaire</th>
+                                <th class="text-center">Nb. Élèves</th>
+                                <th class="text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for classe in classes %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ classe.nom }}</strong>
+                                    </td>
+                                    <td>{{ classe.get_niveau_display }}</td>
+                                    <td>{{ classe.ecole.nom }}</td>
+                                    <td>{{ classe.annee_scolaire }}</td>
+                                    <td class="text-center">
+                                        <span class="badge bg-primary">{{ classe.nombre_eleves }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <a href="{% url 'eleves:liste_eleves' %}?classe={{ classe.id }}" 
+                                           class="btn btn-sm btn-outline-primary" 
+                                           title="Voir les élèves">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Aucune classe trouvée.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Statistiques par école -->
+    {% if stats.classes_par_ecole %}
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-building me-2"></i>Répartition par École
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for ecole_nom, data in stats.classes_par_ecole.items %}
+                        <div class="col-md-4 mb-3">
+                            <div class="card border">
+                                <div class="card-body">
+                                    <h6 class="card-title">{{ ecole_nom }}</h6>
+                                    <p class="mb-1">
+                                        <i class="fas fa-school text-primary me-1"></i>
+                                        {{ data.nombre_classes }} classe{{ data.nombre_classes|pluralize }}
+                                    </p>
+                                    <p class="mb-0">
+                                        <i class="fas fa-users text-success me-1"></i>
+                                        {{ data.nombre_eleves }} élève{{ data.nombre_eleves|pluralize }}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    {% endif %}
+{% endblock %}

@@ -1,0 +1,407 @@
+    <!-- 4. STATISTIQUES PAR NIVEAU -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="chart-container">
+                <h4 class="chart-title d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-layer-group text-primary"></i> Répartition par niveau scolaire</span>
+                    <button class="btn btn-sm btn-success" onclick="exportStatsExcel()">
+                        <i class="fas fa-file-excel"></i> Excel
+                    </button>
+                </h4>
+                <div class="table-responsive">
+                    <table class="table table-stats">
+                        <thead>
+                            <tr>
+                                <th>Niveau</th>
+                                <th>Élèves</th>
+                                <th>Garçons</th>
+                                <th>Filles</th>
+                                <th>Actifs</th>
+                                <th>Classes</th>
+                                <th>Répartition</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for niveau_stat in stats_par_niveau %}
+                                <tr>
+                                    <td><strong>{{ niveau_stat.niveau_nom }}</strong></td>
+                                    <td><span class="badge bg-primary">{{ niveau_stat.total_eleves|intcomma }}</span></td>
+                                    <td>{{ niveau_stat.garcons|intcomma }}</td>
+                                    <td>{{ niveau_stat.filles|intcomma }}</td>
+                                    <td>{{ niveau_stat.actifs|intcomma }}</td>
+                                    <td>{{ niveau_stat.classes|intcomma }}</td>
+                                    <td>
+                                        <div class="progress progress-custom">
+                                            <div class="progress-bar progress-bar-custom" role="progressbar" 
+                                                 style="width: {{ niveau_stat.pourcentage }}%; background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                                                {{ niveau_stat.pourcentage }}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. TOP 10 CLASSES -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="chart-container">
+                <h4 class="chart-title"><i class="fas fa-chalkboard-teacher text-primary"></i> Top 10 des classes les plus peuplées</h4>
+                <div class="row">
+                    {% for classe_stat in stats_par_classe %}
+                        <div class="col-lg-6 col-md-12 mb-3">
+                            <div class="card border-left-primary h-100">
+                                <div class="card-body">
+                                    <div class="row no-gutters align-items-center">
+                                        <div class="col mr-2">
+                                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                                {{ classe_stat.classe.nom }} - {{ classe_stat.classe.ecole.nom }}
+                                            </div>
+                                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                                {{ classe_stat.total_eleves|intcomma }} élèves
+                                            </div>
+                                            <div class="row mt-2">
+                                                <div class="col-4">
+                                                    <small class="text-info">{{ classe_stat.garcons|intcomma }} G</small>
+                                                </div>
+                                                <div class="col-4">
+                                                    <small class="text-danger">{{ classe_stat.filles|intcomma }} F</small>
+                                                </div>
+                                                <div class="col-4">
+                                                    <small class="text-success">{{ classe_stat.actifs|intcomma }} A</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-auto">
+                                            <i class="fas fa-users fa-2x text-gray-300"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. STATISTIQUES TEMPORELLES -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="chart-container">
+                <h4 class="chart-title"><i class="fas fa-calendar-alt text-primary"></i> Inscriptions récentes</h4>
+                <div class="row text-center">
+                    <div class="col-4">
+                        <div class="metric-card success">
+                            <h3>{{ stats_temporelles.inscriptions_cette_semaine|intcomma }}</h3>
+                            <p class="mb-0">Cette semaine</p>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="metric-card info">
+                            <h3>{{ stats_temporelles.inscriptions_ce_mois|intcomma }}</h3>
+                            <p class="mb-0">Ce mois</p>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="metric-card">
+                            <h3>{{ stats_temporelles.inscriptions_cette_annee|intcomma }}</h3>
+                            <p class="mb-0">Cette année</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="chart-container">
+                <h4 class="chart-title"><i class="fas fa-chart-line text-primary"></i> Évolution mensuelle</h4>
+                <div class="evolution-chart">
+                    <div class="row text-center">
+                        {% for mois in evolution_mensuelle %}
+                            <div class="col-2">
+                                <div class="text-center">
+                                    <div class="badge bg-primary mb-1">{{ mois.inscriptions|intcomma }}</div>
+                                    <br><small class="text-muted">{{ mois.mois_court }}</small>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 7. STATISTIQUES DES RESPONSABLES -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="chart-container">
+                <h4 class="chart-title"><i class="fas fa-user-friends text-primary"></i> Responsables</h4>
+                <div class="row mb-3">
+                    <div class="col-6 text-center">
+                        <h4 class="text-primary">{{ stats_responsables.total_responsables|intcomma }}</h4>
+                        <small class="text-muted">Total responsables</small>
+                    </div>
+                    <div class="col-6 text-center">
+                        <h4 class="text-info">{{ stats_responsables.eleves_avec_deux_responsables|intcomma }}</h4>
+                        <small class="text-muted">Élèves avec 2 resp.</small>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-6 text-center">
+                        <span class="badge bg-success">{{ stats_responsables.responsables_principaux|intcomma }}</span>
+                        <br><small>Principaux</small>
+                    </div>
+                    <div class="col-6 text-center">
+                        <span class="badge bg-warning">{{ stats_responsables.responsables_secondaires|intcomma }}</span>
+                        <br><small>Secondaires</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="chart-container">
+                <h4 class="chart-title"><i class="fas fa-family text-primary"></i> Relations familiales</h4>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <tbody>
+                            {% for relation in relations_stats %}
+                                <tr>
+                                    <td>{{ relation.relation }}</td>
+                                    <td><span class="badge bg-primary">{{ relation.count|intcomma }}</span></td>
+                                    <td>
+                                        <div class="progress progress-custom" style="height: 15px;">
+                                            <div class="progress-bar" style="width: {{ relation.pourcentage }}%;">
+                                                {{ relation.pourcentage }}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 8. STATISTIQUES FINANCIÈRES -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="chart-container">
+                <h4 class="chart-title"><i class="fas fa-coins text-primary"></i> Aperçu financier</h4>
+                <div class="row">
+                    <div class="col-lg-2 col-md-4 col-sm-6">
+                        <div class="metric-card success">
+                            <h4>{{ stats_financieres.eleves_avec_paiements|intcomma }}</h4>
+                            <p class="mb-0">Élèves payants</p>
+                        </div>
+                    </div>
+                    <div class="col-lg-2 col-md-4 col-sm-6">
+                        <div class="metric-card warning">
+                            <h4>{{ stats_financieres.eleves_sans_paiements|intcomma }}</h4>
+                            <p class="mb-0">Sans paiement</p>
+                        </div>
+                    </div>
+                    <div class="col-lg-2 col-md-4 col-sm-6">
+                        <div class="metric-card info">
+                            <h4>{{ stats_financieres.total_paiements|intcomma }}</h4>
+                            <p class="mb-0">Total paiements</p>
+                        </div>
+                    </div>
+                    <div class="col-lg-2 col-md-4 col-sm-6">
+                        <div class="metric-card">
+                            <h4>{{ stats_financieres.paiements_valides|intcomma }}</h4>
+                            <p class="mb-0">Validés</p>
+                        </div>
+                    </div>
+                    <div class="col-lg-2 col-md-4 col-sm-6">
+                        <div class="metric-card warning">
+                            <h4>{{ stats_financieres.paiements_en_attente|intcomma }}</h4>
+                            <p class="mb-0">En attente</p>
+                        </div>
+                    </div>
+                    <div class="col-lg-2 col-md-4 col-sm-6">
+                        <div class="metric-card success">
+                            <h4>{{ stats_financieres.taux_validation }}%</h4>
+                            <p class="mb-0">Taux validation</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 9. INDICATEURS DE PERFORMANCE -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="chart-container">
+                <h4 class="chart-title"><i class="fas fa-tachometer-alt text-primary"></i> Indicateurs de performance</h4>
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="progress progress-custom mb-2">
+                                <div class="progress-bar bg-success progress-bar-custom" style="width: {{ indicateurs.taux_activite }}%;">
+                                    {{ indicateurs.taux_activite }}%
+                                </div>
+                            </div>
+                            <h6>Taux d'activité</h6>
+                            <small class="text-muted">Élèves actifs / Total</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="progress progress-custom mb-2">
+                                <div class="progress-bar bg-info progress-bar-custom" style="width: {{ indicateurs.taux_retention }}%;">
+                                    {{ indicateurs.taux_retention }}%
+                                </div>
+                            </div>
+                            <h6>Taux de rétention</h6>
+                            <small class="text-muted">Maintien des élèves</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h4 class="text-warning">{{ indicateurs.ratio_eleves_classes }}</h4>
+                            <h6>Élèves par classe</h6>
+                            <small class="text-muted">Ratio moyen</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <h4 class="text-primary">{{ indicateurs.ratio_eleves_responsables }}</h4>
+                            <h6>Élèves par responsable</h6>
+                            <small class="text-muted">Ratio moyen</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 10. ACTIONS RAPIDES -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="chart-container">
+                <h4 class="chart-title"><i class="fas fa-tools text-primary"></i> Actions rapides</h4>
+                <div class="row">
+                    <div class="col-md-3">
+                        <a href="{% url 'eleves:ajouter_eleve' %}" class="btn btn-success btn-block mb-2">
+                            <i class="fas fa-user-plus"></i> Ajouter un élève
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="{% url 'eleves:liste_eleves' %}" class="btn btn-primary btn-block mb-2">
+                            <i class="fas fa-list"></i> Liste des élèves
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="{% url 'paiements:tableau_bord' %}" class="btn btn-info btn-block mb-2">
+                            <i class="fas fa-money-bill-wave"></i> Paiements
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="{% url 'eleves:gestion_classes' %}" class="btn btn-warning btn-block mb-2">
+                            <i class="fas fa-chalkboard"></i> Gérer les classes
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Animation des cartes au survol
+    document.addEventListener('DOMContentLoaded', function() {
+        const statCards = document.querySelectorAll('.stat-card');
+        statCards.forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-5px)';
+            });
+            card.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0)';
+            });
+        });
+
+        // Animation des barres de progression
+        const progressBars = document.querySelectorAll('.progress-bar');
+        progressBars.forEach(bar => {
+            const width = bar.style.width;
+            bar.style.width = '0%';
+            setTimeout(() => {
+                bar.style.transition = 'width 1s ease-in-out';
+                bar.style.width = width;
+            }, 500);
+        });
+
+        // Mise à jour automatique toutes les 5 minutes
+        setInterval(function() {
+            console.log('Mise à jour automatique des statistiques...');
+            // Ici on pourrait ajouter une requête AJAX pour mettre à jour les données
+        }, 300000); // 5 minutes
+    });
+
+    // Fonction d'impression personnalisée
+    function printStats() {
+        window.print();
+    }
+
+    // Fonction d'export Excel (SheetJS) basée sur le tableau par niveau
+    function exportStatsExcel() {
+        const ensureXLSX = (cb) => {
+            if (window.XLSX) return cb();
+            const s = document.createElement('script');
+            s.src = '{% static "vendor/xlsx/xlsx.full.min.js" %}';
+            s.onload = cb;
+            document.head.appendChild(s);
+        };
+
+        ensureXLSX(() => {
+            const table = document.querySelector('.table-stats');
+            if (!table) return;
+            const rows = Array.from(table.querySelectorAll('thead tr, tbody tr'));
+            const aoa = rows.map(tr => Array.from(tr.children).map(td => td.innerText.replace(/\s+/g, ' ').trim()));
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Statistiques');
+            const date = new Date().toISOString().split('T')[0];
+            XLSX.writeFile(wb, `eleves_statistiques_complete_par_niveau_${date}.xlsx`);
+        });
+    }
+
+    // Fonction d'export CSV (table des stats par niveau)
+    function exportStats() {
+        const table = document.querySelector('.table-stats');
+        if (!table) return;
+
+        const rows = Array.from(table.querySelectorAll('thead tr, tbody tr'));
+        const csv = rows.map(tr => {
+            const cells = Array.from(tr.children).map(td => {
+                let text = td.innerText.replace(/\s+/g, ' ').trim();
+                text = '"' + text.replace(/"/g, '""') + '"';
+                return text;
+            });
+            return cells.join(',');
+        }).join('\n');
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const date = new Date().toISOString().split('T')[0];
+        a.href = url;
+        a.download = `eleves_statistiques_complete_par_niveau_${date}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+</script>
+{% endblock %}

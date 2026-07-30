@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Fiche de Report des Notes - {{ classe.nom }}</title>
+    <style>
+        @page {
+            size: A4 landscape;
+            margin: 0.5cm;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 10.5px;
+            line-height: 1.28;
+        }
+        
+        .page {
+            page-break-after: always;
+            padding: 5px;
+            position: relative;
+        }
+        
+        .page:last-child {
+            page-break-after: avoid;
+        }
+        
+        /* Filigrane avec le logo de l'école */
+        .watermark {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            opacity: 0.08;
+            z-index: -1;
+            pointer-events: none;
+        }
+        
+        .watermark img {
+            width: 400px;
+            height: auto;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            border-bottom: 2px solid #1a5276;
+            padding-bottom: 5px;
+        }
+        
+        .header-left {
+            text-align: left;
+            font-size: 10px;
+        }
+        
+        .header-center {
+            text-align: center;
+            flex: 1;
+        }
+        
+        .header-center h1 {
+            font-size: 18px;
+            color: #1a5276;
+            margin-bottom: 2px;
+        }
+        
+        .header-center h2 {
+            font-size: 13px;
+            color: #333;
+        }
+        
+        .header-right {
+            text-align: right;
+            font-size: 10px;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            font-size: 10.5px;
+        }
+        
+        .info-row span {
+            padding: 2px 5px;
+            background: #e8f4f8;
+            border-radius: 3px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+        
+        th, td {
+            border: 1px solid #333;
+            padding: 3px 2px;
+            text-align: center;
+            font-size: 8.5px;
+        }
+        
+        th {
+            background: #1a5276;
+            color: white;
+            font-weight: bold;
+            font-size: 8px;
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+            height: 92px;
+            white-space: nowrap;
+        }
+        
+        th.col-num {
+            width: 20px;
+            writing-mode: horizontal-tb;
+            height: auto;
+        }
+        
+        th.col-prenom {
+            width: 80px;
+            writing-mode: horizontal-tb;
+            height: auto;
+            text-align: left;
+        }
+        
+        th.col-nom {
+            width: 60px;
+            writing-mode: horizontal-tb;
+            height: auto;
+            text-align: left;
+        }
+        
+        th.col-sexe {
+            width: 20px;
+            writing-mode: horizontal-tb;
+            height: auto;
+        }
+        
+        th.col-matiere {
+            min-width: 25px;
+            max-width: 40px;
+            background: #2c3e50;
+        }
+        
+        th.col-moyenne {
+            min-width: 30px;
+            background: #27ae60;
+            writing-mode: horizontal-tb;
+            height: auto;
+        }
+        
+        th.col-rang {
+            min-width: 25px;
+            background: #e74c3c;
+            writing-mode: horizontal-tb;
+            height: auto;
+        }
+        
+        td.col-prenom, td.col-nom {
+            text-align: left;
+            padding-left: 2px;
+            font-size: 10px;
+        }
+        
+        tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+        
+        .empty-cell {
+            height: 22px;
+        }
+        
+        .footer {
+            margin-top: 10px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 9.5px;
+        }
+        
+        .signature-box {
+            border: 1px solid #333;
+            padding: 4px;
+            width: 180px;
+            text-align: center;
+        }
+        
+        .signature-box p {
+            margin-bottom: 25px;
+        }
+        
+        .note-info {
+            font-size: 9.5px;
+            color: #666;
+            margin-top: 5px;
+            font-style: italic;
+            text-align: center;
+        }
+        
+        .legend {
+            margin-top: 8px;
+            font-size: 9px;
+            color: #333;
+        }
+        
+        .legend span {
+            margin-right: 15px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Filigrane avec le logo de l'école -->
+    {% if logo_base64 %}
+    <div class="watermark">
+        <img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo">
+    </div>
+    {% endif %}
+    
+    <div class="page">
+        <div class="header">
+            <div class="header-left">
+                {% if ecole %}
+                <strong>{{ ecole.nom }}</strong><br>
+                {{ ecole.adresse|default:"" }}
+                {% endif %}
+            </div>
+            <div class="header-center">
+                <h1>FICHE DE REPORT DES NOTES</h1>
+                <h2>{{ periode_display }}</h2>
+            </div>
+            <div class="header-right">
+                Année: <strong>{{ annee_scolaire }}</strong><br>
+                Imprimé le: {{ date_impression|date:"d/m/Y" }}
+            </div>
+        </div>
+        
+        <div class="info-row">
+            <span><strong>Classe:</strong> {{ classe.nom }}</span>
+            <span><strong>Effectif:</strong> {{ eleves|length }} élèves</span>
+            <span><strong>Matières:</strong> {{ matieres|length }}</span>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th class="col-num">N°</th>
+                    <th class="col-prenom">Prénoms</th>
+                    <th class="col-nom">Nom</th>
+                    <th class="col-sexe">Sexe</th>
+                    {% for matiere in matieres %}
+                    <th class="col-matiere" title="{{ matiere.nom }}">{{ matiere.nom|truncatechars:15 }}</th>
+                    {% endfor %}
+                    <th class="col-moyenne">Moy.</th>
+                    <th class="col-rang">Rang</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for eleve in eleves %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td class="col-prenom">{{ eleve.prenom }}</td>
+                    <td class="col-nom">{{ eleve.nom }}</td>
+                    <td>{{ eleve.sexe|default:"" }}</td>
+                    {% for matiere in matieres %}
+                    <td class="empty-cell"></td>
+                    {% endfor %}
+                    <td class="empty-cell"></td>
+                    <td class="empty-cell"></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <div class="legend">
+            <strong>Matières:</strong>
+            {% for matiere in matieres %}
+            <span>{{ forloop.counter }}. {{ matiere.nom }} (Coef: {{ matiere.coefficient|default:"1" }})</span>
+            {% endfor %}
+        </div>
+        
+        <div class="footer">
+            <div class="signature-box">
+                <p>Signature du Professeur Principal</p>
+                <span>_________________________</span>
+            </div>
+            <div class="note-info">
+                Notes sur 20 | Moy. = Moyenne Générale | Rang = Classement
+            </div>
+            <div class="signature-box">
+                <p>Visa du Directeur</p>
+                <span>_________________________</span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Rapport des salaires payés</h3>
+    <div>
+      <a class="btn btn-outline-primary" id="btnExportPdf" href="#">Exporter PDF</a>
+    </div>
+  </div>
+
+  <form method="get" class="row g-2 mb-3" id="filtersForm">
+    <div class="col-md-3">
+      <label class="form-label">Année</label>
+      <select name="annee" class="form-select">
+        <option value="">Toutes</option>
+        {% for a in annees_dispo %}
+          <option value="{{ a }}" {% if a|stringformat:'s' == annee_selectionnee|stringformat:'s' %}selected{% endif %}>{{ a }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">École</label>
+      <select name="ecole" class="form-select">
+        <option value="">Toutes</option>
+        {% for e in ecoles %}
+          <option value="{{ e.id }}" {% if e.id|stringformat:'s' == ecole_selectionnee|stringformat:'s' %}selected{% endif %}>{{ e.nom }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3 align-self-end">
+      <button type="submit" class="btn btn-primary">Filtrer</button>
+    </div>
+  </form>
+
+  <div class="table-responsive">
+    <table class="table table-bordered table-sm align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Année</th>
+          <th>Mois</th>
+          <th>Total payé (GNF)</th>
+          <th>Nombre d'états payés</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in aggs %}
+        <tr>
+          <td>{{ r.periode__annee }}</td>
+          <td>{{ r.periode__mois|floatformat:0|stringformat:'02d' }}</td>
+          <td><strong>{{ r.total_paye|floatformat:0 }}</strong></td>
+          <td>{{ r.nombre }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="4" class="text-center">Aucune donnée trouvée.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <th colspan="2" class="text-end">Total annuel</th>
+          <th colspan="2">{{ total_annuel|floatformat:0 }}</th>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+
+<script>
+  (function(){
+    const exportBtn = document.getElementById('btnExportPdf');
+    const form = document.getElementById('filtersForm');
+    function qs(){
+      const params = new URLSearchParams(new FormData(form));
+      const url = new URL(window.location.href);
+      for (const [k,v] of url.searchParams.entries()){
+        if(!params.has(k)) params.set(k,v);
+      }
+      return params.toString();
+    }
+    exportBtn.addEventListener('click', function(e){
+      e.preventDefault();
+      const url = `{% url 'salaires:export_rapport_paiements_pdf' %}?` + qs();
+      window.location.href = url;
+    });
+  })();
+</script>
+{% endblock %}

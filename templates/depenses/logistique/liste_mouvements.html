@@ -1,0 +1,132 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-exchange-alt text-warning"></i> {{ titre_page }}</h2>
+                    <p class="text-muted">Historique des entrées et sorties</p>
+                </div>
+                <div>
+                    <a href="{% url 'depenses:dashboard_logistique' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Dashboard
+                    </a>
+                    <a href="{% url 'depenses:creer_mouvement' %}" class="btn btn-success">
+                        <i class="fas fa-plus"></i> Nouveau Mouvement
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Article</label>
+                    <select name="article" class="form-select">
+                        <option value="">Tous</option>
+                        {% for art in articles %}
+                        <option value="{{ art.id }}" {% if article_id == art.id|stringformat:"s" %}selected{% endif %}>
+                            {{ art.nom }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Type</label>
+                    <select name="type" class="form-select">
+                        <option value="">Tous</option>
+                        <option value="ENTREE" {% if type_mouvement == 'ENTREE' %}selected{% endif %}>Entrée</option>
+                        <option value="SORTIE" {% if type_mouvement == 'SORTIE' %}selected{% endif %}>Sortie</option>
+                        <option value="AJUSTEMENT" {% if type_mouvement == 'AJUSTEMENT' %}selected{% endif %}>Ajustement</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Date début</label>
+                    <input type="date" name="date_debut" class="form-control" value="{{ date_debut }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Date fin</label>
+                    <input type="date" name="date_fin" class="form-control" value="{{ date_fin }}">
+                </div>
+                <div class="col-md-1 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Liste des mouvements -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>N° Mouvement</th>
+                            <th>Date</th>
+                            <th>Article</th>
+                            <th>Type</th>
+                            <th>Motif</th>
+                            <th>Quantité</th>
+                            <th>Stock Avant</th>
+                            <th>Stock Après</th>
+                            <th>Montant</th>
+                            <th>Créé par</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for mvt in mouvements %}
+                        <tr>
+                            <td><strong>{{ mvt.numero_mouvement }}</strong></td>
+                            <td>{{ mvt.date_mouvement|date:"d/m/Y H:i" }}</td>
+                            <td>{{ mvt.article.nom }}</td>
+                            <td>
+                                <span class="badge 
+                                    {% if mvt.type_mouvement == 'ENTREE' %}bg-success
+                                    {% elif mvt.type_mouvement == 'SORTIE' %}bg-danger
+                                    {% else %}bg-info{% endif %}">
+                                    {{ mvt.get_type_mouvement_display }}
+                                </span>
+                            </td>
+                            <td><small>{{ mvt.get_motif_display }}</small></td>
+                            <td>
+                                <strong>
+                                    {% if mvt.type_mouvement == 'ENTREE' %}+{% elif mvt.type_mouvement == 'SORTIE' %}-{% endif %}
+                                    {{ mvt.quantite }}
+                                </strong>
+                            </td>
+                            <td>{{ mvt.stock_avant }}</td>
+                            <td><strong>{{ mvt.stock_apres }}</strong></td>
+                            <td>
+                                {% if mvt.montant_total %}
+                                {{ mvt.montant_total|intcomma }} GNF
+                                {% else %}-{% endif %}
+                            </td>
+                            <td>{{ mvt.cree_par.get_full_name|default:mvt.cree_par.username }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="10" class="text-center py-4">
+                                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                                <p class="text-muted">Aucun mouvement trouvé</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,349 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Tableau d'Honneur{% endblock %}
+
+{% block extra_css %}
+<style>
+    .honneur-header {
+        background: linear-gradient(135deg, #1a6fc4 0%, #0d3b8c 100%);
+        color: #fff;
+        padding: 2rem;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+        box-shadow: 0 5px 20px rgba(13, 59, 140, 0.35);
+        text-align: center;
+    }
+    .honneur-header h1 {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 700;
+        color: #fff;
+    }
+    .honneur-header p {
+        margin: 0.5rem 0 0 0;
+        opacity: 0.85;
+        color: #e0eaff;
+    }
+
+    .filter-bar {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        margin-bottom: 2rem;
+    }
+
+    /* Grille de badges paysage — 3 par ligne */
+    .honneur-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    /* ── Badge carte paysage (horizontal) ── */
+    .honneur-card {
+        background: white;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.10);
+        transition: transform 0.25s, box-shadow 0.25s;
+        position: relative;
+        display: flex;
+        flex-direction: row;
+        border: 2px solid #1a6fc4;
+        min-height: 200px;
+    }
+    .honneur-card:hover {
+        transform: translateY(-6px);
+        box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+    }
+
+    /* Bordure top 3 */
+    .honneur-card.top-1 { border-color: #d4a017; }
+    .honneur-card.top-2 { border-color: #8a8a8a; }
+    .honneur-card.top-3 { border-color: #b87333; }
+
+    /* Photo à gauche */
+    .card-photo-wrapper {
+        width: 180px;
+        min-width: 180px;
+        overflow: hidden;
+        background: linear-gradient(135deg, #4a90d9 0%, #1a6fc4 50%, #0d3b8c 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        flex-shrink: 0;
+    }
+    .card-photo-wrapper img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+    .card-photo-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+    }
+    .card-photo-placeholder i {
+        font-size: 4rem;
+        color: rgba(255,255,255,0.35);
+    }
+
+    /* Badge rang en haut à gauche sur la photo */
+    .card-rang-badge {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 1rem;
+        color: #fff;
+        z-index: 2;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        border: 2px solid #fff;
+    }
+    .card-rang-1 { background: linear-gradient(135deg, #ffd700, #d4a017); color: #333; }
+    .card-rang-2 { background: linear-gradient(135deg, #d4d4d4, #8a8a8a); color: #333; }
+    .card-rang-3 { background: linear-gradient(135deg, #cd7f32, #b87333); }
+    .card-rang-other { background: #1a6fc4; }
+
+    /* Ruban décoratif top 3 */
+    .card-ribbon {
+        position: absolute;
+        top: -1px;
+        right: -1px;
+        width: 0;
+        height: 0;
+        border-style: solid;
+        border-width: 0 45px 45px 0;
+        z-index: 1;
+    }
+    .ribbon-gold   { border-color: transparent #ffd700 transparent transparent; }
+    .ribbon-silver { border-color: transparent #c0c0c0 transparent transparent; }
+    .ribbon-bronze { border-color: transparent #cd7f32 transparent transparent; }
+
+    /* Infos à droite */
+    .card-info {
+        padding: 1.2rem 1.4rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        flex: 1;
+    }
+    .card-info .card-name {
+        font-size: 1.15rem;
+        font-weight: 800;
+        color: #1a1a2e;
+        margin-bottom: 0.2rem;
+        line-height: 1.3;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+    .card-info .card-classe {
+        font-size: 0.9rem;
+        color: #1a6fc4;
+        font-weight: 600;
+        margin-bottom: 0.8rem;
+    }
+    .card-stats {
+        display: flex;
+        gap: 0.8rem;
+        flex-wrap: wrap;
+    }
+    .card-stat {
+        border-radius: 10px;
+        padding: 0.5rem 0.9rem;
+        text-align: center;
+        flex: 1;
+        min-width: 90px;
+    }
+    .card-stat-moyenne {
+        background: #eef4ff;
+        border: 1px solid #c7deff;
+    }
+    .card-stat-rang {
+        background: #eefbf0;
+        border: 1px solid #b8e6c0;
+    }
+    .card-stat .stat-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: #888;
+        display: block;
+    }
+    .card-stat .stat-value {
+        font-size: 1.1rem;
+        font-weight: 800;
+    }
+    .card-stat .stat-value.moyenne-val { color: #1a6fc4; }
+    .card-stat .stat-value.rang-val { color: #28a745; }
+
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    }
+    .empty-state i {
+        font-size: 4rem;
+        color: #ccc;
+        margin-bottom: 1rem;
+        display: block;
+    }
+
+    @media (max-width: 1200px) {
+        .honneur-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+    @media (max-width: 768px) {
+        .honneur-grid {
+            grid-template-columns: 1fr;
+        }
+        .honneur-card {
+            flex-direction: column;
+            min-height: auto;
+        }
+        .card-photo-wrapper {
+            width: 100%;
+            min-width: auto;
+            height: 200px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="honneur-header">
+        <h1><i class="fas fa-trophy me-2"></i> Tableau d'Honneur</h1>
+        <p>Les meilleurs élèves de l'établissement — Premiers de chaque classe</p>
+    </div>
+
+    <!-- Filtres -->
+    <div class="filter-bar">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-5">
+                <label class="form-label fw-bold">Période</label>
+                <select name="periode" class="form-select" onchange="this.form.submit()">
+                    <option value="">-- Sélectionner une période --</option>
+                    {% for code, label in periodes %}
+                    <option value="{{ code }}" {% if code == periode %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label fw-bold">Niveau</label>
+                <select name="niveau" class="form-select" onchange="this.form.submit()">
+                    {% for code, label in niveaux %}
+                    <option value="{{ code }}" {% if code == niveau_filtre %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-search me-1"></i> Afficher
+                </button>
+                {% if premiers %}
+                <a href="{% url 'notes:tableau_honneur_pdf' %}?periode={{ periode }}&niveau={{ niveau_filtre }}" target="_blank" class="btn btn-danger">
+                    <i class="fas fa-file-pdf me-1"></i> PDF
+                </a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+
+    {% if periode and premiers %}
+    <!-- Premier global mis en évidence -->
+    {% if premier_global %}
+    <div class="alert alert-warning text-center py-3 mb-4" style="border-left: 5px solid #ffd700; background: linear-gradient(90deg, #fff9e6, #fff3cd);">
+        <h5 class="mb-0">
+            <i class="fas fa-crown text-warning me-2"></i>
+            Premier{% if premier_global.eleve.sexe == 'F' %}e{% endif %}
+            {% if niveau_filtre == 'ETABLISSEMENT' %}de l'Établissement{% elif niveau_filtre == 'PRIMAIRE' %}du Primaire{% elif niveau_filtre == 'SECONDAIRE' %}du Secondaire{% elif niveau_filtre == 'MATERNELLE' %}de la Maternelle{% endif %}
+            :
+            <strong>{{ premier_global.eleve.prenom }} {{ premier_global.eleve.nom }}</strong>
+            — {{ premier_global.classe_nom }}
+            — <span class="text-primary">{{ premier_global.moyenne }}/{{ premier_global.note_max }}</span>
+        </h5>
+    </div>
+    {% endif %}
+
+    <h4 class="text-center text-muted mb-4">
+        Période : <strong>{{ periode_label }}</strong>
+        — {% if niveau_filtre == 'ETABLISSEMENT' %}Établissement (Primaire + Secondaire){% elif niveau_filtre %}{{ niveau_filtre|capfirst }}{% else %}Tous les niveaux{% endif %}
+        — {{ premiers|length }} classe{{ premiers|length|pluralize:"s" }}
+    </h4>
+
+    <!-- Grille de badges paysage : 3 par ligne -->
+    <div class="honneur-grid">
+        {% for p in premiers %}
+        <div class="honneur-card {% if p.rang_premiers == 1 %}top-1{% elif p.rang_premiers == 2 %}top-2{% elif p.rang_premiers == 3 %}top-3{% endif %}">
+            <!-- Photo à gauche -->
+            <div class="card-photo-wrapper">
+                <!-- Badge rang -->
+                <div class="card-rang-badge {% if p.rang_premiers == 1 %}card-rang-1{% elif p.rang_premiers == 2 %}card-rang-2{% elif p.rang_premiers == 3 %}card-rang-3{% else %}card-rang-other{% endif %}">
+                    {% if p.rang_premiers == 1 %}<i class="fas fa-crown" style="font-size:0.9rem;"></i>{% else %}{{ p.rang_premiers_formate }}{% endif %}
+                </div>
+                {% if p.photo_base64 %}
+                <img src="data:image/jpeg;base64,{{ p.photo_base64 }}" alt="Photo de {{ p.eleve.prenom }}">
+                {% else %}
+                <div class="card-photo-placeholder">
+                    <i class="fas fa-user-graduate"></i>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Infos à droite -->
+            <div class="card-info">
+                {% if p.rang_premiers <= 3 %}
+                <div class="card-ribbon {% if p.rang_premiers == 1 %}ribbon-gold{% elif p.rang_premiers == 2 %}ribbon-silver{% elif p.rang_premiers == 3 %}ribbon-bronze{% endif %}"></div>
+                {% endif %}
+
+                <div class="card-name">{{ p.eleve.prenom }} {{ p.eleve.nom }}</div>
+                <div class="card-classe"><i class="fas fa-school me-1"></i>{{ p.classe_nom }}
+                    {% if not niveau_filtre %}<span class="badge ms-1 {% if p.niveau == 'MATERNELLE' %}bg-success{% elif p.niveau == 'PRIMAIRE' %}bg-primary{% else %}bg-secondary{% endif %}" style="font-size:0.65rem;">{{ p.niveau|capfirst }}</span>{% endif %}
+                </div>
+                <div class="card-stats">
+                    <div class="card-stat card-stat-moyenne">
+                        <span class="stat-label">Moyenne</span>
+                        <span class="stat-value moyenne-val">{{ p.moyenne }}/{{ p.note_max }}</span>
+                    </div>
+                    <div class="card-stat card-stat-rang">
+                        <span class="stat-label">Rang classe</span>
+                        <span class="stat-value rang-val">{{ p.rang_formate }}/{{ p.total_eleves }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% elif periode and not premiers %}
+    <div class="empty-state">
+        <i class="fas fa-info-circle"></i>
+        <h5>Aucun résultat pour cette période{% if niveau_filtre %} / ce niveau{% endif %}</h5>
+        <p class="text-muted">Vérifiez que des notes ont été saisies pour la période <strong>{{ periode_label }}</strong>{% if niveau_filtre %} au niveau <strong>{{ niveau_filtre|capfirst }}</strong>{% endif %}.</p>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="fas fa-trophy"></i>
+        <h5>Sélectionnez une période</h5>
+        <p class="text-muted">Choisissez une période ci-dessus pour afficher le tableau d'honneur.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

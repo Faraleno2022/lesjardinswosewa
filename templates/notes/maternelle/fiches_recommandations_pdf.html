@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Fiches Recommandations - {{ classe.nom }}</title>
+    <style>
+        @page {
+            size: A4;
+            
+            margin: 10mm;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            font-size: 10pt;
+            line-height: 1.3;
+            color: #333;
+        }
+        
+        .fiche-page {
+            width: 190mm;
+            min-height: 277mm;
+            margin: 0 auto;
+            padding: 8mm;
+            border: 2px solid #2c3e50;
+            position: relative;
+            page-break-after: always;
+        }
+        
+        .fiche-page:last-child {
+            page-break-after: avoid;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 12px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 8px;
+        }
+        
+        .header-logo {
+            width: 50px;
+            height: 50px;
+            object-fit: contain;
+            margin-bottom: 5px;
+        }
+        
+        .republique {
+            font-size: 11pt;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        
+        .devise {
+            font-size: 9pt;
+            margin-bottom: 3px;
+        }
+        
+        .devise-rouge { color: #CE1126; }
+        .devise-jaune { color: #FCD116; }
+        .devise-vert { color: #009460; }
+        
+        .ecole-nom {
+            font-size: 12pt;
+            font-weight: bold;
+            color: #2c3e50;
+            text-transform: uppercase;
+        }
+        
+        .fiche-titre {
+            font-size: 14pt;
+            font-weight: bold;
+            color: #e74c3c;
+            margin-top: 5px;
+        }
+        
+        .periode-info {
+            font-size: 10pt;
+            margin-top: 3px;
+        }
+        
+        .eleve-info {
+            background: #f8f9fa;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-left: 4px solid #3498db;
+        }
+        
+        .eleve-info table {
+            width: 100%;
+        }
+        
+        .eleve-info td {
+            padding: 3px 8px;
+            font-size: 10pt;
+        }
+        
+        .section {
+            margin-bottom: 15px;
+        }
+        
+        .section-title {
+            padding: 8px 15px;
+            font-size: 11pt;
+            font-weight: bold;
+            border-radius: 5px 5px 0 0;
+            color: white;
+        }
+        
+        .section-title.analyse {
+            background: linear-gradient(90deg, #17a2b8, #138496);
+        }
+        
+        .section-title.recommandations {
+            background: linear-gradient(90deg, #ffc107, #e0a800);
+            color: #333;
+        }
+        
+        .section-title.observations {
+            background: linear-gradient(90deg, #6c757d, #5a6268);
+        }
+        
+        .section-content {
+            border: 1px solid #ccc;
+            border-top: none;
+            padding: 12px;
+            border-radius: 0 0 5px 5px;
+        }
+        
+        .checkbox-table {
+            width: 100%;
+            font-size: 9pt;
+        }
+        
+        .checkbox-table td {
+            padding: 5px 0;
+            vertical-align: top;
+        }
+        
+        .checkbox {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #333;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        
+        .observations-lines {
+            min-height: 50px;
+        }
+        
+        .observations-lines div {
+            border-bottom: 1px dashed #ccc;
+            height: 22px;
+            margin-bottom: 3px;
+        }
+        
+        .signatures {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+            padding-top: 10px;
+            border-top: 1px dashed #bdc3c7;
+        }
+        
+        .signature-box {
+            text-align: center;
+            width: 30%;
+        }
+        
+        .signature-label {
+            font-size: 9pt;
+            color: #555;
+            margin-bottom: 25px;
+        }
+        
+        .signature-line {
+            border-top: 1px solid #333;
+            padding-top: 3px;
+            font-size: 8pt;
+        }
+        
+        .footer {
+            margin-top: 10px;
+            text-align: center;
+            font-size: 7pt;
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+    {% for eleve_data in eleves %}
+    <div class="fiche-page">
+        <!-- En-tête -->
+        <div class="header">
+            {% if logo_base64 %}
+            <img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo" class="header-logo">
+            {% endif %}
+            <div class="republique">RÉPUBLIQUE DE GUINÉE</div>
+            <div class="devise">
+                <span class="devise-rouge">Travail</span> - 
+                <span class="devise-jaune">Justice</span> - 
+                <span class="devise-vert">Solidarité</span>
+            </div>
+            <div class="ecole-nom">{{ ecole.nom }}</div>
+            <div class="fiche-titre">FICHE D'ÉVALUATION - MATERNELLE</div>
+            <div class="periode-info">{{ trimestre_display }} - Année {{ annee_scolaire }}</div>
+        </div>
+        
+        <!-- Informations élève -->
+        <div class="eleve-info">
+            <table>
+                <tr>
+                    <td style="width: 50%;"><strong>Nom & Prénom:</strong> {{ eleve_data.nom }} {{ eleve_data.prenom }}</td>
+                    <td><strong>Classe:</strong> {{ classe.nom }}</td>
+                </tr>
+            </table>
+        </div>
+        
+        <!-- Section Analyse du travail de l'enfant -->
+        <div class="section">
+            <div class="section-title analyse">📋 ANALYSE DU TRAVAIL DE L'ENFANT</div>
+            <div class="section-content">
+                <table class="checkbox-table">
+                    <tr>
+                        <td style="width: 50%;">
+                            <span class="checkbox"></span>
+                            L'enfant comprend ce qu'on lui demande
+                        </td>
+                        <td>
+                            <span class="checkbox"></span>
+                            L'enfant ne comprend pas ce qu'on lui demande
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <span class="checkbox"></span>
+                            L'enfant est trop jeune pour cette classe
+                        </td>
+                        <td>
+                            <span class="checkbox"></span>
+                            L'enfant fixe son attention
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <span class="checkbox"></span>
+                            L'enfant ne fixe pas son attention
+                        </td>
+                        <td>
+                            <span class="checkbox"></span>
+                            L'enfant est timide
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <span class="checkbox"></span>
+                            L'enfant est turbulent
+                        </td>
+                        <td>
+                            <span class="checkbox"></span>
+                            L'enfant est sociable
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Section Recommandations de la monitrice -->
+        <div class="section">
+            <div class="section-title recommandations">💡 RECOMMANDATIONS DE LA MONITRICE</div>
+            <div class="section-content">
+                <table class="checkbox-table">
+                    <tr>
+                        <td style="width: 50%;">
+                            <span class="checkbox"></span>
+                            Enfant à encourager et à féliciter
+                        </td>
+                        <td>
+                            <span class="checkbox"></span>
+                            Enfant à suivre à domicile
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <span class="checkbox"></span>
+                            Mettre le goûter dans le sac de l'enfant
+                        </td>
+                        <td>
+                            <span class="checkbox"></span>
+                            L'enfant a besoin d'aide et d'encouragement des parents
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <span class="checkbox"></span>
+                            L'enfant a besoin de l'amour maternel et paternel
+                        </td>
+                        <td>
+                            <span class="checkbox"></span>
+                            L'enfant a besoin d'être épanoui
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <span class="checkbox"></span>
+                            L'enfant a besoin de sorties éducatives et récréatives
+                        </td>
+                        <td>
+                            <span class="checkbox"></span>
+                            L'enfant a besoin d'aide pour développer ses facultés intellectuelles
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <span class="checkbox"></span>
+                            L'enfant doit être pris avec beaucoup de douceur et de patience
+                        </td>
+                        <td>
+                            <span class="checkbox"></span>
+                            L'enfant a besoin de fermeté
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <span class="checkbox"></span>
+                            L'enfant a un esprit d'infériorité
+                        </td>
+                        <td>
+                            <span class="checkbox"></span>
+                            L'enfant a besoin d'une attention particulière des parents
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Observations complémentaires -->
+        <div class="section">
+            <div class="section-title observations">📝 OBSERVATIONS COMPLÉMENTAIRES</div>
+            <div class="section-content observations-lines">
+                <div></div>
+                <div></div>
+                <div></div>
+            </div>
+        </div>
+        
+        <!-- Signatures -->
+        <div class="signatures">
+            <div class="signature-box">
+                <div class="signature-label">La Monitrice</div>
+                <div class="signature-line">Signature</div>
+            </div>
+            <div class="signature-box">
+                <div class="signature-label">Le Directeur/La Directrice</div>
+                <div class="signature-line">Signature et cachet</div>
+            </div>
+            <div class="signature-box">
+                <div class="signature-label">Parent/Tuteur</div>
+                <div class="signature-line">Signature</div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            {{ ecole.nom }} | {{ ecole.tous_telephones|default:"" }} | Imprimé le {{ date_impression|date:"d/m/Y" }}
+        </div>
+    </div>
+    {% endfor %}
+</body>
+</html>

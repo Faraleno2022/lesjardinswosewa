@@ -1,0 +1,389 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}Élèves avec impayés - myschool{% endblock %}
+
+{% block extra_css %}
+<style>
+    .card-header-custom {
+        background: linear-gradient(135deg, #dc3545, #c82333);
+        color: white;
+    }
+    .progress-bar-custom {
+        background: linear-gradient(90deg, #28a745, #20c997);
+    }
+    .btn-note-rappel {
+        background: linear-gradient(135deg, #ff9800, #f57c00);
+        color: white;
+        border: none;
+    }
+    .btn-note-rappel:hover {
+        background: linear-gradient(135deg, #f57c00, #e65100);
+        color: white;
+    }
+    .stat-card {
+        border-radius: 15px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        background: white;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+    }
+    .table-impayes th {
+        background-color: #f8f9fa;
+        font-weight: 600;
+    }
+    .badge-danger-light {
+        background-color: #fee;
+        color: #dc3545;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-exclamation-triangle text-warning"></i> Élèves avec impayés</h2>
+                    <p class="text-muted">Liste des élèves ayant des frais de scolarité non réglés</p>
+                </div>
+                <div>
+                    <a href="{% url 'paiements:tableau_bord' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Retour
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistiques -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stat-card text-center">
+                <div class="stat-number text-danger">{{ eleves_avec_soldes|length }}</div>
+                <div class="text-muted">Élèves avec impayés</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card text-center">
+                <div class="stat-number text-warning">{{ total_impayes|floatformat:0|intcomma }} GNF</div>
+                <div class="text-muted">Total des impayés</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card text-center">
+                <div class="stat-number text-info">
+                    {% if eleves_avec_soldes %}
+                        {{ total_impayes|floatformat:0|intcomma }} / {{ eleves_avec_soldes|length }}
+                    {% else %}
+                        0
+                    {% endif %}
+                </div>
+                <div class="text-muted">Moyenne par élève</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card text-center">
+                <a href="{% url 'paiements:generer_toutes_notes_rappel_pdf' %}" class="btn btn-note-rappel btn-lg">
+                    <i class="fas fa-file-pdf"></i> Générer toutes les notes
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Liste des élèves -->
+    <div class="card">
+        <div class="card-header card-header-custom">
+            <h5 class="mb-0"><i class="fas fa-list"></i> Détail des impayés</h5>
+        </div>
+        <div class="card-body">
+            {% if eleves_avec_soldes %}
+            <div class="table-responsive">
+                <table class="table table-hover table-impayes">
+                    <thead>
+                        <tr>
+                            <th>Matricule</th>
+                            <th>Nom complet</th>
+                            <th>Classe</th>
+                            <th>Montant total</th>
+                            <th>Montant payé</th>
+                            <th>Reste à payer</th>
+                            <th>Progression</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in eleves_avec_soldes %}
+                        <tr>
+                            <td>
+                                <span class="badge badge-secondary">{{ item.eleve.matricule }}</span>
+                            </td>
+                            <td>
+                                <a href="{% url 'eleves:detail_eleve' item.eleve.id %}" class="text-dark">
+                                    <strong>{{ item.eleve.nom_complet }}</strong>
+                                </a>
+                            </td>
+                            <td>{{ item.eleve.classe.nom }}</td>
+                            <td>{{ item.montant_total|floatformat:0|intcomma }} GNF</td>
+                            <td class="text-success">{{ item.montant_paye|floatformat:0|intcomma }} GNF</td>
+                            <td class="text-danger">
+                                <strong>{{ item.reste_a_payer|floatformat:0|intcomma }} GNF</strong>
+                            </td>
+                            <td>
+                                <div class="progress" style="height: 20px;">
+                                    <div class="progress-bar progress-bar-custom" role="progressbar" 
+                                         data-width="{{ item.pourcentage_paye }}"
+                                         aria-valuenow="{{ item.pourcentage_paye }}" 
+                                         aria-valuemin="0" aria-valuemax="100">
+                                        {{ item.pourcentage_paye }}%
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{% url 'paiements:generer_note_rappel_pdf' item.eleve.id %}" 
+                                       class="btn btn-warning" title="Note de rappel PDF">
+                                        <i class="fas fa-file-pdf"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-success" 
+                                            onclick="envoyerNoteRappelWhatsApp({{ item.eleve.id }}, '{{ item.eleve.nom_complet|escapejs }}')"
+                                            title="Envoyer par WhatsApp">
+                                        <i class="fab fa-whatsapp"></i>
+                                    </button>
+                                    <form method="post" action="{% url 'paiements:relancer_eleve' item.eleve.id %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="canal" value="WHATSAPP">
+                                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                                        <button type="submit" class="btn btn-outline-warning" title="Journaliser une relance WhatsApp" onclick="return confirm('Créer une relance WhatsApp dans l’historique pour cet élève ?');">
+                                            <i class="fas fa-bell"></i>
+                                        </button>
+                                    </form>
+                                    <a href="{% url 'paiements:ajouter_paiement_eleve' item.eleve.id %}" 
+                                       class="btn btn-primary" title="Enregistrer paiement">
+                                        <i class="fas fa-plus"></i>
+                                    </a>
+                                    <a href="{% url 'paiements:echeancier_eleve' item.eleve.id %}" 
+                                       class="btn btn-info" title="Échéancier">
+                                        <i class="fas fa-calendar-alt"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-success text-center">
+                <i class="fas fa-check-circle fa-3x mb-3"></i>
+                <h4>Aucun impayé !</h4>
+                <p>Tous les élèves sont à jour dans leurs paiements.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Modal WhatsApp pour note de rappel -->
+<div class="modal fade" id="whatsappNoteRappelModal" tabindex="-1" aria-labelledby="whatsappNoteRappelModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header" style="background: #25D366; color: white;">
+                <h5 class="modal-title" id="whatsappNoteRappelModalLabel">
+                    <i class="fab fa-whatsapp me-2"></i>Envoyer la note de rappel par WhatsApp
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="whatsappNoteRappelContent">
+                    <div class="text-center">
+                        <div class="spinner-border text-success" role="status">
+                            <span class="visually-hidden">Chargement...</span>
+                        </div>
+                        <p class="mt-2">Préparation du message...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-success" id="btnOuvrirWhatsAppNoteRappel" disabled>
+                    <i class="fab fa-whatsapp me-2"></i>Ouvrir WhatsApp
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let whatsappNoteRappelModal;
+let currentWhatsAppLinkNoteRappel = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Appliquer la largeur aux barres de progression
+    document.querySelectorAll('.progress-bar[data-width]').forEach(function(bar) {
+        var width = bar.getAttribute('data-width');
+        bar.style.width = width + '%';
+    });
+    
+    // Initialiser la modal WhatsApp
+    whatsappNoteRappelModal = new bootstrap.Modal(document.getElementById('whatsappNoteRappelModal'));
+    
+    // Gestionnaire pour le bouton d'ouverture WhatsApp
+    document.getElementById('btnOuvrirWhatsAppNoteRappel').addEventListener('click', function() {
+        if (currentWhatsAppLinkNoteRappel) {
+            window.open(currentWhatsAppLinkNoteRappel, '_blank');
+            whatsappNoteRappelModal.hide();
+            
+            // Afficher un message de confirmation
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-success alert-dismissible fade show';
+            alertDiv.innerHTML = `
+                <i class="fab fa-whatsapp me-2"></i>
+                <strong>WhatsApp ouvert !</strong> Le message de rappel a été pré-rempli.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            const container = document.querySelector('.container-fluid');
+            if (container) {
+                container.insertBefore(alertDiv, container.firstChild);
+                window.scrollTo(0, 0);
+            }
+        }
+    });
+});
+
+function genererToutesNotes() {
+    if (confirm('Voulez-vous générer les notes de rappel pour tous les élèves avec des impayés ?')) {
+        // TODO: Implémenter la génération groupée
+        window.location.href = "{% url 'paiements:generer_toutes_notes_rappel_pdf' %}";
+    }
+}
+/* genererToutesNotes() remplacée par un lien direct vers la vue PDF */
+
+function envoyerNoteRappelWhatsApp(eleveId, eleveNom) {
+    // Afficher la modal
+    whatsappNoteRappelModal.show();
+    
+    // Charger l'aperçu
+    chargerApercuWhatsAppNoteRappel(eleveId);
+}
+
+function chargerApercuWhatsAppNoteRappel(eleveId) {
+    const content = document.getElementById('whatsappNoteRappelContent');
+    const btnOuvrir = document.getElementById('btnOuvrirWhatsAppNoteRappel');
+    
+    // Réinitialiser
+    btnOuvrir.disabled = true;
+    currentWhatsAppLinkNoteRappel = null;
+    content.innerHTML = `
+        <div class="text-center">
+            <div class="spinner-border text-success" role="status">
+                <span class="visually-hidden">Chargement...</span>
+            </div>
+            <p class="mt-2">Préparation du message...</p>
+        </div>
+    `;
+    
+    // Appel AJAX
+    fetch(`{% url 'paiements:apercu_whatsapp_note_rappel' %}?eleve_id=${eleveId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                afficherApercuWhatsAppNoteRappel(data);
+                if (data.whatsapp_link) {
+                    currentWhatsAppLinkNoteRappel = data.whatsapp_link;
+                    btnOuvrir.disabled = false;
+                }
+            } else {
+                content.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle me-2"></i>
+                        <strong>Erreur:</strong> ${data.error}
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            content.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    <strong>Erreur:</strong> Erreur de connexion
+                </div>
+            `;
+        });
+}
+
+function afficherApercuWhatsAppNoteRappel(data) {
+    const content = document.getElementById('whatsappNoteRappelContent');
+    
+    content.innerHTML = `
+        <div class="row">
+            <div class="col-md-5">
+                <h6><i class="fas fa-exclamation-triangle text-warning me-2"></i>Situation financière</h6>
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <p><strong>Élève:</strong> ${data.eleve_nom}</p>
+                        <p><strong>Classe:</strong> ${data.classe}</p>
+                        <hr>
+                        <p><strong>Total dû:</strong> ${data.montant_total} GNF</p>
+                        <p><strong>Paiements saisis:</strong> <span class="text-success">${data.montant_paye} GNF</span></p>
+                        <p><strong>Remises/Bourses:</strong> <span class="text-info">${data.remises_total || '0'} GNF</span></p>
+                        <p><strong>Total couvert:</strong> <span class="text-primary">${data.montant_couvert || data.montant_paye} GNF</span></p>
+                        <p><strong>Retard réel:</strong> <span class="badge bg-warning text-dark">${data.retard_reel || '0'} GNF</span></p>
+                        <p class="mb-0"><strong>Reste à payer:</strong> <span class="badge bg-danger fs-6">${data.reste_a_payer} GNF</span></p>
+                    </div>
+                </div>
+
+                ${data.prochain_libelle ? `
+                <div class="alert alert-warning mt-3">
+                    <i class="fas fa-calendar-day me-2"></i>
+                    <strong>Prochain paiement:</strong><br>
+                    ${data.prochain_libelle} - ${data.prochain_montant} GNF
+                    ${data.prochaine_echeance ? `<br><small>Échéance: ${data.prochaine_echeance}</small>` : ''}
+                </div>
+                ` : ''}
+                
+                ${data.pdf_url ? `
+                <div class="alert alert-success mt-3">
+                    <i class="fas fa-file-pdf me-2"></i>
+                    <strong>Note de rappel PDF incluse !</strong><br>
+                    <small>Le lien de téléchargement sera inclus dans le message.</small>
+                </div>
+                ` : ''}
+                
+                ${!data.telephone ? `
+                <div class="alert alert-warning mt-3">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Attention:</strong> Aucun numéro WhatsApp trouvé.
+                    <br><small>Veuillez renseigner le numéro du responsable dans la fiche élève.</small>
+                </div>
+                ` : `
+                <div class="alert alert-info mt-3">
+                    <i class="fas fa-phone me-2"></i>
+                    <strong>Destinataire:</strong> ${data.telephone}
+                </div>
+                `}
+            </div>
+            
+            <div class="col-md-7">
+                <h6><i class="fab fa-whatsapp me-2"></i>Aperçu du message</h6>
+                <div class="card">
+                    <div class="card-body" style="background: #e7ffdb; font-family: 'Segoe UI', sans-serif; max-height: 350px; overflow-y: auto;">
+                        <div style="white-space: pre-line; font-size: 13px;">${data.message}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+</script>
+{% endblock %}

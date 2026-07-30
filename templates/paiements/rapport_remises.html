@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }} - myschool{% endblock %}
+
+{% block breadcrumb_items %}
+  <li class="breadcrumb-item"><a href="{% url 'paiements:tableau_bord' %}">Paiements</a></li>
+  <li class="breadcrumb-item active">Rapport des remises</li>
+{% endblock %}
+
+{% block page_actions %}
+<div>
+  <a href="{% url 'paiements:ajouter_paiement' %}" class="btn btn-primary">
+    <i class="fas fa-plus me-1"></i>Nouveau Paiement
+  </a>
+  <a href="{% url 'paiements:liste_paiements' %}" class="btn btn-outline-info">
+    <i class="fas fa-list me-1"></i>Tous les Paiements
+  </a>
+  <a href="{% url 'paiements:liste_eleves_soldes' %}" class="btn btn-outline-success">
+    <i class="fas fa-check-circle me-1"></i>Élèves soldés
+  </a>
+  <a href="{% url 'paiements:liste_relances' %}" class="btn btn-outline-warning">
+    <i class="fas fa-bell me-1"></i>Relances
+  </a>
+  {% if perms.utilisateurs.peut_consulter_rapports %}
+  <a href="{% url 'paiements:rapport_remises' %}" class="btn btn-outline-success">
+    <i class="fas fa-percent me-1"></i>Rapport des remises
+  </a>
+  {% endif %}
+  <a href="{% url 'paiements:tableau_bord' %}" class="btn btn-secondary">
+    <i class="fas fa-chart-line me-1"></i>Tableau de bord
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12">
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="fas fa-percentage me-2"></i>Remises appliquées</h5>
+      </div>
+      <div class="card-body">
+        <form method="get" class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label">Recherche</label>
+            <input type="text" name="q" value="{{ q }}" class="form-control" placeholder="Nom/prénom, matricule ou classe" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Date début</label>
+            <input type="date" name="date_debut" value="{{ date_debut }}" class="form-control" />
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Date fin</label>
+            <input type="date" name="date_fin" value="{{ date_fin }}" class="form-control" />
+          </div>
+          <div class="col-md-3 d-flex align-items-end">
+            <button class="btn btn-primary me-2" type="submit"><i class="fas fa-search me-1"></i>Rechercher</button>
+            <a class="btn btn-outline-secondary" href="{% url 'paiements:rapport_remises' %}"><i class="fas fa-undo me-1"></i>Réinitialiser</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div>
+          <strong>Total remises:</strong>
+          <span class="text-primary">{{ total_global|floatformat:0|intcomma }} GNF</span>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-striped align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Élève</th>
+                <th>Matricule</th>
+                <th>Classe</th>
+                <th class="text-end">Nb remises</th>
+                <th class="text-end">Total remise (GNF)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if rows %}
+                {% for r in rows %}
+                <tr>
+                  <td>{{ r.paiement__eleve__prenom }} {{ r.paiement__eleve__nom }}</td>
+                  <td>{{ r.paiement__eleve__matricule }}</td>
+                  <td>{{ r.paiement__eleve__classe__nom }}</td>
+                  <td class="text-end">{{ r.nb_remises }}</td>
+                  <td class="text-end text-danger">{{ r.total_remise|floatformat:0|intcomma }}</td>
+                </tr>
+                {% endfor %}
+              {% else %}
+                <tr>
+                  <td colspan="5" class="text-center text-muted py-4">Aucune remise appliquée pour la période sélectionnée.</td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

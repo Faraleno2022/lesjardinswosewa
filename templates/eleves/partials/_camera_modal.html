@@ -1,0 +1,182 @@
+{# Reusable camera modal for capturing a photo into a file input #}
+<div class="modal fade" id="cameraModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-camera me-2"></i>Prendre une photo</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger d-none" id="cameraError"></div>
+        <div class="row g-3">
+          <div class="col-md-7 text-center">
+            <video id="cameraVideo" autoplay playsinline style="width:100%;border-radius:8px;background:#000"></video>
+          </div>
+          <div class="col-md-5">
+            <canvas id="cameraCanvas" style="width:100%;border-radius:8px;border:1px solid #dee2e6;"></canvas>
+            <div class="mt-3 d-grid gap-2">
+              <button class="btn btn-primary" id="btnCapture"><i class="fas fa-dot-circle me-2"></i>Capturer</button>
+              <button class="btn btn-secondary" id="btnSwitch"><i class="fas fa-sync-alt me-2"></i>Basculer caméra</button>
+              <button class="btn btn-success" id="btnUse"><i class="fas fa-check me-2"></i>Utiliser la photo</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <small class="text-muted">Si la caméra ne démarre pas, vérifiez les autorisations du navigateur.</small>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  let stream = null;
+  let currentFacing = 'environment'; // try rear first on mobile
+  let targetInputId = null;
+  const modalEl = document.getElementById('cameraModal');
+  const video = document.getElementById('cameraVideo');
+  const canvas = document.getElementById('cameraCanvas');
+  const btnCapture = document.getElementById('btnCapture');
+  const btnSwitch = document.getElementById('btnSwitch');
+  const btnUse = document.getElementById('btnUse');
+
+  function stopStream(){
+    if(stream){
+      stream.getTracks().forEach(t => t.stop());
+      stream = null;
+    }
+  }
+
+  function showError(msg){
+    const errorEl = document.getElementById('cameraError');
+    errorEl.innerHTML = msg;
+    errorEl.classList.remove('d-none');
+  }
+
+  function msgPermissionDenied(){
+    return `🚫 <strong>Permission caméra refusée par le navigateur</strong>
+    <hr class="my-2">
+    <strong>Pour réactiver la caméra :</strong><br>
+    <span class="fw-semibold">Chrome / Edge :</span>
+    Cliquez sur 🔒 (barre d'adresse) → <em>Paramètres du site</em> → <strong>Caméra → Autoriser</strong> → rechargez (F5)<br>
+    <span class="fw-semibold">Firefox :</span>
+    Cliquez sur 🎥 (barre d'adresse) → <strong>Autoriser la caméra</strong> → rechargez (F5)<br>
+    <span class="text-muted small">Ou : Paramètres navigateur → Confidentialité → Autorisations → Caméra → supprimer le blocage pour cette adresse.</span>`;
+  }
+
+  async function startStream(){
+    stopStream();
+    const errorEl = document.getElementById('cameraError');
+    errorEl.classList.add('d-none');
+
+    // navigator.mediaDevices absent en HTTP sur IP réseau (non-secure context)
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
+      showError(isLocalhost
+        ? '⚠️ <strong>Caméra non supportée</strong><br>Ce navigateur ne supporte pas l\'accès caméra.'
+        : '🔐 <strong>Connexion HTTP non sécurisée</strong><br>La caméra nécessite HTTPS ou localhost.<br>Accédez via <code>http://localhost:8000</code>.');
+      return;
+    }
+
+    // Vérifier l'état de permission avant d'appeler getUserMedia
+    if (navigator.permissions) {
+      try {
+        const perm = await navigator.permissions.query({ name: 'camera' });
+        if (perm.state === 'denied') {
+          showError(msgPermissionDenied());
+          return;
+        }
+      } catch(e) { /* permissions API non disponible, on continue */ }
+    }
+
+    const constraints = {
+      video: { facingMode: { ideal: currentFacing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    };
+    try {
+      stream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = stream;
+    } catch (e) {
+      console.warn('getUserMedia échoué, essai caméra par défaut', e);
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        video.srcObject = stream;
+      } catch (err){
+        console.error('Caméra indisponible', err);
+        const errStr = String(err.name || err).toLowerCase();
+        const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
+        let msg;
+        if (errStr.includes('notallowed') || errStr.includes('permission') || errStr.includes('denied')) {
+          msg = msgPermissionDenied();
+        } else if (errStr.includes('notfound') || errStr.includes('devicenotfound')) {
+          msg = '📷 <strong>Aucune caméra détectée</strong><br>Vérifiez qu\'une caméra est connectée et activée sur cet appareil.';
+        } else if (!window.isSecureContext && !isLocalhost) {
+          msg = '🔐 <strong>Connexion HTTP non sécurisée</strong><br>La caméra nécessite HTTPS ou localhost.<br>Accédez via <code>http://localhost:8000</code>.';
+        } else {
+          msg = '⚠️ <strong>Erreur caméra :</strong> ' + (err.message || err);
+        }
+        showError(msg);
+      }
+    }
+  }
+
+  function capture(){
+    const w = video.videoWidth || 640;
+    const h = video.videoHeight || 480;
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, w, h);
+  }
+
+  async function usePhoto(){
+    if(!targetInputId) return;
+    const input = document.getElementById(targetInputId);
+    if(!input) return;
+    canvas.toBlob(function(blob){
+      if(!blob) return;
+      const file = new File([blob], 'photo_eleve.jpg', { type: 'image/jpeg' });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+      // Optionnel: afficher un aperçu si un élément img[data-preview] est présent
+      const preview = document.querySelector('[data-photo-preview]');
+      if (preview) {
+        preview.src = URL.createObjectURL(file);
+        preview.style.display = 'block';
+      }
+      const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+      modal.hide();
+    }, 'image/jpeg', 0.9);
+  }
+
+  // Wire events when DOM is ready
+  document.addEventListener('click', function(e){
+    const btn = e.target.closest('[data-open-camera-for]');
+    if(!btn) return;
+    e.preventDefault();
+    targetInputId = btn.getAttribute('data-open-camera-for');
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+    // startStream() est appelé dans shown.bs.modal pour attendre la fin de l'animation
+  });
+
+  // Démarrer la caméra APRÈS que le modal soit entièrement visible (fin d'animation CSS)
+  // Certains navigateurs refusent getUserMedia sur un élément vidéo non visible
+  modalEl.addEventListener('shown.bs.modal', function(){
+    startStream();
+  });
+
+  btnCapture.addEventListener('click', function(e){ e.preventDefault(); capture(); });
+  btnUse.addEventListener('click', function(e){ e.preventDefault(); usePhoto(); });
+  btnSwitch.addEventListener('click', function(e){
+    e.preventDefault();
+    currentFacing = (currentFacing === 'environment') ? 'user' : 'environment';
+    startStream();
+  });
+
+  modalEl.addEventListener('hidden.bs.modal', function(){
+    stopStream();
+  });
+})();
+</script>

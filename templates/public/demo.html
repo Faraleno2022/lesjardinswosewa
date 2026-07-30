@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block title %}Demander une démonstration - Myschool GN{% endblock %}
+{% block meta_description %}Demandez une démonstration de Myschool GN pour découvrir la gestion scolaire adaptée aux établissements en Guinée.{% endblock %}
+
+{% block content %}
+<section class="container py-5">
+  <div class="row align-items-center g-4">
+    <div class="col-lg-7">
+      <h1 class="text-primary fw-bold">Demander une démonstration</h1>
+      <p class="lead text-muted">Découvrez comment Myschool GN peut organiser les inscriptions, paiements, notes, bulletins et rapports de votre établissement.</p>
+      <a href="{% url 'contact' %}" class="btn btn-primary btn-lg">
+        <i class="fas fa-phone me-2"></i>Contacter l'administrateur
+      </a>
+    </div>
+    <div class="col-lg-5">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <h2 class="h5">Contact direct</h2>
+          <p class="mb-2">FARA LENO</p>
+          <p class="mb-0"><a href="tel:+224622613559">+224 622 61 35 59</a></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

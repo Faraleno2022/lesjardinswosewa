@@ -1,0 +1,387 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Modifier {{ eleve.prenom }} {{ eleve.nom }} - myschool{% endblock %}
+
+{% block extra_css %}
+<style>
+    .card-header {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        color: white;
+        font-weight: 600;
+    }
+    .form-section {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        border-left: 4px solid #28a745;
+    }
+    .form-section h6 {
+        color: #28a745;
+        margin-bottom: 15px;
+        font-weight: 600;
+    }
+    .photo-preview {
+        max-width: 150px;
+        max-height: 150px;
+        border-radius: 8px;
+        border: 2px dashed #dee2e6;
+        padding: 10px;
+        display: none;
+    }
+    .current-photo {
+        max-width: 150px;
+        max-height: 150px;
+        border-radius: 8px;
+        border: 2px solid #28a745;
+    }
+    .btn-primary {
+        background: linear-gradient(135deg, #007bff, #0056b3);
+        border: none;
+        font-weight: 500;
+    }
+    .btn-success {
+        background: linear-gradient(135deg, #28a745, #20c997);
+        border: none;
+        font-weight: 500;
+    }
+    .btn-secondary {
+        background: linear-gradient(135deg, #6c757d, #5a6268);
+        border: none;
+        font-weight: 500;
+    }
+    .required-field {
+        color: #dc3545;
+        font-weight: bold;
+    }
+    .alert-info {
+        background: #e3f2fd;
+        border-color: #1976d2;
+        color: #1976d2;
+    }
+    .is-invalid {
+        border-color: #dc3545;
+    }
+    .form-control:focus {
+        border-color: #28a745;
+        box-shadow: 0 0 0 0.2rem rgba(40, 167, 69, 0.25);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h4 class="mb-0">
+                            <i class="fas fa-user-edit me-2"></i>
+                            Modifier l'élève : {{ eleve.prenom }} {{ eleve.nom }}
+                        </h4>
+                        <div>
+                            <span class="badge bg-light text-dark">{{ eleve.matricule }}</span>
+                            <span class="badge bg-info">{{ eleve.classe|default:"Aucune classe" }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Messages -->
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                <i class="fas fa-info-circle me-2"></i>{{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <!-- Formulaire de modification -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <form method="post" enctype="multipart/form-data" id="modificationForm">
+                        {% csrf_token %}
+                        
+                        <!-- Section Informations personnelles -->
+                        <div class="form-section">
+                            <h6><i class="fas fa-user me-2"></i>Informations personnelles</h6>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="{{ form.matricule.id_for_label }}" class="form-label">
+                                            Matricule <span class="required-field">*</span>
+                                        </label>
+                                        {{ form.matricule }}
+                                        {% if form.matricule.errors %}
+                                            <div class="text-danger small mt-1">{{ form.matricule.errors.0 }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="{{ form.prenom.id_for_label }}" class="form-label">
+                                            Prénom <span class="required-field">*</span>
+                                        </label>
+                                        {{ form.prenom }}
+                                        {% if form.prenom.errors %}
+                                            <div class="text-danger small mt-1">{{ form.prenom.errors.0 }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="{{ form.nom.id_for_label }}" class="form-label">
+                                            Nom <span class="required-field">*</span>
+                                        </label>
+                                        {{ form.nom }}
+                                        {% if form.nom.errors %}
+                                            <div class="text-danger small mt-1">{{ form.nom.errors.0 }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-3">
+                                    <div class="mb-3">
+                                        <label for="{{ form.sexe.id_for_label }}" class="form-label">
+                                            Sexe <span class="required-field">*</span>
+                                        </label>
+                                        {{ form.sexe }}
+                                        {% if form.sexe.errors %}
+                                            <div class="text-danger small mt-1">{{ form.sexe.errors.0 }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="mb-3">
+                                        <label for="{{ form.date_naissance.id_for_label }}" class="form-label">
+                                            Date de naissance <span class="required-field">*</span>
+                                        </label>
+                                        {{ form.date_naissance }}
+                                        {% if form.date_naissance.errors %}
+                                            <div class="text-danger small mt-1">{{ form.date_naissance.errors.0 }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="{{ form.lieu_naissance.id_for_label }}" class="form-label">
+                                            Lieu de naissance <span class="required-field">*</span>
+                                        </label>
+                                        {{ form.lieu_naissance }}
+                                        {% if form.lieu_naissance.errors %}
+                                            <div class="text-danger small mt-1">{{ form.lieu_naissance.errors.0 }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Section Scolarité -->
+                        <div class="form-section">
+                            <h6><i class="fas fa-graduation-cap me-2"></i>Informations scolaires</h6>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="{{ form.classe.id_for_label }}" class="form-label">
+                                            Classe <span class="required-field">*</span>
+                                        </label>
+                                        {{ form.classe }}
+                                        {% if form.classe.errors %}
+                                            <div class="text-danger small mt-1">{{ form.classe.errors.0 }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="{{ form.date_inscription.id_for_label }}" class="form-label">
+                                            Date d'inscription <span class="required-field">*</span>
+                                        </label>
+                                        {{ form.date_inscription }}
+                                        {% if form.date_inscription.errors %}
+                                            <div class="text-danger small mt-1">{{ form.date_inscription.errors.0 }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="{{ form.statut.id_for_label }}" class="form-label">
+                                            Statut <span class="required-field">*</span>
+                                        </label>
+                                        {{ form.statut }}
+                                        {% if form.statut.errors %}
+                                            <div class="text-danger small mt-1">{{ form.statut.errors.0 }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Section Responsables -->
+                        <div class="form-section">
+                            <h6><i class="fas fa-users me-2"></i>Responsables</h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="{{ form.responsable_principal.id_for_label }}" class="form-label">
+                                            Responsable principal <span class="required-field">*</span>
+                                        </label>
+                                        {{ form.responsable_principal }}
+                                        {% if form.responsable_principal.errors %}
+                                            <div class="text-danger small mt-1">{{ form.responsable_principal.errors.0 }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="{{ form.responsable_secondaire.id_for_label }}" class="form-label">
+                                            Responsable secondaire
+                                        </label>
+                                        {{ form.responsable_secondaire }}
+                                        {% if form.responsable_secondaire.errors %}
+                                            <div class="text-danger small mt-1">{{ form.responsable_secondaire.errors.0 }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Section Photo -->
+                        <div class="form-section">
+                            <h6><i class="fas fa-camera me-2"></i>Photo de l'élève</h6>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="{{ form.photo.id_for_label }}" class="form-label">
+                                            Changer la photo
+                                        </label>
+                                        {{ form.photo }}
+                                        {% if form.photo.errors %}
+                                            <div class="text-danger small mt-1">{{ form.photo.errors.0 }}</div>
+                                        {% endif %}
+                                        <div class="form-text">Formats acceptés : JPG, PNG, GIF (max 5MB)</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    {% if eleve.photo %}
+                                        <div class="mb-3">
+                                            <label class="form-label">Photo actuelle</label>
+                                            <div>
+                                                <img src="{{ eleve.photo.url }}" alt="Photo de {{ eleve.prenom }}" class="current-photo">
+                                            </div>
+                                        </div>
+                                    {% endif %}
+                                    <div id="photoPreview" class="photo-preview">
+                                        <img id="previewImg" src="" alt="Aperçu" style="max-width: 100%; max-height: 100%;">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Boutons d'action -->
+                        <div class="row">
+                            <div class="col-12">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <a href="{% url 'eleves:liste_eleves' %}" class="btn btn-secondary">
+                                            <i class="fas fa-arrow-left me-2"></i>Retour à la liste
+                                        </a>
+                                        <a href="{% url 'eleves:detail_eleve' eleve.id %}" class="btn btn-info ms-2">
+                                            <i class="fas fa-eye me-2"></i>Voir détails
+                                        </a>
+                                    </div>
+                                    <div>
+                                        <button type="submit" name="action" value="save" class="btn btn-primary btn-lg">
+                                            <i class="fas fa-save me-2"></i>Enregistrer les modifications
+                                        </button>
+                                        <button type="submit" name="action" value="save_and_list" class="btn btn-success btn-lg ms-2">
+                                            <i class="fas fa-save me-2"></i>Enregistrer et retourner à la liste
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript pour la fonctionnalité -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const photoInput = document.getElementById('{{ form.photo.id_for_label }}');
+    const photoPreview = document.getElementById('photoPreview');
+    const previewImg = document.getElementById('previewImg');
+    
+    if (photoInput) {
+        photoInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                // Vérification du type de fichier
+                if (!file.type.startsWith('image/')) {
+                    alert('Veuillez sélectionner un fichier image valide.');
+                    return;
+                }
+                
+                // Vérification de la taille (5MB max)
+                if (file.size > 5 * 1024 * 1024) {
+                    alert('La taille du fichier ne doit pas dépasser 5MB.');
+                    return;
+                }
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    previewImg.src = e.target.result;
+                    photoPreview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            } else {
+                photoPreview.style.display = 'none';
+            }
+        });
+    }
+    
+    // Validation du formulaire avant soumission
+    const form = document.getElementById('modificationForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            const requiredFields = form.querySelectorAll('[required]');
+            let isValid = true;
+            
+            requiredFields.forEach(function(field) {
+                if (!field.value.trim()) {
+                    field.classList.add('is-invalid');
+                    isValid = false;
+                } else {
+                    field.classList.remove('is-invalid');
+                }
+            });
+            
+            if (!isValid) {
+                e.preventDefault();
+                alert('Veuillez remplir tous les champs obligatoires.');
+                return false;
+            }
+            
+            // Désactiver le bouton pour éviter les doubles soumissions
+            const submitButtons = form.querySelectorAll('button[type="submit"]');
+            submitButtons.forEach(function(btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enregistrement...';
+            });
+        });
+    }
+});
+</script>
+{% endblock %}

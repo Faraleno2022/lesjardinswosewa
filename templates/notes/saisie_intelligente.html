@@ -1,0 +1,694 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Saisie Intelligente des Notes{% endblock %}
+
+{% block extra_css %}
+<style>
+    .saisie-container {
+        background: linear-gradient(to bottom right, #e0f2fe, #f3e8ff);
+        min-height: 100vh;
+        padding: 2rem;
+    }
+    
+    .main-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        margin: 0 auto;
+    }
+    
+    .selection-section {
+        background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 15px rgba(155, 89, 182, 0.3);
+    }
+    
+    .table-wrapper {
+        overflow-x: auto;
+        max-width: 100%;
+    }
+    
+    .eleves-table {
+        width: 100%;
+        margin-top: 1rem;
+        border-collapse: collapse;
+        min-width: 800px;
+    }
+    
+    .eleves-table thead {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+    
+    .eleves-table th {
+        padding: 0.8rem 0.5rem;
+        font-weight: 700;
+        text-align: center;
+        font-size: 11px;
+        border: 1px solid #d1d5db;
+        background: linear-gradient(135deg, #1a5276 0%, #2980b9 100%);
+        color: white;
+        white-space: nowrap;
+    }
+    
+    .eleves-table th.matiere-header {
+        background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+        min-width: 70px;
+        max-width: 90px;
+        font-size: 10px;
+        writing-mode: horizontal-tb;
+    }
+    
+    .eleves-table th.fixed-col {
+        background: linear-gradient(135deg, #1a5276 0%, #2980b9 100%);
+    }
+    
+    .eleves-table td {
+        padding: 0.4rem;
+        border: 1px solid #e5e7eb;
+        font-size: 12px;
+        text-align: center;
+    }
+    
+    .eleves-table tbody tr:nth-child(even) {
+        background: #f9fafb;
+    }
+    
+    .eleves-table tbody tr:hover {
+        background: #fef3c7;
+    }
+    
+    .eleves-table td.nom-col {
+        text-align: left;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    
+    .note-input {
+        width: 60px;
+        padding: 0.4rem;
+        border: 2px solid #d1d5db;
+        border-radius: 4px;
+        text-align: center;
+        font-weight: 600;
+        font-size: 12px;
+    }
+    
+    .note-input:focus {
+        outline: none;
+        border-color: #9b59b6;
+        box-shadow: 0 0 0 2px rgba(155, 89, 182, 0.2);
+    }
+    
+    .note-input.valid {
+        border-color: #16a34a;
+        background: #f0fdf4;
+    }
+    
+    .note-input.invalid {
+        border-color: #dc2626;
+        background: #fef2f2;
+    }
+    
+    .note-input.absent {
+        background: #fef3c7;
+        border-color: #f59e0b;
+    }
+    
+    .absent-checkbox {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+    
+    .save-btn {
+        background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%);
+        color: white;
+        padding: 1rem 2.5rem;
+        border-radius: 10px;
+        border: none;
+        font-weight: 600;
+        font-size: 1.1rem;
+        cursor: pointer;
+        transition: all 0.3s;
+        box-shadow: 0 4px 12px rgba(155, 89, 182, 0.3);
+    }
+    
+    .save-btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(155, 89, 182, 0.4);
+    }
+    
+    .save-btn:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+    
+    .custom-toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        color: white;
+        font-weight: 600;
+        z-index: 9999;
+        animation: slideIn 0.3s ease;
+    }
+    
+    .custom-toast.success { background: #16a34a; }
+    .custom-toast.error { background: #dc2626; }
+    .custom-toast.warning { background: #f59e0b; }
+    
+    @keyframes slideIn {
+        from { transform: translateX(400px); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    
+    .info-badge {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-weight: 600;
+        margin-right: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .info-badge.classe { background: #dbeafe; color: #1e40af; }
+    .info-badge.periode { background: #fef3c7; color: #92400e; }
+    .info-badge.type { background: #f3e8ff; color: #7c3aed; }
+    
+    .stats-bar {
+        background: #f8fafc;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        display: flex;
+        gap: 2rem;
+        flex-wrap: wrap;
+    }
+    
+    .stat-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .stat-value {
+        font-weight: 700;
+        font-size: 1.2rem;
+    }
+    
+    .legend {
+        background: #f0f9ff;
+        border-radius: 8px;
+        padding: 0.8rem;
+        margin-bottom: 1rem;
+        font-size: 12px;
+    }
+    
+    .legend-item {
+        display: inline-flex;
+        align-items: center;
+        margin-right: 1.5rem;
+    }
+    
+    .legend-color {
+        width: 16px;
+        height: 16px;
+        border-radius: 3px;
+        margin-right: 0.3rem;
+    }
+    
+    @media print {
+        .no-print { display: none !important; }
+        .main-card { box-shadow: none; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="saisie-container">
+    <div class="main-card">
+        <h2 class="mb-4">
+            <i class="fas fa-magic text-purple me-2"></i>
+            Saisie Intelligente des Notes
+        </h2>
+        
+        <!-- Section de sélection -->
+        <div class="selection-section no-print">
+            <form method="GET" id="selectionForm">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Classe</label>
+                        <select name="classe_id" id="classeSelect" class="form-select" required onchange="this.form.submit()">
+                            <option value="">-- Sélectionner une classe --</option>
+                            {% for classe in classes %}
+                            <option value="{{ classe.id }}" {% if classe_selectionnee and classe.id == classe_selectionnee.id %}selected{% endif %}>
+                                {{ classe.nom }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">Type de note</label>
+                        <select name="type_note" id="typeNoteSelect" class="form-select" required onchange="updatePeriodes()">
+                            <option value="">-- Sélectionner --</option>
+                            <option value="mensuelle" {% if type_note == 'mensuelle' %}selected{% endif %}>Note Mensuelle</option>
+                            <option value="composition" {% if type_note == 'composition' %}selected{% endif %}>Composition</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">Période</label>
+                        <select name="periode" id="periodeSelect" class="form-select" required>
+                            <option value="">-- Sélectionner --</option>
+                            {% for code, label in periodes_disponibles %}
+                            <option value="{{ code }}" {% if periode == code %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">&nbsp;</label>
+                        <button type="submit" class="btn btn-light w-100">
+                            <i class="fas fa-sync me-2"></i>Charger
+                        </button>
+                    </div>
+                    
+                    {% if classe_selectionnee and periode %}
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">&nbsp;</label>
+                        <a href="{% url 'notes:import_intelligent' %}" class="btn btn-outline-light w-100">
+                            <i class="fas fa-file-excel me-2"></i>Importer Excel
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+        
+        {% if classe_selectionnee and periode and matieres %}
+        <!-- Informations -->
+        <div class="mb-3">
+            <span class="info-badge classe">
+                <i class="fas fa-school me-2"></i>{{ classe_selectionnee.nom }}
+            </span>
+            <span class="info-badge periode">
+                <i class="fas fa-calendar me-2"></i>{{ periode_display }}
+            </span>
+            <span class="info-badge type">
+                <i class="fas fa-edit me-2"></i>{{ type_note_display }}
+            </span>
+        </div>
+        
+        <!-- Légende -->
+        <div class="legend no-print">
+            <strong>Légende:</strong>
+            <span class="legend-item"><span class="legend-color" style="background:#f0fdf4;border:2px solid #16a34a;"></span> Note valide</span>
+            <span class="legend-item"><span class="legend-color" style="background:#fef2f2;border:2px solid #dc2626;"></span> Note invalide</span>
+            <span class="legend-item"><span class="legend-color" style="background:#fef3c7;border:2px solid #f59e0b;"></span> Absent</span>
+            <span class="legend-item"><strong>Note max:</strong> {{ note_max }}</span>
+        </div>
+        
+        <!-- Statistiques -->
+        <div class="stats-bar no-print">
+            <div class="stat-item">
+                <i class="fas fa-users text-primary"></i>
+                <span>Élèves: <span class="stat-value" id="totalEleves">{{ eleves|length }}</span></span>
+            </div>
+            <div class="stat-item">
+                <i class="fas fa-book text-warning"></i>
+                <span>Matières: <span class="stat-value">{{ matieres|length }}</span></span>
+            </div>
+            <div class="stat-item">
+                <i class="fas fa-check-circle text-success"></i>
+                <span>Notes saisies: <span class="stat-value" id="notesSaisies">0</span></span>
+            </div>
+            <div class="stat-item">
+                <i class="fas fa-times-circle text-danger"></i>
+                <span>Absents: <span class="stat-value" id="totalAbsents">0</span></span>
+            </div>
+        </div>
+        
+        <!-- Tableau des notes -->
+        <div class="table-wrapper">
+            <table class="eleves-table" id="notesTable">
+                <thead>
+                    <tr>
+                        <th class="fixed-col" style="width:40px;">#</th>
+                        <th class="fixed-col" style="width:100px;">Matricule</th>
+                        <th class="fixed-col" style="width:120px;">Prénom</th>
+                        <th class="fixed-col" style="width:100px;">Nom</th>
+                        {% for matiere in matieres %}
+                        <th class="matiere-header" title="{{ matiere.nom }} (Coef: {{ matiere.coefficient }})">
+                            {{ matiere.code|default:matiere.nom|truncatechars:10 }}
+                        </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody id="notesTableBody">
+                    {% for eleve in eleves %}
+                    <tr data-eleve-id="{{ eleve.id|stringformat:"d" }}" data-matricule="{{ eleve.matricule }}">
+                        <td>{{ forloop.counter }}</td>
+                        <td style="font-size:10px;">{{ eleve.matricule }}</td>
+                        <td class="nom-col">{{ eleve.prenom }}</td>
+                        <td class="nom-col">{{ eleve.nom }}</td>
+                        {% for matiere in matieres %}
+                        <td>
+                            <input type="number" 
+                                   class="note-input" 
+                                   data-eleve-id="{{ eleve.id|stringformat:"d" }}"
+                                   data-matiere-id="{{ matiere.id|stringformat:"d" }}"
+                                   data-matiere-nom="{{ matiere.nom }}"
+                                   step="0.01" 
+                                   min="0" 
+                                   max="{{ note_max }}"
+                                   placeholder="--"
+                                   onchange="validateNote(this)"
+                                   oninput="onNoteInput(this)"
+                                   onkeydown="handleKeyDown(event, this)">
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Boutons d'action -->
+        <div class="text-center mt-4 no-print">
+            <button onclick="sauvegarderToutesNotes()" class="save-btn" id="saveBtn">
+                <i class="fas fa-save me-2"></i>
+                Enregistrer toutes les notes
+            </button>
+            <button onclick="window.print()" class="btn btn-outline-secondary ms-3">
+                <i class="fas fa-print me-2"></i>Imprimer
+            </button>
+        </div>
+        
+        {% elif classe_selectionnee and not matieres %}
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            Aucune matière trouvée pour cette classe. Veuillez d'abord configurer les matières.
+        </div>
+        {% elif classe_selectionnee and not eleves %}
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            Aucun élève trouvé pour cette classe.
+        </div>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            Sélectionnez une classe, un type de note et une période pour commencer la saisie intelligente.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const NOTE_MAX = {{ note_max|default:20|stringformat:"d" }};
+const CSRF_TOKEN = '{{ csrf_token }}';
+const TYPE_NOTE = '{{ type_note|escapejs }}';
+const PERIODE = '{{ periode|escapejs }}';
+
+// Validation d'une note
+function validateNote(input) {
+    const value = parseFloat(input.value);
+    
+    // Si une note est saisie, désactiver automatiquement le statut absent
+    if (input.value !== '' && input.value !== null && !isNaN(value)) {
+        input.classList.remove('absent');
+        delete input.dataset.absent;
+    }
+    
+    input.classList.remove('valid', 'invalid');
+    
+    if (input.value === '' || input.value === null) {
+        return;
+    }
+    
+    if (isNaN(value) || value < 0 || value > NOTE_MAX) {
+        input.classList.add('invalid');
+    } else {
+        input.classList.add('valid');
+    }
+    
+    updateStats();
+}
+
+// Réaction immédiate à la saisie d'une note (désactive absent en temps réel)
+function onNoteInput(input) {
+    if (input.value !== '') {
+        // Dès qu'un caractère est tapé, désactiver le statut absent
+        if (input.classList.contains('absent') || input.dataset.absent === 'true') {
+            input.classList.remove('absent');
+            delete input.dataset.absent;
+            updateStats();
+        }
+    }
+    validateNote(input);
+}
+
+// Navigation au clavier
+function handleKeyDown(event, input) {
+    const inputs = Array.from(document.querySelectorAll('.note-input'));
+    const currentIndex = inputs.indexOf(input);
+    const cols = {{ matieres|length|stringformat:"d" }};
+    
+    switch(event.key) {
+        case 'ArrowDown':
+        case 'Enter':
+            event.preventDefault();
+            if (currentIndex + cols < inputs.length) {
+                inputs[currentIndex + cols].focus();
+                inputs[currentIndex + cols].select();
+            }
+            break;
+        case 'ArrowUp':
+            event.preventDefault();
+            if (currentIndex - cols >= 0) {
+                inputs[currentIndex - cols].focus();
+                inputs[currentIndex - cols].select();
+            }
+            break;
+        case 'ArrowRight':
+            if (input.selectionStart === input.value.length) {
+                event.preventDefault();
+                if (currentIndex + 1 < inputs.length) {
+                    inputs[currentIndex + 1].focus();
+                    inputs[currentIndex + 1].select();
+                }
+            }
+            break;
+        case 'ArrowLeft':
+            if (input.selectionStart === 0) {
+                event.preventDefault();
+                if (currentIndex - 1 >= 0) {
+                    inputs[currentIndex - 1].focus();
+                    inputs[currentIndex - 1].select();
+                }
+            }
+            break;
+        case 'a':
+        case 'A':
+            // Marquer comme absent
+            if (event.ctrlKey || event.metaKey) {
+                event.preventDefault();
+                input.value = '';
+                input.classList.remove('valid', 'invalid');
+                input.classList.add('absent');
+                input.dataset.absent = 'true';
+                updateStats();
+            }
+            break;
+    }
+}
+
+// Mise à jour des statistiques
+function updateStats() {
+    const inputs = document.querySelectorAll('.note-input');
+    let saisies = 0;
+    let absents = 0;
+    
+    inputs.forEach(input => {
+        if (input.value !== '' && !input.classList.contains('absent')) {
+            saisies++;
+        }
+        if (input.classList.contains('absent') || input.dataset.absent === 'true') {
+            absents++;
+        }
+    });
+    
+    document.getElementById('notesSaisies').textContent = saisies;
+    document.getElementById('totalAbsents').textContent = absents;
+}
+
+// Sauvegarder toutes les notes
+async function sauvegarderToutesNotes() {
+    const btn = document.getElementById('saveBtn');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Enregistrement...';
+    
+    const notes = [];
+    const inputs = document.querySelectorAll('.note-input');
+    
+    inputs.forEach(input => {
+        const eleveId = input.dataset.eleveId;
+        const matiereId = input.dataset.matiereId;
+        const value = input.value.trim();
+        const isAbsent = input.classList.contains('absent') || input.dataset.absent === 'true';
+        
+        // N'envoyer que les notes avec une valeur numérique OU les absents
+        if (isAbsent) {
+            notes.push({
+                eleve_id: eleveId,
+                matiere_id: matiereId,
+                note: null,
+                absent: true
+            });
+        } else if (value !== '' && !isNaN(parseFloat(value))) {
+            notes.push({
+                eleve_id: eleveId,
+                matiere_id: matiereId,
+                note: parseFloat(value),
+                absent: false
+            });
+        }
+    });
+    
+    if (notes.length === 0) {
+        showToast('Aucune note à enregistrer', 'warning');
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        return;
+    }
+    
+    try {
+        const response = await fetch('{% url "notes:saisie_intelligente_save" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': CSRF_TOKEN
+            },
+            body: JSON.stringify({
+                type_note: TYPE_NOTE,
+                periode: PERIODE,
+                notes: notes
+            })
+        });
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Erreur serveur:', response.status, errorText);
+            showToast(`Erreur serveur (${response.status}). Vérifiez la console.`, 'error');
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+            return;
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            let msg = `${data.saved} note(s) enregistrée(s) avec succès!`;
+            if (data.created > 0) msg += ` (${data.created} nouvelle(s)`;
+            if (data.updated > 0) msg += data.created > 0 ? `, ${data.updated} mise(s) à jour` : ` (${data.updated} mise(s) à jour`;
+            if (data.absents > 0) msg += (data.created > 0 || data.updated > 0) ? `, ${data.absents} absent(s)` : ` (${data.absents} absent(s)`;
+            if (data.created > 0 || data.updated > 0 || data.absents > 0) msg += ')';
+            if (data.errors && data.errors.length > 0) {
+                showToast(msg, 'success');
+                setTimeout(() => showToast(`${data.errors.length} erreur(s) détectée(s)`, 'error'), 500);
+            } else {
+                showToast(msg, 'success');
+            }
+        } else {
+            showToast(data.error || 'Erreur lors de l\'enregistrement', 'error');
+        }
+    } catch (error) {
+        console.error('Erreur:', error);
+        showToast('Erreur de connexion au serveur', 'error');
+    }
+    
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+}
+
+// Afficher un toast
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    toast.className = `custom-toast ${type}`;
+    toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'times-circle' : 'exclamation-circle'} me-2"></i>${message}`;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.animation = 'slideIn 0.3s ease reverse';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Mise à jour des périodes selon le type de note
+function updatePeriodes() {
+    const typeNote = document.getElementById('typeNoteSelect').value;
+    const periodeSelect = document.getElementById('periodeSelect');
+    
+    let options = '<option value="">-- Sélectionner --</option>';
+    
+    if (typeNote === 'mensuelle') {
+        options += `
+            <option value="OCTOBRE">Octobre</option>
+            <option value="NOVEMBRE">Novembre</option>
+            <option value="DECEMBRE">Décembre</option>
+            <option value="JANVIER">Janvier</option>
+            <option value="FEVRIER">Février</option>
+            <option value="MARS">Mars</option>
+            <option value="AVRIL">Avril</option>
+            <option value="MAI">Mai</option>
+            <option value="JUIN">Juin</option>
+        `;
+    } else if (typeNote === 'composition') {
+        options += `
+            <option value="TRIMESTRE_1">1er Trimestre</option>
+            <option value="TRIMESTRE_2">2ème Trimestre</option>
+            <option value="TRIMESTRE_3">3ème Trimestre</option>
+            <option value="SEMESTRE_1">1er Semestre</option>
+            <option value="SEMESTRE_2">2ème Semestre</option>
+        `;
+    }
+    
+    periodeSelect.innerHTML = options;
+}
+
+// Charger les notes existantes au chargement de la page
+document.addEventListener('DOMContentLoaded', function() {
+    updateStats();
+    
+    {% if notes_existantes %}
+    // Pré-remplir les notes existantes
+    const notesExistantes = {{ notes_existantes|safe }};
+    notesExistantes.forEach(note => {
+        const input = document.querySelector(`input[data-eleve-id="${note.eleve_id}"][data-matiere-id="${note.matiere_id}"]`);
+        if (input) {
+            if (note.absent) {
+                input.classList.add('absent');
+                input.dataset.absent = 'true';
+            } else if (note.note !== null) {
+                input.value = note.note;
+                input.classList.add('valid');
+            }
+        }
+    });
+    updateStats();
+    {% endif %}
+});
+</script>
+{% endblock %}

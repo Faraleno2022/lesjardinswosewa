@@ -1,0 +1,161 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load notes_extras %}
+
+{% block title %}Saisie Bulletin Maternelle - {{ eleve.prenom }} {{ eleve.nom }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-child me-2"></i>
+                            Bulletin Maternelle - {{ eleve.prenom }} {{ eleve.nom }}
+                        </h5>
+                        <span class="badge bg-light text-primary">{{ trimestre_display }} - {{ classe_note.annee_scolaire }}</span>
+                    </div>
+                </div>
+                
+                <div class="card-body">
+                    <!-- Informations élève -->
+                    <div class="alert alert-info mb-4">
+                        <div class="row">
+                            <div class="col-md-4"><strong>Élève:</strong> {{ eleve.prenom }} {{ eleve.nom }}</div>
+                            <div class="col-md-4"><strong>Classe:</strong> {{ classe_note.nom }}</div>
+                            <div class="col-md-4"><strong>Matricule:</strong> {{ eleve.matricule }}</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Récapitulatif des appréciations -->
+                    <div class="mb-4">
+                        <h6 class="border-bottom pb-2 mb-3">
+                            <i class="fas fa-star me-2"></i>Appréciations par activité
+                        </h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Activité</th>
+                                        <th class="text-center">Lettre</th>
+                                        <th>Mention</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for matiere in matieres %}
+                                    <tr>
+                                        <td>{{ matiere.nom }}</td>
+                                        <td class="text-center">
+                                            {% with app=appreciations|get_item:matiere.id %}
+                                                {% if app %}
+                                                    <span class="badge 
+                                                        {% if app.appreciation == 'A+' %}bg-success
+                                                        {% elif app.appreciation == 'A' %}bg-primary
+                                                        {% elif app.appreciation == 'B+' %}bg-info
+                                                        {% elif app.appreciation == 'B' %}bg-secondary
+                                                        {% elif app.appreciation == 'B-' %}bg-warning text-dark
+                                                        {% elif app.appreciation == 'C' %}bg-orange
+                                                        {% else %}bg-danger{% endif %}">
+                                                        {{ app.appreciation }}
+                                                    </span>
+                                                {% else %}-{% endif %}
+                                            {% endwith %}
+                                        </td>
+                                        <td>
+                                            {% with app=appreciations|get_item:matiere.id %}
+                                                {% if app %}{{ app.get_appreciation_display }}{% else %}-{% endif %}
+                                            {% endwith %}
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="3" class="text-center text-muted">Aucune appréciation saisie</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <!-- Analyse du travail -->
+                        <div class="mb-4">
+                            <h6 class="border-bottom pb-2 mb-3 text-primary">
+                                <i class="fas fa-clipboard-check me-2"></i>Analyse du travail de l'enfant
+                            </h6>
+                            <div class="row">
+                                {% for key, label in analyses_choices %}
+                                <div class="col-md-6 mb-2">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="analyses" 
+                                               value="{{ key }}" id="analyse_{{ key }}"
+                                               {% if key in bulletin.analyses %}checked{% endif %}>
+                                        <label class="form-check-label" for="analyse_{{ key }}">
+                                            {{ label }}
+                                        </label>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        
+                        <!-- Recommandations -->
+                        <div class="mb-4">
+                            <h6 class="border-bottom pb-2 mb-3 text-success">
+                                <i class="fas fa-lightbulb me-2"></i>Recommandations de la coordinatrice
+                            </h6>
+                            <div class="row">
+                                {% for key, label in recommandations_choices %}
+                                <div class="col-md-6 mb-2">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="recommandations" 
+                                               value="{{ key }}" id="reco_{{ key }}"
+                                               {% if key in bulletin.recommandations %}checked{% endif %}>
+                                        <label class="form-check-label" for="reco_{{ key }}">
+                                            {{ label }}
+                                        </label>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        
+                        <!-- Appréciation générale -->
+                        <div class="mb-4">
+                            <h6 class="border-bottom pb-2 mb-3 text-info">
+                                <i class="fas fa-comment me-2"></i>Appréciation générale
+                            </h6>
+                            <textarea class="form-control" name="appreciation_generale" rows="3" 
+                                      placeholder="Commentaire général sur l'élève...">{{ bulletin.appreciation_generale|default:"" }}</textarea>
+                        </div>
+                        
+                        <!-- Boutons -->
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'notes:consulter_notes' %}?classe_id={{ classe_note.id }}&periode={{ trimestre }}" 
+                               class="btn btn-secondary">
+                                <i class="fas fa-arrow-left me-1"></i> Retour
+                            </a>
+                            <div>
+                                <button type="submit" name="sauvegarder" class="btn btn-primary me-2">
+                                    <i class="fas fa-save me-1"></i> Sauvegarder
+                                </button>
+                                <button type="submit" name="generer_pdf" class="btn btn-success">
+                                    <i class="fas fa-file-pdf me-1"></i> Sauvegarder et Générer PDF
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.bg-orange { background-color: #fd7e14 !important; color: white; }
+</style>
+{% endblock %}

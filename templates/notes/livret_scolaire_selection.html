@@ -1,0 +1,190 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Livrets Scolaires{% endblock %}
+
+{% block breadcrumb_items %}
+    <li class="breadcrumb-item"><a href="{% url 'notes:tableau_bord' %}">Notes</a></li>
+    <li class="breadcrumb-item active">Livrets Scolaires</li>
+{% endblock %}
+
+{% block page_actions %}
+    <a href="{% url 'notes:tableau_bord' %}" class="btn btn-outline-secondary">
+        <i class="fas fa-arrow-left me-1"></i>Retour
+    </a>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+
+    <!-- En-tête -->
+    <div class="card border-0 shadow-sm mb-4" style="background: linear-gradient(135deg, #1a1a2e, #16213e);">
+        <div class="card-body py-4 text-white d-flex align-items-center gap-3">
+            <div style="font-size:3rem;"><i class="fas fa-book-reader"></i></div>
+            <div>
+                <h2 class="mb-1 fw-bold">Livrets Scolaires</h2>
+                <p class="mb-0 opacity-75">
+                    Générez le livret scolaire complet d'un élève — parcours de la maternelle au lycée,
+                    notes, moyennes, classements et proposition d'orientation.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Sélection de la classe -->
+        <div class="col-lg-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-primary text-white">
+                    <i class="fas fa-school me-2"></i>1. Choisir une classe
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-3">
+                        Sélectionnez une classe pour voir ses élèves.
+                        {% if annee_active %}<br>Année active : <strong>{{ annee_active }}</strong>{% endif %}
+                    </p>
+
+                    <div class="list-group list-group-flush" style="max-height:400px; overflow-y:auto;">
+                        {% for cls in classes %}
+                        <a href="?classe_id={{ cls.id }}"
+                           class="list-group-item list-group-item-action d-flex justify-content-between align-items-center {% if classe_selected and classe_selected.id == cls.id %}active{% endif %}">
+                            <span>
+                                <i class="fas fa-chalkboard me-1"></i>{{ cls.nom }}
+                            </span>
+                            <span class="badge {% if classe_selected and classe_selected.id == cls.id %}bg-white text-primary{% else %}bg-secondary{% endif %}">
+                                {{ cls.get_niveau_display }}
+                            </span>
+                        </a>
+                        {% empty %}
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                            Aucune classe trouvée
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Liste des élèves -->
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <span>
+                        <i class="fas fa-users me-2"></i>2. Sélectionner un élève
+                        {% if classe_selected %}
+                        — <strong>{{ classe_selected.nom }}</strong>
+                        {% endif %}
+                    </span>
+                    {% if eleves %}
+                    <span class="badge bg-success">{{ eleves|length }} élève(s)</span>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    {% if classe_selected %}
+                        {% if eleves %}
+                        <div class="alert alert-info py-2 small mb-3">
+                            <i class="fas fa-info-circle me-1"></i>
+                            <strong>Complet</strong> : tout le parcours (maternelle -> terminale) |
+                            <strong>Annuel</strong> : uniquement l'année en cours.
+                        </div>
+
+                        <div class="table-responsive" style="max-height:450px; overflow-y:auto;">
+                            <table class="table table-hover table-sm mb-0">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>Matricule</th>
+                                        <th>Nom complet</th>
+                                        <th class="text-center">Sexe</th>
+                                        <th class="text-center">Date naissance</th>
+                                        <th class="text-center">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for eleve in eleves %}
+                                    <tr>
+                                        <td>
+                                            <span class="badge bg-secondary">{{ eleve.matricule }}</span>
+                                        </td>
+                                        <td class="fw-semibold">{{ eleve.nom }} {{ eleve.prenom }}</td>
+                                        <td class="text-center">
+                                            {% if eleve.sexe == 'M' %}
+                                                <i class="fas fa-mars text-primary"></i>
+                                            {% else %}
+                                                <i class="fas fa-venus text-danger"></i>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            {{ eleve.date_naissance|date:"d/m/Y"|default:"—" }}
+                                        </td>
+                                        <td class="text-center">
+                                            <div class="btn-group btn-group-sm" role="group">
+                                                <a href="{% url 'notes:livret_scolaire_pdf' eleve.id %}"
+                                                   class="btn btn-outline-primary"
+                                                   title="Livret complet (tout le parcours)">
+                                                    <i class="fas fa-book me-1"></i>Complet
+                                                </a>
+                                                <a href="{% url 'notes:livret_scolaire_annuel_pdf' eleve.id %}"
+                                                   class="btn btn-outline-success"
+                                                   title="Livret annuel (année en cours)">
+                                                    <i class="fas fa-file-pdf me-1"></i>Annuel
+                                                </a>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <div class="text-center text-muted py-5">
+                            <i class="fas fa-user-slash fa-3x mb-3 d-block"></i>
+                            <p>Aucun élève actif dans cette classe.</p>
+                        </div>
+                        {% endif %}
+                    {% else %}
+                    <div class="text-center text-muted py-5">
+                        <i class="fas fa-arrow-left fa-3x mb-3 d-block text-primary"></i>
+                        <h5>Sélectionnez une classe</h5>
+                        <p>Choisissez une classe dans la liste à gauche pour voir les élèves disponibles.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% if classe_selected and eleves %}
+            <!-- Format du livret -->
+            <div class="card shadow-sm mt-3">
+                <div class="card-header bg-info text-white">
+                    <i class="fas fa-info-circle me-2"></i>Format du livret scolaire
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <h6 class="fw-bold"><i class="fas fa-file-alt text-primary me-2"></i>Contenu</h6>
+                            <ul class="small mb-0">
+                                <li>Page de couverture (Ministère, école, élève)</li>
+                                <li>Notes par semestre/trimestre pour chaque classe</li>
+                                <li>Moyennes annuelles et classements</li>
+                                <li>Analyse par cycle (Maternelle, Primaire, Collège, Lycée)</li>
+                                <li>Proposition d'orientation automatique</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="fw-bold"><i class="fas fa-print text-success me-2"></i>Impression</h6>
+                            <ul class="small mb-0">
+                                <li><strong>Format :</strong> Paysage (Landscape A4)</li>
+                                <li><strong>Mise en page :</strong> 2 niveaux par page (gauche/droite)</li>
+                                <li><strong>Pages séquentielles</strong> sans saut de page</li>
+                                <li><strong>Pages numérotées</strong> automatiquement</li>
+                                <li>En-têtes officiels (IRE, DPE, DSEE)</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

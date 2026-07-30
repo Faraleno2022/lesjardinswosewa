@@ -1,0 +1,193 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Créer un comptable{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <h2 class="mb-3">Créer un comptable</h2>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      {% if form.ecole.field.queryset|length == 0 %}
+      <div class="alert alert-warning" role="alert">
+        <i class="fas fa-exclamation-triangle me-2"></i>
+        Aucune école n'est disponible. Créez d'abord une école dans l'administration.
+        <a class="alert-link ms-1" href="{% url 'admin:eleves_ecole_add' %}">Ajouter une école</a>
+      </div>
+      {% endif %}
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            {{ form.username.label_tag }} {{ form.username }}
+            {% for err in form.username.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+          </div>
+          <div class="col-md-6">
+            {{ form.email.label_tag }} {{ form.email }}
+            {% for err in form.email.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+          </div>
+          <div class="col-md-6">
+            {{ form.first_name.label_tag }} {{ form.first_name }}
+            {% for err in form.first_name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+          </div>
+          <div class="col-md-6">
+            {{ form.last_name.label_tag }} {{ form.last_name }}
+            {% for err in form.last_name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+          </div>
+          <div class="col-md-6">
+            {{ form.password1.label_tag }} {{ form.password1 }}
+            {% for err in form.password1.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+          </div>
+          <div class="col-md-6">
+            {{ form.password2.label_tag }} {{ form.password2 }}
+            {% for err in form.password2.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+          </div>
+          <div class="col-md-6">
+            {{ form.telephone.label_tag }} {{ form.telephone }}
+            {% for err in form.telephone.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+          </div>
+          <div class="col-12">
+            {{ form.ecole.label_tag }} {{ form.ecole }}
+            {% for err in form.ecole.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+          </div>
+        </div>
+
+        <hr/>
+        <h5>Permissions</h5>
+        <div class="row g-2">
+          <div class="col-md-6 form-check">{{ form.peut_valider_paiements }} {{ form.peut_valider_paiements.label_tag }}</div>
+          <div class="col-md-6 form-check">{{ form.peut_valider_depenses }} {{ form.peut_valider_depenses.label_tag }}</div>
+          <div class="col-md-6 form-check">{{ form.peut_generer_rapports }} {{ form.peut_generer_rapports.label_tag }}</div>
+          <div class="col-md-6 form-check">{{ form.peut_gerer_utilisateurs }} {{ form.peut_gerer_utilisateurs.label_tag }}</div>
+        </div>
+
+        <div class="col-12">
+          <h5 class="mt-4 mb-3"><i class="fas fa-shield-alt me-2"></i>Permissions Générales</h5>
+          <div class="row">
+            <div class="col-md-6">
+              <div class="form-check">
+                {{ form.peut_valider_paiements }}
+                {{ form.peut_valider_paiements.label_tag }}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check">
+                {{ form.peut_valider_depenses }}
+                {{ form.peut_valider_depenses.label_tag }}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check">
+                {{ form.peut_generer_rapports }}
+                {{ form.peut_generer_rapports.label_tag }}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check">
+                {{ form.peut_gerer_utilisateurs }}
+                {{ form.peut_gerer_utilisateurs.label_tag }}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <h5 class="mt-4 mb-3"><i class="fas fa-lock me-2"></i>Permissions Granulaires</h5>
+          <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            <strong>Important :</strong> Par défaut, les comptables ne peuvent PAS ajouter de paiements, dépenses ou enseignants pour des raisons de sécurité.
+          </div>
+          
+          <div class="row">
+            <div class="col-12">
+              <h6 class="text-primary"><i class="fas fa-plus-circle me-2"></i>Permissions d'Ajout</h6>
+            </div>
+            <div class="col-md-4">
+              <div class="form-check">
+                {{ form.peut_ajouter_paiements }}
+                {{ form.peut_ajouter_paiements.label_tag }}
+                <small class="form-text text-muted">{{ form.peut_ajouter_paiements.help_text }}</small>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="form-check">
+                {{ form.peut_ajouter_depenses }}
+                {{ form.peut_ajouter_depenses.label_tag }}
+                <small class="form-text text-muted">{{ form.peut_ajouter_depenses.help_text }}</small>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="form-check">
+                {{ form.peut_ajouter_enseignants }}
+                {{ form.peut_ajouter_enseignants.label_tag }}
+                <small class="form-text text-muted">{{ form.peut_ajouter_enseignants.help_text }}</small>
+              </div>
+            </div>
+            
+            <div class="col-12 mt-3">
+              <h6 class="text-warning"><i class="fas fa-edit me-2"></i>Permissions de Modification</h6>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check">
+                {{ form.peut_modifier_paiements }}
+                {{ form.peut_modifier_paiements.label_tag }}
+                <small class="form-text text-muted">{{ form.peut_modifier_paiements.help_text }}</small>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check">
+                {{ form.peut_modifier_depenses }}
+                {{ form.peut_modifier_depenses.label_tag }}
+                <small class="form-text text-muted">{{ form.peut_modifier_depenses.help_text }}</small>
+              </div>
+            </div>
+            
+            <div class="col-12 mt-3">
+              <h6 class="text-danger"><i class="fas fa-trash me-2"></i>Permissions de Suppression</h6>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check">
+                {{ form.peut_supprimer_paiements }}
+                {{ form.peut_supprimer_paiements.label_tag }}
+                <small class="form-text text-muted">{{ form.peut_supprimer_paiements.help_text }}</small>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check">
+                {{ form.peut_supprimer_depenses }}
+                {{ form.peut_supprimer_depenses.label_tag }}
+                <small class="form-text text-muted">{{ form.peut_supprimer_depenses.help_text }}</small>
+              </div>
+            </div>
+            
+            <div class="col-12 mt-3">
+              <h6 class="text-success"><i class="fas fa-chart-bar me-2"></i>Permissions de Consultation</h6>
+            </div>
+            <div class="col-md-6">
+              <div class="form-check">
+                {{ form.peut_consulter_rapports }}
+                {{ form.peut_consulter_rapports.label_tag }}
+                <small class="form-text text-muted">{{ form.peut_consulter_rapports.help_text }}</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <button type="submit" class="btn btn-primary">Créer</button>
+          <a href="{% url 'home' %}" class="btn btn-secondary">Annuler</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

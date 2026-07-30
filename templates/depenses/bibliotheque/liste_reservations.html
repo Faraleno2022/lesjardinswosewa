@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-bookmark text-warning"></i> {{ titre_page }}</h2>
+                    <p class="text-muted">Gestion des réservations de livres</p>
+                </div>
+                <div>
+                    <a href="{% url 'depenses:dashboard_bibliotheque' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Liste des réservations -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>N° Réservation</th>
+                            <th>Livre</th>
+                            <th>Élève</th>
+                            <th>Classe</th>
+                            <th>Date Réservation</th>
+                            <th>Date Expiration</th>
+                            <th>Statut</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for res in reservations %}
+                        <tr>
+                            <td><strong>{{ res.numero_reservation }}</strong></td>
+                            <td>{{ res.livre.titre|truncatewords:5 }}</td>
+                            <td>{{ res.eleve.nom }} {{ res.eleve.prenom }}</td>
+                            <td>{{ res.eleve.classe.nom|default:"-" }}</td>
+                            <td>{{ res.date_reservation|date:"d/m/Y H:i" }}</td>
+                            <td>{{ res.date_expiration|date:"d/m/Y H:i" }}</td>
+                            <td>
+                                <span class="badge 
+                                    {% if res.statut == 'EN_ATTENTE' %}bg-warning
+                                    {% elif res.statut == 'DISPONIBLE' %}bg-success
+                                    {% elif res.statut == 'EMPRUNTEE' %}bg-primary
+                                    {% elif res.statut == 'ANNULEE' %}bg-danger
+                                    {% else %}bg-secondary{% endif %}">
+                                    {{ res.get_statut_display }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if res.statut == 'DISPONIBLE' %}
+                                <a href="{% url 'depenses:creer_emprunt' %}?livre={{ res.livre.id }}&eleve={{ res.eleve.id }}" 
+                                   class="btn btn-sm btn-success">
+                                    <i class="fas fa-hand-holding-heart"></i> Emprunter
+                                </a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center py-4">
+                                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                                <p class="text-muted">Aucune réservation trouvée</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

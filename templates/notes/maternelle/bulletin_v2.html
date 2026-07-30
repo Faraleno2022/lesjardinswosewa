@@ -1,0 +1,289 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Bulletin Maternelle - {{ eleve.prenom }} {{ eleve.nom }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="card shadow">
+        <!-- En-tête -->
+        <div class="card-header bg-primary text-white">
+            <div class="row align-items-center">
+                <div class="col-auto">
+                    {% if ecole.logo %}
+                    <img src="{{ ecole.logo.url }}" alt="Logo" style="height: 60px;">
+                    {% endif %}
+                </div>
+                <div class="col text-center">
+                    <h4 class="mb-0">{{ ecole.nom }}</h4>
+                    <p class="mb-0">BULLETIN SCOLAIRE - MATERNELLE</p>
+                    <small>{{ trimestre_display }} - Année {{ classe.annee_scolaire }}</small>
+                </div>
+                <div class="col-auto">
+                    <a href="{% url 'notes:bulletin_maternelle_v2_pdf' eleve_id=eleve.id classe_id=classe.id trimestre=trimestre %}" 
+                       class="btn btn-light btn-sm" target="_blank">
+                        <i class="fas fa-file-pdf me-1"></i>PDF
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card-body">
+            <!-- Informations élève -->
+            <div class="alert alert-info mb-4">
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Nom & Prénom:</strong> {{ eleve.nom }} {{ eleve.prenom }}
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Matricule:</strong> {{ eleve.matricule }}
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Classe:</strong> {{ classe.nom }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Barème -->
+            <div class="alert alert-secondary mb-4">
+                <strong>Barème:</strong>
+                <span class="badge bg-success me-1">A+ Excellent (10)</span>
+                <span class="badge bg-primary me-1">A Très bien (9,5)</span>
+                <span class="badge bg-info me-1">B+ Bien (8-9)</span>
+                <span class="badge bg-secondary me-1">B Assez bien (7)</span>
+                <span class="badge bg-warning text-dark me-1">B- Moyen (6)</span>
+                <span class="badge" style="background:#fd7e14">C Passable (5-5,75)</span>
+                <span class="badge bg-danger">D Difficultés (3-4)</span>
+            </div>
+            
+            <!-- Tableau des notes -->
+            <h5 class="mb-3"><i class="fas fa-star me-2"></i>Résultats par activité</h5>
+            <div class="table-responsive mb-4">
+                <table class="table table-bordered">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width:35%">Activité</th>
+                            <th class="text-center" style="width:9%">A+</th>
+                            <th class="text-center" style="width:9%">A</th>
+                            <th class="text-center" style="width:9%">B+</th>
+                            <th class="text-center" style="width:9%">B</th>
+                            <th class="text-center" style="width:9%">B-</th>
+                            <th class="text-center" style="width:9%">C</th>
+                            <th class="text-center" style="width:9%">D</th>
+                        </tr>
+                        <tr>
+                            <th></th>
+                            <th class="text-center" style="font-size:0.6rem;color:#ccc;">Excellent</th>
+                            <th class="text-center" style="font-size:0.6rem;color:#ccc;">Très bien</th>
+                            <th class="text-center" style="font-size:0.6rem;color:#ccc;">Bien</th>
+                            <th class="text-center" style="font-size:0.6rem;color:#ccc;">Assez bien</th>
+                            <th class="text-center" style="font-size:0.6rem;color:#ccc;">Moyen</th>
+                            <th class="text-center" style="font-size:0.6rem;color:#ccc;">Passable</th>
+                            <th class="text-center" style="font-size:0.6rem;color:#ccc;">Difficultés</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for note in notes %}
+                        <tr>
+                            <td>{{ note.matiere.nom }}</td>
+                            <td class="text-center">
+                                {% if note.absent %}
+                                    <span class="badge bg-secondary">ABS</span>
+                                {% elif note.lettre == 'A+' %}
+                                    <span style="display:inline-block;width:14px;height:14px;border:2px solid #28a745;background:#28a745;border-radius:2px;"></span>
+                                {% else %}
+                                    <span style="display:inline-block;width:14px;height:14px;border:1px solid #ddd;border-radius:2px;"></span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if note.absent %}
+                                    <span class="badge bg-secondary">ABS</span>
+                                {% elif note.lettre == 'A' %}
+                                    <span style="display:inline-block;width:14px;height:14px;border:2px solid #17a2b8;background:#17a2b8;border-radius:2px;"></span>
+                                {% else %}
+                                    <span style="display:inline-block;width:14px;height:14px;border:1px solid #ddd;border-radius:2px;"></span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if note.absent %}
+                                    <span class="badge bg-secondary">ABS</span>
+                                {% elif note.lettre == 'B+' %}
+                                    <span style="display:inline-block;width:14px;height:14px;border:2px solid #007bff;background:#007bff;border-radius:2px;"></span>
+                                {% else %}
+                                    <span style="display:inline-block;width:14px;height:14px;border:1px solid #ddd;border-radius:2px;"></span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if note.absent %}
+                                    <span class="badge bg-secondary">ABS</span>
+                                {% elif note.lettre == 'B' %}
+                                    <span style="display:inline-block;width:14px;height:14px;border:2px solid #6c757d;background:#6c757d;border-radius:2px;"></span>
+                                {% else %}
+                                    <span style="display:inline-block;width:14px;height:14px;border:1px solid #ddd;border-radius:2px;"></span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if note.absent %}
+                                    <span class="badge bg-secondary">ABS</span>
+                                {% elif note.lettre == 'B-' %}
+                                    <span style="display:inline-block;width:14px;height:14px;border:2px solid #ffc107;background:#ffc107;border-radius:2px;"></span>
+                                {% else %}
+                                    <span style="display:inline-block;width:14px;height:14px;border:1px solid #ddd;border-radius:2px;"></span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if note.absent %}
+                                    <span class="badge bg-secondary">ABS</span>
+                                {% elif note.lettre == 'C' %}
+                                    <span style="display:inline-block;width:14px;height:14px;border:2px solid #fd7e14;background:#fd7e14;border-radius:2px;"></span>
+                                {% else %}
+                                    <span style="display:inline-block;width:14px;height:14px;border:1px solid #ddd;border-radius:2px;"></span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if note.absent %}
+                                    <span class="badge bg-secondary">ABS</span>
+                                {% elif note.lettre == 'D' %}
+                                    <span style="display:inline-block;width:14px;height:14px;border:2px solid #dc3545;background:#dc3545;border-radius:2px;"></span>
+                                {% else %}
+                                    <span style="display:inline-block;width:14px;height:14px;border:1px solid #ddd;border-radius:2px;"></span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center text-muted">Aucune appréciation saisie</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="table-secondary">
+                        <tr>
+                            <th>APPRÉCIATION GÉNÉRALE</th>
+                            <th class="text-center">
+                                {% if lettre_generale == 'A+' %}
+                                <span style="display:inline-block;width:14px;height:14px;border:2px solid #28a745;background:#28a745;border-radius:2px;"></span>
+                                {% else %}
+                                <span style="display:inline-block;width:14px;height:14px;border:1px solid #ddd;border-radius:2px;"></span>
+                                {% endif %}
+                            </th>
+                            <th class="text-center">
+                                {% if lettre_generale == 'A' %}
+                                <span style="display:inline-block;width:14px;height:14px;border:2px solid #17a2b8;background:#17a2b8;border-radius:2px;"></span>
+                                {% else %}
+                                <span style="display:inline-block;width:14px;height:14px;border:1px solid #ddd;border-radius:2px;"></span>
+                                {% endif %}
+                            </th>
+                            <th class="text-center">
+                                {% if lettre_generale == 'B+' %}
+                                <span style="display:inline-block;width:14px;height:14px;border:2px solid #007bff;background:#007bff;border-radius:2px;"></span>
+                                {% else %}
+                                <span style="display:inline-block;width:14px;height:14px;border:1px solid #ddd;border-radius:2px;"></span>
+                                {% endif %}
+                            </th>
+                            <th class="text-center">
+                                {% if lettre_generale == 'B' %}
+                                <span style="display:inline-block;width:14px;height:14px;border:2px solid #6c757d;background:#6c757d;border-radius:2px;"></span>
+                                {% else %}
+                                <span style="display:inline-block;width:14px;height:14px;border:1px solid #ddd;border-radius:2px;"></span>
+                                {% endif %}
+                            </th>
+                            <th class="text-center">
+                                {% if lettre_generale == 'B-' %}
+                                <span style="display:inline-block;width:14px;height:14px;border:2px solid #ffc107;background:#ffc107;border-radius:2px;"></span>
+                                {% else %}
+                                <span style="display:inline-block;width:14px;height:14px;border:1px solid #ddd;border-radius:2px;"></span>
+                                {% endif %}
+                            </th>
+                            <th class="text-center">
+                                {% if lettre_generale == 'C' %}
+                                <span style="display:inline-block;width:14px;height:14px;border:2px solid #fd7e14;background:#fd7e14;border-radius:2px;"></span>
+                                {% else %}
+                                <span style="display:inline-block;width:14px;height:14px;border:1px solid #ddd;border-radius:2px;"></span>
+                                {% endif %}
+                            </th>
+                            <th class="text-center">
+                                {% if lettre_generale == 'D' %}
+                                <span style="display:inline-block;width:14px;height:14px;border:2px solid #dc3545;background:#dc3545;border-radius:2px;"></span>
+                                {% else %}
+                                <span style="display:inline-block;width:14px;height:14px;border:1px solid #ddd;border-radius:2px;"></span>
+                                {% endif %}
+                            </th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            
+            <!-- Résultat général -->
+            {% if moyenne %}
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted">Acquisition</h6>
+                            <h3 class="text-primary">{{ moyenne }}%</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted">Mention</h6>
+                            <h3 class="text-success">{{ mention_generale|default:"-" }}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Analyses du travail -->
+            {% if analyses_selectionnees %}
+            <div class="mb-4">
+                <h5 class="text-primary"><i class="fas fa-clipboard-check me-2"></i>Analyse du travail de l'enfant</h5>
+                <ul class="list-group">
+                    {% for item in analyses_selectionnees %}
+                    <li class="list-group-item"><i class="fas fa-check text-success me-2"></i>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            
+            <!-- Recommandations -->
+            {% if recommandations_selectionnees %}
+            <div class="mb-4">
+                <h5 class="text-success"><i class="fas fa-lightbulb me-2"></i>Recommandations de la coordinatrice</h5>
+                <ul class="list-group">
+                    {% for item in recommandations_selectionnees %}
+                    <li class="list-group-item"><i class="fas fa-arrow-right text-warning me-2"></i>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            
+            <!-- Appréciation générale -->
+            {% if bulletin.appreciation_generale %}
+            <div class="mb-4">
+                <h5 class="text-info"><i class="fas fa-comment me-2"></i>Appréciation générale</h5>
+                <div class="alert alert-light border">
+                    {{ bulletin.appreciation_generale }}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="card-footer">
+            <div class="d-flex justify-content-between">
+                <a href="{% url 'notes:consulter_notes' %}?classe_id={{ classe.id }}&periode={{ trimestre }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left me-1"></i>Retour
+                </a>
+                <a href="{% url 'notes:saisie_bulletin_maternelle' eleve_id=eleve.id classe_id=classe.id trimestre=trimestre %}" class="btn btn-primary">
+                    <i class="fas fa-edit me-1"></i>Modifier
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.bg-orange { background-color: #fd7e14 !important; color: white; }
+</style>
+{% endblock %}

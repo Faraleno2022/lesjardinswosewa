@@ -1,0 +1,335 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-utensils text-success"></i> {{ titre_page }}</h2>
+                    <p class="text-muted">Gestion des abonnements à la cantine scolaire avec alertes</p>
+                </div>
+                <div>
+                    <a href="{% url 'bus:creer_abonnement_cantine' %}" class="btn btn-success">
+                        <i class="fas fa-plus"></i> Nouvel Abonnement
+                    </a>
+                    <a href="{% url 'bus:liste_abonnements_cantine' %}" class="btn btn-primary">
+                        <i class="fas fa-list"></i> Liste Complète
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistiques Générales -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-0">Total Abonnements</h6>
+                            <h2 class="mb-0">{{ total }}</h2>
+                        </div>
+                        <div>
+                            <i class="fas fa-users fa-3x opacity-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-0">Actifs</h6>
+                            <h2 class="mb-0">{{ actifs }}</h2>
+                        </div>
+                        <div>
+                            <i class="fas fa-check-circle fa-3x opacity-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-0">Expirés</h6>
+                            <h2 class="mb-0">{{ expires }}</h2>
+                        </div>
+                        <div>
+                            <i class="fas fa-exclamation-triangle fa-3x opacity-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="card-title mb-0">Suspendus</h6>
+                            <h2 class="mb-0">{{ suspendus }}</h2>
+                        </div>
+                        <div>
+                            <i class="fas fa-pause-circle fa-3x opacity-50"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alertes Critiques -->
+    {% if nb_critiques > 0 %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="alert alert-danger border-danger">
+                <h5 class="alert-heading">
+                    <i class="fas fa-exclamation-circle"></i> 
+                    Alertes Critiques ({{ nb_critiques }})
+                </h5>
+                <p class="mb-2">Les abonnements suivants expirent dans 3 jours ou moins :</p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Élève</th>
+                                <th>Classe</th>
+                                <th>Type Repas</th>
+                                <th>Date Expiration</th>
+                                <th>Jours Restants</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for abo in abonnements_critiques %}
+                            <tr>
+                                <td><strong>{{ abo.eleve }}</strong></td>
+                                <td>{{ abo.eleve.classe.nom|default:"-" }}</td>
+                                <td>
+                                    <span class="badge badge-info">{{ abo.get_type_repas_display }}</span>
+                                </td>
+                                <td>{{ abo.date_expiration|date:"d/m/Y" }}</td>
+                                <td>
+                                    <span class="badge badge-danger">
+                                        <i class="fas fa-clock"></i> {{ abo.jours_restants }} jour{{ abo.jours_restants|pluralize }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="{% url 'bus:modifier_abonnement_cantine' abo.id %}" 
+                                       class="btn btn-sm btn-warning" title="Renouveler">
+                                        <i class="fas fa-sync"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Alertes Expirés -->
+    {% if nb_expires > 0 %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="alert alert-warning border-warning">
+                <h5 class="alert-heading">
+                    <i class="fas fa-calendar-times"></i> 
+                    Abonnements Expirés ({{ nb_expires }})
+                </h5>
+                <p class="mb-2">Ces abonnements sont expirés mais toujours marqués comme actifs :</p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Élève</th>
+                                <th>Classe</th>
+                                <th>Type Repas</th>
+                                <th>Date Expiration</th>
+                                <th>Contact</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for abo in abonnements_expires|slice:":10" %}
+                            <tr>
+                                <td><strong>{{ abo.eleve }}</strong></td>
+                                <td>{{ abo.eleve.classe.nom|default:"-" }}</td>
+                                <td>
+                                    <span class="badge badge-info">{{ abo.get_type_repas_display }}</span>
+                                </td>
+                                <td class="text-danger">{{ abo.date_expiration|date:"d/m/Y" }}</td>
+                                <td>{{ abo.contact_parent|default:"-" }}</td>
+                                <td>
+                                    <a href="{% url 'bus:modifier_abonnement_cantine' abo.id %}" 
+                                       class="btn btn-sm btn-primary" title="Modifier">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if nb_expires > 10 %}
+                <p class="mt-2 mb-0">
+                    <a href="{% url 'bus:liste_abonnements_cantine' %}?filtre=expire" class="btn btn-sm btn-warning">
+                        Voir tous les {{ nb_expires }} abonnements expirés
+                    </a>
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Alertes Proche Expiration -->
+    {% if nb_proche_expiration > 0 %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="alert alert-info border-info">
+                <h5 class="alert-heading">
+                    <i class="fas fa-bell"></i> 
+                    Proche de l'Expiration ({{ nb_proche_expiration }})
+                </h5>
+                <p class="mb-2">Ces abonnements expirent dans les 7 prochains jours :</p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Élève</th>
+                                <th>Classe</th>
+                                <th>Type Repas</th>
+                                <th>Date Expiration</th>
+                                <th>Jours Restants</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for abo in abonnements_proche_expiration|slice:":10" %}
+                            <tr>
+                                <td><strong>{{ abo.eleve }}</strong></td>
+                                <td>{{ abo.eleve.classe.nom|default:"-" }}</td>
+                                <td>
+                                    <span class="badge badge-info">{{ abo.get_type_repas_display }}</span>
+                                </td>
+                                <td>{{ abo.date_expiration|date:"d/m/Y" }}</td>
+                                <td>
+                                    <span class="badge badge-warning">
+                                        <i class="fas fa-clock"></i> {{ abo.jours_restants }} jour{{ abo.jours_restants|pluralize }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="{% url 'bus:modifier_abonnement_cantine' abo.id %}" 
+                                       class="btn btn-sm btn-primary" title="Renouveler">
+                                        <i class="fas fa-sync"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if nb_proche_expiration > 10 %}
+                <p class="mt-2 mb-0">
+                    <a href="{% url 'bus:liste_abonnements_cantine' %}?filtre=proche_expiration" class="btn btn-sm btn-info">
+                        Voir tous les {{ nb_proche_expiration }} abonnements
+                    </a>
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Statistiques par Type de Repas -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="fas fa-sun fa-3x text-warning mb-3"></i>
+                    <h5>Déjeuner</h5>
+                    <h2 class="text-primary">{{ stats_type_repas.dejeuner }}</h2>
+                    <p class="text-muted mb-0">abonnements actifs</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="fas fa-cookie-bite fa-3x text-info mb-3"></i>
+                    <h5>Goûter</h5>
+                    <h2 class="text-primary">{{ stats_type_repas.gouter }}</h2>
+                    <p class="text-muted mb-0">abonnements actifs</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="fas fa-utensils fa-3x text-success mb-3"></i>
+                    <h5>Complet (Déjeuner + Goûter)</h5>
+                    <h2 class="text-primary">{{ stats_type_repas.complet }}</h2>
+                    <p class="text-muted mb-0">abonnements actifs</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Revenus Estimés -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card bg-light">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="fas fa-money-bill-wave text-success"></i> 
+                        Revenus Mensuels Estimés
+                    </h5>
+                    <h2 class="text-success">{{ revenus_mensuel|intcomma }} GNF</h2>
+                    <p class="text-muted mb-0">Basé sur les abonnements mensuels actifs</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card bg-light">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="fas fa-chart-line text-primary"></i> 
+                        Actions Rapides
+                    </h5>
+                    <div class="btn-group-vertical w-100">
+                        <a href="{% url 'bus:liste_abonnements_cantine' %}?filtre=critique" class="btn btn-danger btn-sm">
+                            <i class="fas fa-exclamation-triangle"></i> Voir Critiques ({{ nb_critiques }})
+                        </a>
+                        <a href="{% url 'bus:liste_abonnements_cantine' %}?filtre=proche_expiration" class="btn btn-warning btn-sm">
+                            <i class="fas fa-bell"></i> Voir Proche Expiration ({{ nb_proche_expiration }})
+                        </a>
+                        <a href="{% url 'bus:export_cantine_excel' %}" class="btn btn-success btn-sm">
+                            <i class="fas fa-file-excel"></i> Exporter en Excel
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.opacity-50 {
+    opacity: 0.5;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="row justify-content-center">
+    <div class="col-md-6">
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+          <h5 class="mb-0">Vérification du numéro de téléphone</h5>
+        </div>
+        <div class="card-body">
+          {% if messages %}
+            {% for message in messages %}
+              <div class="alert alert-{{ message.tags }}" role="alert">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+
+          <p class="mb-3">
+            Pour renforcer la sécurité, veuillez confirmer votre numéro de téléphone enregistré.
+          </p>
+          <p>
+            Numéro attendu: <strong>{{ telephone_masque }}</strong>
+          </p>
+
+          <form method="post" novalidate>
+            {% csrf_token %}
+            {% if next %}
+              <input type="hidden" name="next" value="{{ next }}" />
+            {% endif %}
+            <div class="mb-3">
+              <label for="id_telephone" class="form-label">Numéro de téléphone</label>
+              <input type="text" class="form-control" id="id_telephone" name="telephone" placeholder="+224XXXXXXXXX" required>
+              <div class="form-text">Entrez le numéro exactement tel qu'enregistré.</div>
+            </div>
+            <div class="d-grid">
+              <button type="submit" class="btn btn-primary">Valider</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <div class="text-center mt-3">
+        <a class="btn btn-link" href="{% url 'utilisateurs:logout' %}">Se déconnecter</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

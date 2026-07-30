@@ -1,0 +1,339 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Gestion des Notes{% endblock %}
+
+{% block extra_css %}
+<style>
+    .notes-dashboard {
+        padding: 2rem 0;
+    }
+    
+    .notes-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+        height: 100%;
+        border: 2px solid transparent;
+        cursor: pointer;
+        text-decoration: none;
+        display: block;
+    }
+    
+    .notes-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        border-color: #007bff;
+    }
+    
+    .notes-card-icon {
+        font-size: 3.5rem;
+        margin-bottom: 1.5rem;
+        display: block;
+    }
+    
+    .notes-card-title {
+        font-size: 1.3rem;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 0.5rem;
+    }
+    
+    .notes-card-description {
+        color: #666;
+        font-size: 0.95rem;
+        margin: 0;
+    }
+    
+    .notes-card.primary { border-left: 5px solid #007bff; }
+    .notes-card.primary:hover { background: linear-gradient(135deg, #e7f1ff 0%, #ffffff 100%); }
+    .notes-card.primary .notes-card-icon { color: #007bff; }
+    
+    .notes-card.success { border-left: 5px solid #28a745; }
+    .notes-card.success:hover { background: linear-gradient(135deg, #e3eaf2 0%, #ffffff 100%); }
+    .notes-card.success .notes-card-icon { color: #28a745; }
+    
+    .notes-card.info { border-left: 5px solid #17a2b8; }
+    .notes-card.info:hover { background: linear-gradient(135deg, #e8edf3 0%, #ffffff 100%); }
+    .notes-card.info .notes-card-icon { color: #17a2b8; }
+    
+    .notes-card.warning { border-left: 5px solid #ffc107; }
+    .notes-card.warning:hover { background: linear-gradient(135deg, #e7f1ff 0%, #ffffff 100%); }
+    .notes-card.warning .notes-card-icon { color: #ffc107; }
+    
+    .notes-card.danger { border-left: 5px solid #003d82; }
+    .notes-card.danger:hover { background: linear-gradient(135deg, #e6eef7 0%, #ffffff 100%); }
+    .notes-card.danger .notes-card-icon { color: #003d82; }
+    
+    .notes-card.purple { border-left: 5px solid #1a1a2e; }
+    .notes-card.purple:hover { background: linear-gradient(135deg, #e8e8ec 0%, #ffffff 100%); }
+    .notes-card.purple .notes-card-icon { color: #1a1a2e; }
+    
+    .notes-card.orange { border-left: 5px solid #ff9800; }
+    .notes-card.orange:hover { background: linear-gradient(135deg, #fff3e0 0%, #ffffff 100%); }
+    .notes-card.orange .notes-card-icon { color: #ff9800; }
+    
+    .notes-card.magic { border-left: 5px solid #9b59b6; }
+    .notes-card.magic:hover { background: linear-gradient(135deg, #f5eef8 0%, #ffffff 100%); }
+    .notes-card.magic .notes-card-icon { color: #9b59b6; }
+    
+    .notes-card.rose { border-left: 5px solid #e91e63; }
+    .notes-card.rose:hover { background: linear-gradient(135deg, #fce4ec 0%, #ffffff 100%); }
+    .notes-card.rose .notes-card-icon { color: #e91e63; }
+    
+    .page-header {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+        box-shadow: 0 5px 20px rgba(0, 123, 255, 0.3);
+    }
+    
+    .page-header h1 {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 700;
+    }
+    
+    .page-header p {
+        margin: 0.5rem 0 0 0;
+        opacity: 0.9;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid notes-dashboard">
+    <!-- En-tête -->
+    <div class="page-header">
+        <h1><i class="fas fa-book me-3"></i>Gestion des Notes</h1>
+        <p>Choisissez une option pour gérer les notes et les résultats scolaires</p>
+    </div>
+
+    <!-- Grille de boutons -->
+    <div class="row g-4">
+        <!-- Gérer les Classes -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'notes:gerer_classes' %}" class="notes-card primary">
+                <i class="fas fa-school notes-card-icon"></i>
+                <h3 class="notes-card-title">Gérer les Classes</h3>
+                <p class="notes-card-description">
+                    Créer, modifier et organiser les classes de l'établissement
+                </p>
+            </a>
+        </div>
+
+        <!-- Gérer les Matières -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'notes:gerer_matieres' %}" class="notes-card success">
+                <i class="fas fa-book-open notes-card-icon"></i>
+                <h3 class="notes-card-title">Gérer les Matières</h3>
+                <p class="notes-card-description">
+                    Définir les matières et leurs coefficients par classe
+                </p>
+            </a>
+        </div>
+
+        <!-- Gérer les Élèves -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'notes:gerer_eleves' %}" class="notes-card info">
+                <i class="fas fa-user-graduate notes-card-icon"></i>
+                <h3 class="notes-card-title">Gérer les Élèves</h3>
+                <p class="notes-card-description">
+                    Consulter et gérer les informations des élèves
+                </p>
+            </a>
+        </div>
+
+        <!-- Saisir les Notes -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'notes:saisir_notes' %}" class="notes-card warning">
+                <i class="fas fa-edit notes-card-icon"></i>
+                <h3 class="notes-card-title">Saisir les Notes</h3>
+                <p class="notes-card-description">
+                    Enregistrer les notes des évaluations et examens
+                </p>
+            </a>
+        </div>
+
+        <!-- Evaluations -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'notes:gerer_evaluations' %}" class="notes-card primary">
+                <i class="fas fa-clipboard-check notes-card-icon"></i>
+                <h3 class="notes-card-title">Evaluations</h3>
+                <p class="notes-card-description">
+                    Creer les devoirs, compositions et examens avant la saisie des notes
+                </p>
+            </a>
+        </div>
+
+        <!-- Consulter les Notes -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'notes:consulter_notes' %}" class="notes-card success">
+                <i class="fas fa-eye notes-card-icon"></i>
+                <h3 class="notes-card-title">Consulter les Notes</h3>
+                <p class="notes-card-description">
+                    Voir les notes par classe avec statistiques
+                </p>
+            </a>
+        </div>
+
+        <!-- Générer les Bulletins -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'notes:generer_bulletins' %}" class="notes-card danger">
+                <i class="fas fa-file-alt notes-card-icon"></i>
+                <h3 class="notes-card-title">Générer Bulletins</h3>
+                <p class="notes-card-description">
+                    Créer et imprimer les bulletins de notes
+                </p>
+            </a>
+        </div>
+
+        <!-- Statistiques -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'notes:statistiques' %}" class="notes-card purple">
+                <i class="fas fa-chart-bar notes-card-icon"></i>
+                <h3 class="notes-card-title">Statistiques</h3>
+                <p class="notes-card-description">
+                    Consulter les statistiques et analyses de performance
+                </p>
+            </a>
+        </div>
+
+        <!-- Maternelle -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'notes:saisie_evaluation_maternelle' %}" class="notes-card info">
+                <i class="fas fa-child notes-card-icon"></i>
+                <h3 class="notes-card-title">Maternelle</h3>
+                <p class="notes-card-description">
+                    Saisir les appreciations et generer les bulletins de maternelle
+                </p>
+            </a>
+        </div>
+
+        <!-- Importer des Notes -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'notes:importer_notes' %}" class="notes-card orange">
+                <i class="fas fa-file-upload notes-card-icon"></i>
+                <h3 class="notes-card-title">Importer des Notes</h3>
+                <p class="notes-card-description">
+                    Importer rapidement des notes depuis Excel ou CSV
+                </p>
+            </a>
+        </div>
+
+        <!-- Importation Intelligente -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'notes:import_intelligent' %}" class="notes-card magic">
+                <i class="fas fa-magic notes-card-icon"></i>
+                <h3 class="notes-card-title">Importation Intelligente</h3>
+                <p class="notes-card-description">
+                    Importer toutes les matières d'une classe en une seule fois
+                </p>
+            </a>
+        </div>
+
+        <!-- Saisie Intelligente -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'notes:saisie_intelligente' %}" class="notes-card magic">
+                <i class="fas fa-th notes-card-icon"></i>
+                <h3 class="notes-card-title">Saisie Intelligente</h3>
+                <p class="notes-card-description">
+                    Saisir les notes de toutes les matières en une seule page
+                </p>
+            </a>
+        </div>
+
+        <!-- Tableau d'Honneur -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'notes:tableau_honneur' %}" class="notes-card warning">
+                <i class="fas fa-trophy notes-card-icon"></i>
+                <h3 class="notes-card-title">Tableau d'Honneur</h3>
+                <p class="notes-card-description">
+                    Afficher et télécharger le tableau d'honneur des premiers de chaque classe
+                </p>
+            </a>
+        </div>
+
+        <!-- Livrets Scolaires -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'notes:livret_scolaire' %}" class="notes-card danger">
+                <i class="fas fa-book-reader notes-card-icon"></i>
+                <h3 class="notes-card-title">Livrets Scolaires</h3>
+                <p class="notes-card-description">
+                    Générer le livret scolaire complet : parcours, notes, orientation automatique
+                </p>
+            </a>
+        </div>
+
+        <!-- Vie scolaire -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'notes:liste_activites' %}" class="notes-card rose">
+                <i class="fas fa-user-shield notes-card-icon"></i>
+                <h3 class="notes-card-title">Vie scolaire</h3>
+                <p class="notes-card-description">
+                    Suivre les absences, retards, convocations, discipline et activites des eleves
+                </p>
+            </a>
+        </div>
+
+        <!-- Pointage journalier / Assiduité -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'presence:pointage' %}" class="notes-card info">
+                <i class="fas fa-clipboard-check notes-card-icon"></i>
+                <h3 class="notes-card-title">Pointage journalier</h3>
+                <p class="notes-card-description">
+                    Faire l'appel par classe chaque jour : présents, absents, retards — rapport et alertes d'absences
+                </p>
+            </a>
+        </div>
+
+        <!-- Notes de suivi (bonus) -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'notes:saisie_suivi' %}" class="notes-card warning">
+                <i class="fas fa-star notes-card-icon"></i>
+                <h3 class="notes-card-title">Notes de suivi (bonus)</h3>
+                <p class="notes-card-description">
+                    Cours, oral, écrit, devoirs, participation : bonus plafonné ajouté à la note mensuelle pour encourager les élèves actifs
+                </p>
+            </a>
+        </div>
+
+        <!-- Suivi des devoirs -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'notes:liste_devoirs' %}" class="notes-card primary">
+                <i class="fas fa-tasks notes-card-icon"></i>
+                <h3 class="notes-card-title">Suivi des devoirs</h3>
+                <p class="notes-card-description">
+                    Enregistrer les devoirs donnés par classe et suivre qui a rendu, qui est en retard ou non rendu
+                </p>
+            </a>
+        </div>
+
+        <!-- Emploi du temps -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'notes:emploi_du_temps' %}" class="notes-card success">
+                <i class="fas fa-calendar-alt notes-card-icon"></i>
+                <h3 class="notes-card-title">Emploi du temps</h3>
+                <p class="notes-card-description">
+                    Concevoir l'emploi du temps par classe (matière, professeur, salle) — impression PDF et Excel
+                </p>
+            </a>
+        </div>
+
+        <!-- Calendrier des professeurs -->
+        <div class="col-md-6 col-lg-4">
+            <a href="{% url 'notes:calendrier_professeurs' %}" class="notes-card info">
+                <i class="fas fa-user-clock notes-card-icon"></i>
+                <h3 class="notes-card-title">Calendrier des professeurs</h3>
+                <p class="notes-card-description">
+                    Suivre l'entrée et la sortie des professeurs : pointage quotidien et vue calendrier mensuelle
+                </p>
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

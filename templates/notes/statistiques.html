@@ -1,0 +1,781 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Statistiques{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        margin-bottom: 2rem;
+        transition: transform 0.3s ease;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-5px);
+    }
+
+    .stat-value {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin: 0;
+    }
+
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+        margin-top: 0.5rem;
+    }
+
+    .chart-container {
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        margin-bottom: 2rem;
+    }
+
+    .selection-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        margin-bottom: 2rem;
+    }
+
+    /* Loading overlay */
+    #loading-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(255,255,255,0.85);
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+    }
+    #loading-overlay.active {
+        display: flex;
+    }
+    .loading-spinner {
+        width: 50px;
+        height: 50px;
+        border: 5px solid #e9ecef;
+        border-top: 5px solid #007bff;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Loading overlay -->
+<div id="loading-overlay">
+    <div class="loading-spinner mb-3"></div>
+    <p class="text-primary fw-bold">Chargement des statistiques...</p>
+</div>
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3"><i class="fas fa-chart-bar me-2"></i>Statistiques</h1>
+        <div class="d-flex gap-2 flex-wrap">
+            {% if classe_selectionnee and periode and stats_generales %}
+            <a href="{% url 'notes:exporter_statistiques_pdf' %}?classe_id={{ classe_selectionnee.id }}&periode={{ periode }}" 
+               class="btn btn-danger" title="Exporter le rapport statistique complet en PDF">
+                <i class="fas fa-file-pdf me-2"></i>Rapport Complet PDF
+            </a>
+            <a href="{% url 'notes:exporter_conseils_pdf' %}?classe_id={{ classe_selectionnee.id }}&periode={{ periode }}"
+               class="btn btn-warning text-dark" title="Télécharger les conseils et prises de décision en PDF">
+                <i class="fas fa-lightbulb me-2"></i>Conseils & Décisions PDF
+            </a>
+            {% if eleves_non_admis %}
+            <a href="{% url 'notes:exporter_conseils_pdf' %}?classe_id={{ classe_selectionnee.id }}&periode={{ periode }}"
+               class="btn btn-dark" title="Fiches individuelles des élèves sous la moyenne à remettre aux parents">
+                <i class="fas fa-user-times me-2"></i>Fiches Parents ({{ eleves_non_admis|length }})
+            </a>
+            {% endif %}
+            {% endif %}
+            <a href="{% url 'notes:tableau_bord' %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Retour
+            </a>
+        </div>
+    </div>
+
+    <div class="selection-card">
+        <h4 class="mb-3"><i class="fas fa-school me-2"></i>1. Sélectionner une classe</h4>
+        {% if classes %}
+            <div class="row">
+                {% for classe in classes %}
+                    <div class="col-md-3 col-sm-6 mb-2">
+                        <a href="?classe_id={{ classe.id }}{% if periode %}&periode={{ periode }}{% endif %}" 
+                           class="btn {% if classe_selectionnee and classe.id == classe_selectionnee.id %}btn-primary{% else %}btn-outline-primary{% endif %} w-100">
+                            <i class="fas fa-school me-2"></i>{{ classe.nom }}
+                            <br><small>{{ classe.get_niveau_display }}</small>
+                        </a>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                Aucune classe disponible.
+            </div>
+        {% endif %}
+    </div>
+
+    {% if classe_selectionnee %}
+    <!-- Sélection de période avec filtre par type -->
+    <div class="selection-card">
+        <h4 class="mb-3"><i class="fas fa-calendar me-2"></i>2. Sélectionner une période</h4>
+
+        <!-- Onglets Mois / Trimestre / Semestre -->
+        <ul class="nav nav-tabs mb-3" id="periodeTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if periode == 'TRIMESTRE_1' or periode == 'TRIMESTRE_2' or periode == 'TRIMESTRE_3' or not periode %}active{% endif %}"
+                        id="tab-trimestre" data-bs-toggle="tab" data-bs-target="#pane-trimestre"
+                        type="button" role="tab">
+                    <i class="fas fa-calendar-alt me-1"></i>Par Trimestre
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if periode == 'SEMESTRE_1' or periode == 'SEMESTRE_2' %}active{% endif %}"
+                        id="tab-semestre" data-bs-toggle="tab" data-bs-target="#pane-semestre"
+                        type="button" role="tab">
+                    <i class="fas fa-calendar-check me-1"></i>Par Semestre
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if periode == 'OCTOBRE' or periode == 'NOVEMBRE' or periode == 'DECEMBRE' or periode == 'JANVIER' or periode == 'FEVRIER' or periode == 'MARS' or periode == 'AVRIL' or periode == 'MAI' or periode == 'JUIN' %}active{% endif %}"
+                        id="tab-mois" data-bs-toggle="tab" data-bs-target="#pane-mois"
+                        type="button" role="tab">
+                    <i class="fas fa-calendar-day me-1"></i>Par Mois
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if periode == 'ANNUEL_TRIM' or periode == 'ANNUEL_SEM' %}active{% endif %}"
+                        id="tab-annuel" data-bs-toggle="tab" data-bs-target="#pane-annuel"
+                        type="button" role="tab">
+                    <i class="fas fa-award me-1"></i>Annuel
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="periodeTabContent">
+            <!-- Trimestres -->
+            <div class="tab-pane fade {% if periode == 'TRIMESTRE_1' or periode == 'TRIMESTRE_2' or periode == 'TRIMESTRE_3' or not periode %}show active{% endif %}"
+                 id="pane-trimestre" role="tabpanel">
+                <div class="row g-2">
+                    {% for code, libelle in periodes %}
+                        {% if 'TRIMESTRE' in code %}
+                        <div class="col-md-4 col-sm-6">
+                            <a href="?classe_id={{ classe_selectionnee.id }}&periode={{ code }}"
+                               class="btn {% if periode == code %}btn-primary{% else %}btn-outline-primary{% endif %} w-100">
+                                <i class="fas fa-calendar-alt me-1"></i>{{ libelle }}
+                            </a>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Semestres -->
+            <div class="tab-pane fade {% if periode == 'SEMESTRE_1' or periode == 'SEMESTRE_2' %}show active{% endif %}"
+                 id="pane-semestre" role="tabpanel">
+                <div class="row g-2">
+                    {% for code, libelle in periodes %}
+                        {% if 'SEMESTRE' in code %}
+                        <div class="col-md-4 col-sm-6">
+                            <a href="?classe_id={{ classe_selectionnee.id }}&periode={{ code }}"
+                               class="btn {% if periode == code %}btn-success{% else %}btn-outline-success{% endif %} w-100">
+                                <i class="fas fa-calendar-check me-1"></i>{{ libelle }}
+                            </a>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Mois -->
+            <div class="tab-pane fade {% if periode == 'OCTOBRE' or periode == 'NOVEMBRE' or periode == 'DECEMBRE' or periode == 'JANVIER' or periode == 'FEVRIER' or periode == 'MARS' or periode == 'AVRIL' or periode == 'MAI' or periode == 'JUIN' %}show active{% endif %}"
+                 id="pane-mois" role="tabpanel">
+                <div class="row g-2">
+                    {% for code, libelle in periodes %}
+                        {% if 'TRIMESTRE' not in code and 'SEMESTRE' not in code and 'ANNUEL' not in code %}
+                        <div class="col-md-2 col-sm-4">
+                            <a href="?classe_id={{ classe_selectionnee.id }}&periode={{ code }}"
+                               class="btn {% if periode == code %}btn-warning{% else %}btn-outline-warning{% endif %} w-100 btn-sm">
+                                {{ libelle }}
+                            </a>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Annuel -->
+            <div class="tab-pane fade {% if periode == 'ANNUEL_TRIM' or periode == 'ANNUEL_SEM' %}show active{% endif %}"
+                 id="pane-annuel" role="tabpanel">
+                <div class="row g-2">
+                    {% for code, libelle in periodes %}
+                        {% if 'ANNUEL' in code %}
+                        <div class="col-md-4 col-sm-6">
+                            <a href="?classe_id={{ classe_selectionnee.id }}&periode={{ code }}"
+                               class="btn {% if periode == code %}btn-dark{% else %}btn-outline-dark{% endif %} w-100">
+                                <i class="fas fa-award me-1"></i>{{ libelle }}
+                            </a>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if stats_generales %}
+    <!-- Statistiques générales -->
+    <div class="row">
+        <div class="col-md-3 col-sm-6 mb-3">
+            <div class="stat-card text-center">
+                <i class="fas fa-users fa-2x text-primary mb-3"></i>
+                <p class="stat-value text-primary">{{ stats_generales.total_eleves }}</p>
+                <p class="stat-label">Total élèves</p>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6 mb-3">
+            <div class="stat-card text-center">
+                <i class="fas fa-chart-line fa-2x text-success mb-3"></i>
+                <p class="stat-value text-success">{{ stats_generales.moyenne_classe }}</p>
+                <p class="stat-label">Moyenne classe</p>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6 mb-3">
+            <div class="stat-card text-center">
+                <i class="fas fa-trophy fa-2x text-warning mb-3"></i>
+                <p class="stat-value text-warning">{{ stats_generales.moyenne_max }}</p>
+                <p class="stat-label">Meilleure moyenne</p>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6 mb-3">
+            <div class="stat-card text-center">
+                <i class="fas fa-percentage fa-2x text-info mb-3"></i>
+                <p class="stat-value text-info">{{ stats_generales.taux_reussite }}%</p>
+                <p class="stat-label">Taux de réussite</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Graphiques -->
+    <div class="row">
+        <!-- Répartition des notes -->
+        <div class="col-md-6 mb-4">
+            <div class="chart-container">
+                <h5 class="mb-4"><i class="fas fa-chart-pie me-2"></i>Répartition des moyennes</h5>
+                <canvas id="repartitionChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Moyennes par matière -->
+        <div class="col-md-6 mb-4">
+            <div class="chart-container">
+                <h5 class="mb-4"><i class="fas fa-chart-bar me-2"></i>Moyennes par matière</h5>
+                <canvas id="matieresChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Évolution des moyennes -->
+    {% if evolution_json != '[]' %}
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="chart-container">
+                <h5 class="mb-4"><i class="fas fa-chart-line me-2"></i>Évolution de la moyenne de classe</h5>
+                <canvas id="evolutionChart"></canvas>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Statistiques par matière -->
+    {% if stats_par_matiere %}
+    <div class="chart-container">
+        <h5 class="mb-4"><i class="fas fa-book me-2"></i>Détails par matière</h5>
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>Matière</th>
+                        <th class="text-center">Moyenne</th>
+                        <th class="text-center">Maximum</th>
+                        <th class="text-center">Minimum</th>
+                        <th class="text-center">Nb élèves</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for stat in stats_par_matiere %}
+                    <tr>
+                        <td><strong>{{ stat.matiere }}</strong></td>
+                        <td class="text-center">
+                            <span class="badge {% if est_primaire %}{% if stat.moyenne >= 7 %}bg-success{% elif stat.moyenne >= 5 %}bg-warning{% else %}bg-danger{% endif %}{% else %}{% if stat.moyenne >= 14 %}bg-success{% elif stat.moyenne >= 10 %}bg-warning{% else %}bg-danger{% endif %}{% endif %}">
+                                {{ stat.moyenne }}/{{ note_max }}
+                            </span>
+                        </td>
+                        <td class="text-center">{{ stat.max }}/{{ note_max }}</td>
+                        <td class="text-center">{{ stat.min }}/{{ note_max }}</td>
+                        <td class="text-center">{{ stat.nb_eleves }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Élèves en difficulté -->
+    {% if eleves_non_admis %}
+    <div class="chart-container border-danger" style="border-left: 4px solid #dc3545;">
+        <h5 class="mb-4 text-danger"><i class="fas fa-exclamation-triangle me-2"></i>Élèves en difficulté ({{ eleves_non_admis|length }} élève(s) - Moyenne < {{ seuil_reussite }}/{{ note_max }})</h5>
+        <div class="table-responsive">
+            <table class="table table-hover table-sm">
+                <thead class="table-danger">
+                    <tr>
+                        <th>Matricule</th>
+                        <th>Nom & Prénom</th>
+                        <th class="text-center">Moyenne</th>
+                        <th class="text-center">Écart</th>
+                        <th>Action recommandée</th>
+                        <th class="text-center">Lettres & Messages</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for eleve_data in eleves_non_admis %}
+                    <tr>
+                        <td>{{ eleve_data.eleve.matricule|default:"N/A" }}</td>
+                        <td><strong>{{ eleve_data.eleve.prenom }} {{ eleve_data.eleve.nom }}</strong></td>
+                        <td class="text-center">
+                            <span class="badge bg-danger fs-6">{{ eleve_data.moyenne }}/{{ note_max }}</span>
+                        </td>
+                        <td class="text-center text-danger">
+                            <strong>-{{ eleve_data.ecart }} pts</strong>
+                        </td>
+                        <td><small class="text-muted">Soutien scolaire urgent</small></td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-danger me-1" type="button" data-bs-toggle="collapse" data-bs-target="#lettre-parent-{{ forloop.counter }}" aria-expanded="true" title="Masquer/Afficher la lettre aux parents">
+                                <i class="fas fa-envelope me-1"></i>Parents
+                            </button>
+                            <button class="btn btn-sm btn-info text-white" type="button" data-bs-toggle="collapse" data-bs-target="#message-eleve-{{ forloop.counter }}" aria-expanded="true" title="Masquer/Afficher le message à l'élève">
+                                <i class="fas fa-comment me-1"></i>Élève
+                            </button>
+                        </td>
+                    </tr>
+                    <!-- Lettre aux parents (visible par défaut) -->
+                    <tr class="collapse show" id="lettre-parent-{{ forloop.counter }}">
+                        <td colspan="6" class="p-0">
+                            <div class="card border-danger m-2">
+                                <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+                                    <span><i class="fas fa-envelope me-2"></i>Lettre d'information aux parents - {{ eleve_data.eleve.prenom }} {{ eleve_data.eleve.nom }}</span>
+                                    <span class="badge bg-white text-danger">{{ eleve_data.lettre_parent.urgence }}</span>
+                                </div>
+                                <div class="card-body" id="lettre-parent-content-{{ forloop.counter }}">
+                                    <p class="fw-bold">Objet : {{ eleve_data.lettre_parent.objet }}</p>
+                                    <p>Cher(e) Parent / Tuteur,</p>
+                                    <p>{{ eleve_data.lettre_parent.intro }}</p>
+                                    <p class="fw-bold mt-3">Constat :</p>
+                                    <p>{{ eleve_data.lettre_parent.constat }}</p>
+                                    <p class="fw-bold mt-3">Ce que nous vous demandons :</p>
+                                    <ul>
+                                        {% for demande in eleve_data.lettre_parent.demandes %}
+                                        <li>{{ demande }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                    <p class="mt-3 fst-italic">{{ eleve_data.lettre_parent.conclusion }}</p>
+                                    <hr>
+                                    <p class="text-muted text-end mb-0"><small>L'Administration de l'École</small></p>
+                                </div>
+                                <div class="card-footer text-end">
+                                    <button class="btn btn-sm btn-outline-danger" onclick="imprimerLettre('lettre-parent-content-{{ forloop.counter }}', 'Lettre aux parents')">
+                                        <i class="fas fa-print me-1"></i>Imprimer
+                                    </button>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    <!-- Message à l'élève (visible par défaut) -->
+                    <tr class="collapse show" id="message-eleve-{{ forloop.counter }}">
+                        <td colspan="6" class="p-0">
+                            <div class="card border-info m-2">
+                                <div class="card-header bg-info text-white">
+                                    <i class="fas fa-comment me-2"></i>{{ eleve_data.message_eleve.titre }}
+                                </div>
+                                <div class="card-body" id="message-eleve-content-{{ forloop.counter }}">
+                                    <p class="fw-bold fs-5">{{ eleve_data.message_eleve.intro }}</p>
+                                    <p>{{ eleve_data.message_eleve.constat }}</p>
+                                    <p class="fw-bold mt-3 text-success"><i class="fas fa-heart me-2"></i>Encouragements :</p>
+                                    <ul class="list-unstyled">
+                                        {% for enc in eleve_data.message_eleve.encouragements %}
+                                        <li class="mb-1"><i class="fas fa-check-circle text-success me-2"></i>{{ enc }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                    <p class="fw-bold mt-3 text-primary"><i class="fas fa-lightbulb me-2"></i>Nos conseils pour toi :</p>
+                                    <ol>
+                                        {% for conseil in eleve_data.message_eleve.conseils %}
+                                        <li class="mb-1">{{ conseil }}</li>
+                                        {% endfor %}
+                                    </ol>
+                                    <div class="alert alert-success mt-3 mb-0">
+                                        <i class="fas fa-star me-2"></i>{{ eleve_data.message_eleve.conclusion }}
+                                    </div>
+                                </div>
+                                <div class="card-footer text-end">
+                                    <button class="btn btn-sm btn-outline-info" onclick="imprimerLettre('message-eleve-content-{{ forloop.counter }}', 'Message eleve')">
+                                        <i class="fas fa-print me-1"></i>Imprimer
+                                    </button>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="d-flex gap-2 mt-3 flex-wrap">
+            <button class="btn btn-danger btn-sm" onclick="toggleAllLettres('parent')">
+                <i class="fas fa-envelope-open-text me-1"></i>Afficher toutes les lettres aux parents
+            </button>
+            <button class="btn btn-info btn-sm text-white" onclick="toggleAllLettres('eleve')">
+                <i class="fas fa-comments me-1"></i>Afficher tous les messages aux élèves
+            </button>
+        </div>
+        <div class="alert alert-danger mt-3 mb-0">
+            <i class="fas fa-lightbulb me-2"></i>
+            <strong>Recommandation :</strong> Organiser des cours de rattrapage, convoquer les parents, et mettre en place un suivi personnalisé.
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Élèves à surveiller -->
+    {% if eleves_a_suivre %}
+    <div class="chart-container border-warning" style="border-left: 4px solid #ffc107;">
+        <h5 class="mb-4 text-warning"><i class="fas fa-eye me-2"></i>Élèves à surveiller ({{ eleves_a_suivre|length }} élève(s) - Moyenne {% if est_primaire %}5-6{% else %}10-12{% endif %}/{{ note_max }})</h5>
+        <div class="table-responsive">
+            <table class="table table-hover table-sm">
+                <thead class="table-warning">
+                    <tr>
+                        <th>Matricule</th>
+                        <th>Nom & Prénom</th>
+                        <th class="text-center">Moyenne</th>
+                        <th>Action recommandée</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for eleve_data in eleves_a_suivre %}
+                    <tr>
+                        <td>{{ eleve_data.eleve.matricule|default:"N/A" }}</td>
+                        <td><strong>{{ eleve_data.eleve.prenom }} {{ eleve_data.eleve.nom }}</strong></td>
+                        <td class="text-center">
+                            <span class="badge bg-warning text-dark fs-6">{{ eleve_data.moyenne }}/{{ note_max }}</span>
+                        </td>
+                        <td><small class="text-muted">Accompagnement personnalisé</small></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Élèves excellents -->
+    {% if eleves_excellents %}
+    <div class="chart-container border-success" style="border-left: 4px solid #28a745;">
+        <h5 class="mb-4 text-success"><i class="fas fa-star me-2"></i>Élèves excellents ({{ eleves_excellents|length }} élève(s) - Moyenne ≥ {% if est_primaire %}7{% else %}14{% endif %}/{{ note_max }})</h5>
+        <div class="table-responsive">
+            <table class="table table-hover table-sm">
+                <thead class="table-success">
+                    <tr>
+                        <th>Matricule</th>
+                        <th>Nom & Prénom</th>
+                        <th class="text-center">Moyenne</th>
+                        <th class="text-center">Mention</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for eleve_data in eleves_excellents %}
+                    <tr>
+                        <td>{{ eleve_data.eleve.matricule|default:"N/A" }}</td>
+                        <td><strong>{{ eleve_data.eleve.prenom }} {{ eleve_data.eleve.nom }}</strong></td>
+                        <td class="text-center">
+                            <span class="badge {% if est_primaire %}{% if eleve_data.moyenne >= 8 %}bg-success{% else %}bg-info{% endif %}{% else %}{% if eleve_data.moyenne >= 16 %}bg-success{% else %}bg-info{% endif %}{% endif %} fs-6">{{ eleve_data.moyenne }}/{{ note_max }}</span>
+                        </td>
+                        <td class="text-center">
+                            {% if est_primaire %}
+                                {% if eleve_data.moyenne >= 8 %}
+                                    <span class="badge bg-success">Excellent</span>
+                                {% else %}
+                                    <span class="badge bg-info">Très Bien</span>
+                                {% endif %}
+                            {% else %}
+                                {% if eleve_data.moyenne >= 16 %}
+                                    <span class="badge bg-success">Excellent</span>
+                                {% else %}
+                                    <span class="badge bg-info">Très Bien</span>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Top 10 élèves -->
+    {% if stats_par_eleve %}
+    <div class="chart-container">
+        <h5 class="mb-4"><i class="fas fa-medal me-2"></i>Top 10 élèves</h5>
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th>Rang</th>
+                        <th>Matricule</th>
+                        <th>Nom & Prénom</th>
+                        <th class="text-center">Moyenne</th>
+                        <th class="text-center">Appréciation</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for eleve_data in stats_par_eleve %}
+                    <tr>
+                        <td>
+                            {% if forloop.counter == 1 %}
+                                <i class="fas fa-trophy text-warning"></i>
+                            {% elif forloop.counter == 2 %}
+                                <i class="fas fa-medal text-secondary"></i>
+                            {% elif forloop.counter == 3 %}
+                                <i class="fas fa-medal text-danger"></i>
+                            {% else %}
+                                {{ forloop.counter }}
+                            {% endif %}
+                        </td>
+                        <td>{{ eleve_data.eleve.matricule }}</td>
+                        <td><strong>{{ eleve_data.eleve.prenom }} {{ eleve_data.eleve.nom }}</strong></td>
+                        <td class="text-center">
+                            <span class="badge {% if est_primaire %}{% if eleve_data.moyenne >= 8 %}bg-success{% elif eleve_data.moyenne >= 7 %}bg-info{% elif eleve_data.moyenne >= 5 %}bg-warning{% else %}bg-danger{% endif %}{% else %}{% if eleve_data.moyenne >= 16 %}bg-success{% elif eleve_data.moyenne >= 14 %}bg-info{% elif eleve_data.moyenne >= 10 %}bg-warning{% else %}bg-danger{% endif %}{% endif %} fs-6">
+                                {{ eleve_data.moyenne }}/{{ note_max }}
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            {% if est_primaire %}
+                                {% if eleve_data.moyenne >= 9 %}Excellent
+                                {% elif eleve_data.moyenne >= 8 %}Très bien
+                                {% elif eleve_data.moyenne >= 7 %}Bien
+                                {% elif eleve_data.moyenne >= 6 %}Assez bien
+                                {% elif eleve_data.moyenne >= 5 %}Passable
+                                {% elif eleve_data.moyenne >= 4 %}Insuffisant
+                                {% elif eleve_data.moyenne >= 3 %}Faible
+                                {% else %}Très faible
+                                {% endif %}
+                            {% else %}
+                                {% if eleve_data.moyenne >= 18 %}Excellent
+                                {% elif eleve_data.moyenne >= 16 %}Très bien
+                                {% elif eleve_data.moyenne >= 14 %}Bien
+                                {% elif eleve_data.moyenne >= 12 %}Assez bien
+                                {% elif eleve_data.moyenne >= 10 %}Passable
+                                {% elif eleve_data.moyenne >= 8 %}Insuffisant
+                                {% elif eleve_data.moyenne >= 6 %}Faible
+                                {% else %}Très faible
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+    {% elif classe_selectionnee and periode %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle me-2"></i>
+        Aucune donnée disponible pour cette classe et cette période.
+    </div>
+    {% endif %}
+</div>
+
+<!-- Chart.js (local) -->
+<script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
+<script>
+// Données injectées depuis Django
+window.chartData = {
+    repartition: JSON.parse('{{ repartition_json|escapejs }}'),
+    matieres: JSON.parse('{{ stats_matieres_json|escapejs }}'),
+    evolution: JSON.parse('{{ evolution_json|escapejs }}')
+};
+var noteMax = {{ note_max|default:"20" }};
+var estPrimaire = {% if est_primaire %}true{% else %}false{% endif %};
+
+// Répartition des notes
+const repartitionData = window.chartData.repartition;
+if (repartitionData && (repartitionData.excellent > 0 || repartitionData.tres_bien > 0 || repartitionData.bien > 0 || repartitionData.assez_bien > 0 || repartitionData.insuffisant > 0)) {
+    const repartitionCtx = document.getElementById('repartitionChart').getContext('2d');
+    new Chart(repartitionCtx, {
+        type: 'doughnut',
+        data: {
+            labels: estPrimaire
+                ? ['Excellent (≥9)', 'Très bien (≥8)', 'Bien (≥7)', 'Assez bien (≥6)', 'Passable (≥5)', 'Insuffisant (≥4)', 'Faible (≥3)', 'Très faible (<3)']
+                : ['Excellent (≥18)', 'Très bien (≥16)', 'Bien (≥14)', 'Assez bien (≥12)', 'Passable (≥10)', 'Insuffisant (≥8)', 'Faible (≥6)', 'Très faible (<6)'],
+            datasets: [{
+                data: [
+                    repartitionData.excellent,
+                    repartitionData.tres_bien,
+                    repartitionData.bien,
+                    repartitionData.assez_bien,
+                    repartitionData.passable || 0,
+                    repartitionData.insuffisant,
+                    repartitionData.faible || 0,
+                    repartitionData.tres_faible || 0
+                ],
+                backgroundColor: [
+                    '#146c43',
+                    '#28a745',
+                    '#17a2b8',
+                    '#ffc107',
+                    '#fd7e14',
+                    '#dc3545',
+                    '#e55353',
+                    '#8b0000'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+}
+
+// Moyennes par matière
+const matieresData = window.chartData.matieres;
+if (matieresData.length > 0) {
+    const matieresCtx = document.getElementById('matieresChart').getContext('2d');
+    new Chart(matieresCtx, {
+        type: 'bar',
+        data: {
+            labels: matieresData.map(m => m.matiere),
+            datasets: [{
+                label: 'Moyenne',
+                data: matieresData.map(m => m.moyenne),
+                backgroundColor: '#007bff',
+                borderColor: '#0056b3',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: noteMax
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+}
+
+// Évolution des moyennes
+const evolutionData = window.chartData.evolution;
+if (evolutionData.length > 0) {
+    const evolutionCtx = document.getElementById('evolutionChart').getContext('2d');
+    new Chart(evolutionCtx, {
+        type: 'line',
+        data: {
+            labels: evolutionData.map(e => e.periode),
+            datasets: [{
+                label: 'Moyenne de classe',
+                data: evolutionData.map(e => e.moyenne),
+                borderColor: '#28a745',
+                backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: noteMax
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+}
+
+// Fonction pour imprimer une lettre ou message
+function imprimerLettre(contentId, titre) {
+    var contenu = document.getElementById(contentId);
+    if (!contenu) return;
+    var fenetre = window.open('', '_blank', 'width=800,height=600');
+    fenetre.document.write('<html><head><title>' + titre + '</title>');
+    fenetre.document.write('<style>body{font-family:Arial,sans-serif;padding:30px;line-height:1.6;} .badge,.btn,.card-footer{display:none;} h5{margin-bottom:10px;} ul,ol{margin-left:20px;} .alert{border:1px solid #ccc;padding:10px;margin-top:15px;background:#f0f8f0;} hr{margin:20px 0;} @media print{body{padding:20px;}}</style>');
+    fenetre.document.write('</head><body>');
+    fenetre.document.write(contenu.innerHTML);
+    fenetre.document.write('</body></html>');
+    fenetre.document.close();
+    fenetre.focus();
+    fenetre.print();
+}
+
+// Fonction pour afficher/masquer toutes les lettres
+function toggleAllLettres(type) {
+    var prefix = type === 'parent' ? 'lettre-parent-' : 'message-eleve-';
+    var elements = document.querySelectorAll('[id^="' + prefix + '"]');
+    var allShown = true;
+    elements.forEach(function(el) {
+        if (!el.id.includes('-content-') && !el.classList.contains('show')) {
+            allShown = false;
+        }
+    });
+    elements.forEach(function(el) {
+        if (!el.id.includes('-content-')) {
+            if (allShown) {
+                el.classList.remove('show');
+            } else {
+                el.classList.add('show');
+            }
+        }
+    });
+}
+
+// Afficher le loading overlay lors de la navigation classe/période
+document.addEventListener('DOMContentLoaded', function() {
+    var selectionLinks = document.querySelectorAll('.selection-card a.btn');
+    selectionLinks.forEach(function(link) {
+        link.addEventListener('click', function() {
+            document.getElementById('loading-overlay').classList.add('active');
+        });
+    });
+});
+</script>
+{% endblock %}

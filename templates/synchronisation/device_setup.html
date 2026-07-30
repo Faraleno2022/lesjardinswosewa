@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+
+{% block title %}Connexion offline{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item active">Connexion offline</li>
+{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <div class="col-lg-5">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <i class="fas fa-link me-2"></i>Générer une connexion offline
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="nom" class="form-label">Nom du poste</label>
+                        <input type="text" class="form-control" id="nom" name="nom" value="Poste local" maxlength="120" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="ecole_id" class="form-label">École</label>
+                        <select class="form-select" id="ecole_id" name="ecole_id" required>
+                            {% for ecole in ecoles %}
+                            <option value="{{ ecole.id }}">{{ ecole.nom }} — ID {{ ecole.id }}</option>
+                            {% empty %}
+                            <option value="">Aucune école disponible</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-key me-2"></i>Générer les identifiants
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        <div class="card shadow-sm">
+            <div class="card-header bg-light">
+                <i class="fas fa-copy me-2"></i>Bloc à copier dans le .env offline
+            </div>
+            <div class="card-body">
+                {% if generated %}
+                <div class="alert alert-warning">
+                    Le token est affiché une seule fois. Copiez ce bloc maintenant dans le fichier <strong>.env</strong> du poste offline.
+                </div>
+                <textarea id="syncEnvBlock" class="form-control font-monospace" rows="7" readonly>{{ generated.env_block }}</textarea>
+                <div class="d-flex gap-2 mt-3">
+                    <button type="button" class="btn btn-success" onclick="copySyncEnvBlock()">
+                        <i class="fas fa-copy me-2"></i>Copier
+                    </button>
+                    <a href="{% url 'admin:synchronisation_syncdevice_changelist' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-list me-2"></i>Voir les postes
+                    </a>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">
+                    Remplissez le formulaire puis cliquez sur générer. Les valeurs
+                    <strong>MYSCHOOL_SYNC_DEVICE_ID</strong>,
+                    <strong>MYSCHOOL_SYNC_TOKEN</strong> et
+                    <strong>MYSCHOOL_SYNC_ECOLE_ID</strong> apparaîtront ici.
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function copySyncEnvBlock() {
+    const field = document.getElementById('syncEnvBlock');
+    if (!field) return;
+    field.select();
+    field.setSelectionRange(0, 99999);
+    navigator.clipboard.writeText(field.value).catch(function() {
+        document.execCommand('copy');
+    });
+}
+</script>
+{% endblock %}

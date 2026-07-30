@@ -1,0 +1,330 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Rapport Scolaire — Espace Parent{% endblock %}
+
+{% block breadcrumb %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .rapport-hero {
+        background: linear-gradient(135deg, #0a58ca 0%, #0d6efd 50%, #3d8bfd 100%);
+        color: white;
+        padding: 0.8rem 0;
+        margin-top: -70px;
+        padding-top: calc(70px + 0.8rem);
+        margin-bottom: 1rem;
+    }
+    .rapport-hero h1 {
+        font-size: 1.6rem;
+        font-weight: 700;
+    }
+    .rapport-card {
+        max-width: 550px;
+        margin: 0 auto;
+        border-radius: 20px;
+        box-shadow: 0 10px 40px rgba(0,0,0,.12);
+        border: none;
+        overflow: hidden;
+    }
+    .rapport-card .card-header {
+        background: linear-gradient(135deg, #0d6efd, #0a58ca);
+        color: #fff;
+        text-align: center;
+        padding: 1.5rem;
+        border: none;
+    }
+    .rapport-card .card-header h3 {
+        margin: 0;
+        font-weight: 700;
+    }
+    .rapport-card .card-body {
+        padding: 2rem;
+    }
+    .input-icon-group {
+        position: relative;
+    }
+    .input-icon-group .input-icon {
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #888;
+        font-size: 1.1rem;
+        z-index: 2;
+    }
+    .input-icon-group input,
+    .input-icon-group select {
+        padding-left: 42px;
+    }
+    .info-box {
+        background: #e3f2fd;
+        border-left: 4px solid #1976d2;
+        border-radius: 8px;
+        padding: 1rem;
+        font-size: .9rem;
+    }
+    .security-note {
+        background: #fff3e0;
+        border-left: 4px solid #f57c00;
+        border-radius: 8px;
+        padding: .8rem 1rem;
+        font-size: .85rem;
+    }
+    .rapport-features {
+        max-width: 700px;
+        margin: 2rem auto 0;
+    }
+    .feature-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        padding: .8rem 0;
+    }
+    .feature-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 1.1rem;
+        color: #fff;
+    }
+    @media (max-width: 576px) {
+        .rapport-hero h1 { font-size: 1.8rem; }
+        .rapport-card .card-body { padding: 1.2rem; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Hero -->
+<div class="rapport-hero text-center">
+    <div class="container">
+        <h1><i class="fas fa-file-pdf me-3"></i>Rapport Scolaire</h1>
+        <p class="lead opacity-75 mb-0">Espace Parents — Téléchargez le rapport complet de votre enfant</p>
+    </div>
+</div>
+
+<div class="container pb-5">
+
+    <!-- Formulaire -->
+    <div class="card rapport-card">
+        <div class="card-header">
+            <h3><i class="fas fa-search me-2"></i>Accéder au rapport</h3>
+            <p class="mb-0 opacity-75 small">Renseignez les informations ci-dessous pour vérification</p>
+        </div>
+        <div class="card-body">
+
+            {% if erreur %}
+            <div class="alert alert-danger d-flex align-items-center" role="alert">
+                <i class="fas fa-exclamation-circle me-2 fs-5"></i>
+                <div>{{ erreur }}</div>
+            </div>
+            {% endif %}
+
+            <form method="post" id="rapportForm">
+                {% csrf_token %}
+
+                <!-- Matricule -->
+                <div class="mb-3">
+                    <label class="form-label fw-bold">
+                        <i class="fas fa-id-card me-1 text-primary"></i> Matricule de l'élève
+                    </label>
+                    <div class="input-icon-group">
+                        <i class="fas fa-hashtag input-icon"></i>
+                        <input type="text" name="matricule" class="form-control form-control-lg"
+                               placeholder="Ex: PN3-2025-001"
+                               value="{{ request.POST.matricule|default:'' }}"
+                               required autocomplete="off">
+                    </div>
+                </div>
+
+                <!-- Téléphone -->
+                <div class="mb-3">
+                    <label class="form-label fw-bold">
+                        <i class="fas fa-phone me-1 text-success"></i> Téléphone du responsable
+                    </label>
+                    <div class="input-icon-group">
+                        <i class="fas fa-mobile-alt input-icon"></i>
+                        <input type="tel" name="telephone" class="form-control form-control-lg"
+                               placeholder="Ex: 620000000 ou +224620000000"
+                               value="{{ request.POST.telephone|default:'' }}"
+                               required>
+                    </div>
+                    <div class="form-text">Le numéro enregistré comme responsable de l'élève</div>
+                </div>
+
+                <!-- Classe -->
+                <div class="mb-4" id="classeGroup" style="display: none;">
+                    <label class="form-label fw-bold">
+                        <i class="fas fa-school me-1 text-warning"></i> Classe de l'élève
+                    </label>
+                    <div class="input-icon-group">
+                        <i class="fas fa-chalkboard input-icon"></i>
+                        <select name="classe" id="classeSelect" class="form-select form-select-lg" style="padding-left: 42px;" required>
+                            <option value="">— Sélectionnez la classe —</option>
+                        </select>
+                    </div>
+                    <div id="classeLoading" class="form-text text-primary" style="display: none;">
+                        <i class="fas fa-spinner fa-spin me-1"></i> Chargement des classes...
+                    </div>
+                </div>
+
+                <!-- Message de vérification -->
+                <div id="verificationMsg" class="alert alert-info d-flex align-items-center" style="display: none !important;" role="alert">
+                    <i class="fas fa-info-circle me-2 fs-5"></i>
+                    <div>Renseignez d'abord le matricule et le téléphone, puis les classes disponibles s'afficheront.</div>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-lg w-100" id="btnSubmit">
+                    <i class="fas fa-file-pdf me-2"></i> Générer le rapport scolaire
+                </button>
+            </form>
+
+            <!-- Note de sécurité -->
+            <div class="security-note mt-3">
+                <i class="fas fa-shield-alt me-1 text-warning"></i>
+                <strong>Sécurité :</strong> Les 3 informations doivent correspondre à celles enregistrées dans le système.
+                Aucune donnée n'est stockée lors de cette consultation.
+            </div>
+        </div>
+    </div>
+
+    <!-- Ce que contient le rapport -->
+    <div class="rapport-features">
+        <h5 class="text-center text-muted mb-3"><i class="fas fa-list-check me-1"></i> Contenu du rapport</h5>
+        <div class="feature-item">
+            <div class="feature-icon" style="background: #1976d2;">
+                <i class="fas fa-user-graduate"></i>
+            </div>
+            <div>
+                <strong>Informations personnelles</strong>
+                <div class="text-muted small">Matricule, nom, date de naissance, classe, responsables</div>
+            </div>
+        </div>
+        <div class="feature-item">
+            <div class="feature-icon" style="background: #388e3c;">
+                <i class="fas fa-chart-bar"></i>
+            </div>
+            <div>
+                <strong>Notes & résultats</strong>
+                <div class="text-muted small">Notes mensuelles par matière, compositions, moyennes</div>
+            </div>
+        </div>
+        <div class="feature-item">
+            <div class="feature-icon" style="background: #f57c00;">
+                <i class="fas fa-trophy"></i>
+            </div>
+            <div>
+                <strong>Classements</strong>
+                <div class="text-muted small">Rang, mention et appréciation par période</div>
+            </div>
+        </div>
+        <div class="feature-item">
+            <div class="feature-icon" style="background: #e91e63;">
+                <i class="fas fa-calendar-day"></i>
+            </div>
+            <div>
+                <strong>Activités journalières</strong>
+                <div class="text-muted small">Évaluations, activités sportives, culturelles, artistiques</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Retour accueil -->
+    <div class="text-center mt-4">
+        <a href="{% url 'home' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-home me-1"></i> Retour à l'accueil
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    const form = document.getElementById('rapportForm');
+    const matriculeInput = document.querySelector('input[name="matricule"]');
+    const telephoneInput = document.querySelector('input[name="telephone"]');
+    const classeGroup = document.getElementById('classeGroup');
+    const classeSelect = document.getElementById('classeSelect');
+    const classeLoading = document.getElementById('classeLoading');
+    const btnSubmit = document.getElementById('btnSubmit');
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    let debounceTimer = null;
+    let classesLoaded = false;
+
+    function tryLoadClasses() {
+        const matricule = matriculeInput.value.trim();
+        const telephone = telephoneInput.value.trim();
+
+        if (matricule.length < 3 || telephone.length < 6) {
+            classeGroup.style.display = 'none';
+            classesLoaded = false;
+            return;
+        }
+
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(function() {
+            classeLoading.style.display = 'block';
+            classeGroup.style.display = 'block';
+            classeSelect.innerHTML = '<option value="">— Vérification en cours... —</option>';
+            classeSelect.disabled = true;
+
+            fetch('{% url "rapport_scolaire_classes_ajax" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken,
+                },
+                body: JSON.stringify({ matricule: matricule, telephone: telephone })
+            })
+            .then(function(response) { return response.json().then(function(data) { return {ok: response.ok, data: data}; }); })
+            .then(function(result) {
+                classeLoading.style.display = 'none';
+                classeSelect.disabled = false;
+
+                if (result.ok && result.data.classes) {
+                    classeSelect.innerHTML = '<option value="">— Sélectionnez la classe —</option>';
+                    result.data.classes.forEach(function(cls) {
+                        const opt = document.createElement('option');
+                        opt.value = cls.id;
+                        opt.textContent = cls.nom + ' — ' + cls.ecole;
+                        classeSelect.appendChild(opt);
+                    });
+                    classesLoaded = true;
+                    // Auto-sélectionner si une seule classe
+                    if (result.data.classes.length === 1) {
+                        classeSelect.value = result.data.classes[0].id;
+                    }
+                } else {
+                    classeSelect.innerHTML = '<option value="">— ' + (result.data.error || 'Erreur de vérification') + ' —</option>';
+                    classesLoaded = false;
+                }
+            })
+            .catch(function() {
+                classeLoading.style.display = 'none';
+                classeSelect.disabled = false;
+                classeSelect.innerHTML = '<option value="">— Erreur de connexion —</option>';
+                classesLoaded = false;
+            });
+        }, 600);
+    }
+
+    matriculeInput.addEventListener('input', tryLoadClasses);
+    telephoneInput.addEventListener('input', tryLoadClasses);
+
+    form.addEventListener('submit', function() {
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Génération en cours...';
+        setTimeout(function() {
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = '<i class="fas fa-file-pdf me-2"></i> Générer le rapport scolaire';
+        }, 15000);
+    });
+})();
+</script>
+{% endblock %}

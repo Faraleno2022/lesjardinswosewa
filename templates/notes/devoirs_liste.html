@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block title %}Suivi des devoirs{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h2 class="mb-0"><i class="fas fa-tasks text-primary me-2"></i>Suivi des devoirs</h2>
+        <div>
+            <a href="{% url 'notes:creer_devoir' %}{% if classe_id %}?classe_id={{ classe_id }}{% endif %}" class="btn btn-primary"><i class="fas fa-plus me-1"></i>Nouveau devoir</a>
+            <a href="{% url 'notes:tableau_bord' %}" class="btn btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i>Retour Notes</a>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-md-5">
+                    <label class="form-label">Classe</label>
+                    <select name="classe_id" class="form-select" onchange="this.form.submit()">
+                        <option value="">— Toutes les classes —</option>
+                        {% for c in classes %}
+                        <option value="{{ c.id }}" {% if classe_id == c.id|stringformat:"s" %}selected{% endif %}>{{ c.nom }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr><th>Titre</th><th>Classe</th><th>Matière</th><th>Donné le</th><th>À rendre le</th><th>Rendus</th><th>Non rendus</th><th></th></tr>
+                </thead>
+                <tbody>
+                    {% for d in devoirs %}
+                    <tr>
+                        <td><strong>{{ d.titre }}</strong></td>
+                        <td>{{ d.classe.nom }}</td>
+                        <td>{{ d.matiere.nom }}</td>
+                        <td>{{ d.date_donne|date:'d/m/Y' }}</td>
+                        <td>
+                            {{ d.date_remise|date:'d/m/Y' }}
+                            {% if d.date_remise < today and d.nb_non_rendus > 0 %}<span class="badge bg-warning text-dark ms-1">échéance dépassée</span>{% endif %}
+                        </td>
+                        <td><span class="badge bg-success">{{ d.nb_rendus }}</span> / {{ d.nb_total }}</td>
+                        <td>{% if d.nb_non_rendus %}<span class="badge bg-danger">{{ d.nb_non_rendus }}</span>{% else %}<span class="text-muted">0</span>{% endif %}</td>
+                        <td class="text-end">
+                            <a href="{% url 'notes:suivi_devoir' d.id %}" class="btn btn-sm btn-outline-primary"><i class="fas fa-clipboard-list me-1"></i>Suivi</a>
+                            <form method="post" action="{% url 'notes:supprimer_devoir' d.id %}" class="d-inline" onsubmit="return confirm('Supprimer ce devoir et son suivi ?');">
+                                {% csrf_token %}
+                                <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="8" class="text-center text-muted py-3">Aucun devoir. Cliquez sur « Nouveau devoir » pour commencer.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

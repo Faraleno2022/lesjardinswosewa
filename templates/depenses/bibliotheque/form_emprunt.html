@@ -1,0 +1,221 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <!-- En-tête -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="fas fa-plus text-success"></i> {{ titre_page }}</h2>
+                </div>
+                <div>
+                    <a href="{% url 'depenses:liste_emprunts' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Retour
+                    </a>
+                </div>
+            </div>
+
+            <!-- Formulaire -->
+            <div class="card">
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Livre *</label>
+                                <select name="livre" class="form-control" required>
+                                    <option value="">Sélectionnez un livre</option>
+                                    {% for livre in livres %}
+                                    <option value="{{ livre.id }}">
+                                        {{ livre.titre }} ({{ livre.exemplaires_disponibles }} dispo)
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Élève *</label>
+                                <select name="eleve" id="id_eleve" class="form-control" required>
+                                    <option value="">Sélectionnez un élève</option>
+                                    {% for eleve in eleves %}
+                                    <option value="{{ eleve.id }}">
+                                        {{ eleve.matricule }} - {{ eleve.nom }} {{ eleve.prenom }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Informations de l'élève (affichage automatique) -->
+                        <div id="eleve-info" class="alert alert-info mb-3" style="display: none;">
+                            <h6 class="mb-3"><i class="fas fa-info-circle"></i> Informations de l'élève</h6>
+                            <div class="row align-items-center">
+                                <div class="col-md-3 text-center">
+                                    <img id="info-photo" src="" alt="Photo élève" class="img-thumbnail" style="max-width: 120px; max-height: 120px; display: none;">
+                                    <div id="info-no-photo" style="display: none;">
+                                        <div class="bg-secondary text-white rounded d-inline-block p-3">
+                                            <i class="fas fa-user fa-3x"></i>
+                                        </div>
+                                        <p class="text-muted small mt-2">Pas de photo</p>
+                                    </div>
+                                </div>
+                                <div class="col-md-9">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-2">
+                                            <strong>Nom complet :</strong> <span id="info-nom-complet">-</span>
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <strong>Classe :</strong> <span id="info-classe">-</span>
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <strong>Matricule :</strong> <span id="info-matricule">-</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Durée (jours)</label>
+                                <input type="number" name="duree_jours" class="form-control" 
+                                       value="{% if params %}{{ params.duree_emprunt_defaut }}{% else %}14{% endif %}" min="1">
+                                <small class="text-muted">Durée par défaut: 
+                                    {% if params %}{{ params.duree_emprunt_defaut }}{% else %}14{% endif %} jours
+                                </small>
+                            </div>
+                        </div>
+
+                        {% if params %}
+                        <div class="alert alert-info">
+                            <h6><i class="fas fa-info-circle"></i> Règles de la bibliothèque</h6>
+                            <ul class="mb-0">
+                                <li>Nombre max d'emprunts simultanés: <strong>{{ params.nombre_emprunts_max }}</strong></li>
+                                <li>Pénalité de retard: <strong>{{ params.penalite_retard_journalier|intcomma }} GNF/jour</strong></li>
+                                <li>Pénalité pour perte: <strong>{{ params.penalite_perte|intcomma }} GNF</strong></li>
+                            </ul>
+                        </div>
+                        {% endif %}
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'depenses:liste_emprunts' %}" class="btn btn-secondary">
+                                <i class="fas fa-times"></i> Annuler
+                            </a>
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="fas fa-save"></i> Créer l'Emprunt
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const eleveSelect = document.getElementById('id_eleve');
+    const eleveInfoDiv = document.getElementById('eleve-info');
+    const infoNomComplet = document.getElementById('info-nom-complet');
+    const infoClasse = document.getElementById('info-classe');
+    const infoMatricule = document.getElementById('info-matricule');
+    const infoPhoto = document.getElementById('info-photo');
+    const infoNoPhoto = document.getElementById('info-no-photo');
+    
+    if (eleveSelect) {
+        // Charger les infos si un élève est déjà sélectionné (mode édition)
+        if (eleveSelect.value) {
+            loadEleveInfo(eleveSelect.value);
+        }
+        
+        // Écouter les changements de sélection
+        eleveSelect.addEventListener('change', function() {
+            const eleveId = this.value;
+            
+            if (eleveId) {
+                loadEleveInfo(eleveId);
+            } else {
+                // Réinitialiser si aucun élève sélectionné
+                eleveInfoDiv.style.display = 'none';
+                infoPhoto.style.display = 'none';
+                infoNoPhoto.style.display = 'none';
+            }
+        });
+    }
+    
+    function loadEleveInfo(eleveId) {
+        // Afficher un indicateur de chargement
+        eleveInfoDiv.style.display = 'block';
+        infoNomComplet.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Chargement...';
+        infoClasse.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Chargement...';
+        infoMatricule.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Chargement...';
+        infoPhoto.style.display = 'none';
+        infoNoPhoto.style.display = 'none';
+        
+        // Requête AJAX pour récupérer les informations
+        fetch(`/bus/cantine/api/eleve/${eleveId}/`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Erreur lors du chargement des informations');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    // Debug: afficher les données reçues
+                    console.log('Données élève reçues:', data);
+                    console.log('URL photo:', data.photo_url);
+                    
+                    // Afficher les informations
+                    infoNomComplet.textContent = data.nom_complet;
+                    infoClasse.textContent = data.classe || 'Non assigné';
+                    infoMatricule.textContent = data.matricule || '-';
+                    
+                    // Afficher la photo ou l'icône par défaut
+                    if (data.photo_url) {
+                        console.log('Chargement de la photo:', data.photo_url);
+                        infoPhoto.src = data.photo_url;
+                        infoPhoto.style.display = 'block';
+                        infoNoPhoto.style.display = 'none';
+                        
+                        // Gérer les erreurs de chargement d'image
+                        infoPhoto.onerror = function() {
+                            console.error('Erreur de chargement de l\'image:', data.photo_url);
+                            infoPhoto.style.display = 'none';
+                            infoNoPhoto.style.display = 'block';
+                        };
+                    } else {
+                        console.log('Pas de photo disponible');
+                        infoPhoto.style.display = 'none';
+                        infoNoPhoto.style.display = 'block';
+                    }
+                    
+                    eleveInfoDiv.style.display = 'block';
+                } else {
+                    throw new Error(data.error || 'Erreur inconnue');
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                infoNomComplet.textContent = 'Erreur de chargement';
+                infoClasse.textContent = '-';
+                infoMatricule.textContent = '-';
+                infoPhoto.style.display = 'none';
+                infoNoPhoto.style.display = 'none';
+                
+                // Afficher un message d'erreur
+                eleveInfoDiv.className = 'alert alert-warning mb-3';
+                setTimeout(() => {
+                    eleveInfoDiv.className = 'alert alert-info mb-3';
+                }, 3000);
+            });
+    }
+});
+</script>
+{% endblock %}

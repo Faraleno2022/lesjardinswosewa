@@ -1,0 +1,822 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Ajouter un élève - myschool{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-container {
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        padding: 30px;
+        margin: 20px 0;
+    }
+    .form-group {
+        margin-bottom: 20px;
+    }
+    .form-label {
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 8px;
+    }
+    .required {
+        color: #dc3545;
+    }
+    .btn-save {
+        background: linear-gradient(45deg, #007bff, #0056b3);
+        border: none;
+        padding: 15px 40px;
+        font-weight: 600;
+        border-radius: 8px;
+        color: white;
+        font-size: 16px;
+        transition: all 0.3s ease;
+    }
+    .btn-save:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0,123,255,0.4);
+        color: white;
+    }
+    .section-title {
+        color: #007bff;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 10px;
+        margin-bottom: 25px;
+        font-weight: 600;
+    }
+    .form-control, .form-select {
+        border: 2px solid #e9ecef;
+        border-radius: 8px;
+        padding: 12px;
+        transition: border-color 0.3s ease;
+    }
+    .form-control:focus, .form-select:focus {
+        border-color: #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-user-plus text-primary"></i> Ajouter un nouvel élève</h2>
+                    <p class="text-muted">Formulaire d'enregistrement d'un nouvel élève</p>
+                </div>
+                <div>
+                    <a href="{% url 'eleves:liste_eleves' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Retour à la liste
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Messages -->
+    {% if messages %}
+        <div class="row mb-3">
+            <div class="col-12">
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+                        {% if message.tags == 'success' %}
+                            <i class="fas fa-check-circle me-2"></i>
+                        {% elif message.tags == 'error' %}
+                            <i class="fas fa-exclamation-circle me-2"></i>
+                        {% elif message.tags == 'warning' %}
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                        {% else %}
+                            <i class="fas fa-info-circle me-2"></i>
+                        {% endif %}
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% endif %}
+
+    <!-- Nouveau Formulaire Simple -->
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="form-container">
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    
+                    <!-- Informations personnelles -->
+                    <h4 class="section-title"><i class="fas fa-user me-2"></i>Informations personnelles</h4>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">Matricule</label>
+                                <div class="form-check mb-2">
+                                    {{ form.saisie_manuelle_matricule }}
+                                    <label class="form-check-label" for="{{ form.saisie_manuelle_matricule.id_for_label }}">
+                                        Saisir manuellement le matricule
+                                    </label>
+                                </div>
+                                {{ form.matricule }}
+                                <div class="form-text" id="matricule-help-text">Sera généré automatiquement après enregistrement.</div>
+                                {% if form.matricule.errors %}
+                                    <div class="text-danger small mt-1">{{ form.matricule.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">Sexe <span class="required">*</span></label>
+                                {{ form.sexe }}
+                                {% if form.sexe.errors %}
+                                    <div class="text-danger small mt-1">{{ form.sexe.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">Prénom <span class="required">*</span></label>
+                                {{ form.prenom }}
+                                {% if form.prenom.errors %}
+                                    <div class="text-danger small mt-1">{{ form.prenom.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">Nom <span class="required">*</span></label>
+                                {{ form.nom }}
+                                {% if form.nom.errors %}
+                                    <div class="text-danger small mt-1">{{ form.nom.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">Date de naissance <span class="required">*</span></label>
+                                {{ form.date_naissance }}
+                                {% if form.date_naissance.errors %}
+                                    <div class="text-danger small mt-1">{{ form.date_naissance.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">Lieu de naissance <span class="required">*</span></label>
+                                {{ form.lieu_naissance }}
+                                {% if form.lieu_naissance.errors %}
+                                    <div class="text-danger small mt-1">{{ form.lieu_naissance.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Informations scolaires -->
+                    <h4 class="section-title mt-4"><i class="fas fa-school me-2"></i>Informations scolaires</h4>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">Classe <span class="required">*</span></label>
+                                {% if form.classe.field.queryset|length == 0 %}
+                                <div class="alert alert-warning d-flex align-items-center py-2" role="alert">
+                                    <i class="fas fa-exclamation-triangle me-2"></i>
+                                    <div>
+                                        Aucune classe disponible. Créez d'abord une classe dans l'administration.
+                                        {% if user.is_staff or user.is_superuser %}
+                                          <a class="alert-link ms-1" href="{% url 'admin:eleves_classe_add' %}">Ajouter une classe</a>
+                                        {% else %}
+                                          <span class="ms-1">Contactez l'administrateur FARA LENO AU +224622613559.</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% endif %}
+                                {{ form.classe }}
+                                {% if form.classe.errors %}
+                                    <div class="text-danger small mt-1">{{ form.classe.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">Date d'inscription <span class="required">*</span></label>
+                                {{ form.date_inscription }}
+                                {% if form.date_inscription.errors %}
+                                    <div class="text-danger small mt-1">{{ form.date_inscription.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">Statut <span class="required">*</span></label>
+                                {{ form.statut }}
+                                {% if form.statut.errors %}
+                                    <div class="text-danger small mt-1">{{ form.statut.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Responsable -->
+                    <h4 class="section-title mt-4"><i class="fas fa-users me-2"></i>Responsable principal</h4>
+                    
+                    <!-- Option de création -->
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <div class="form-check">
+                                {{ form.responsable_principal_nouveau }}
+                                <label class="form-check-label" for="{{ form.responsable_principal_nouveau.id_for_label }}">
+                                    <strong>Créer un nouveau responsable principal</strong>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Sélection responsable existant -->
+                    <div id="responsable-existant" class="row">
+                        <div class="col-md-12">
+                            <div class="form-group">
+                                <label class="form-label">Sélectionner un responsable existant <span class="required">*</span></label>
+                                {{ form.responsable_principal }}
+                                {% if form.responsable_principal.errors %}
+                                    <div class="text-danger small mt-1">{{ form.responsable_principal.errors.0 }}</div>
+                                {% endif %}
+                                <div class="form-text">Choisissez dans la liste des responsables déjà enregistrés</div>
+                                
+                                <!-- Recherche par téléphone -->
+                                <div class="mt-3">
+                                    <label class="form-label">Ou rechercher par téléphone</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" id="search-telephone" placeholder="Entrez le numéro de téléphone...">
+                                        <button type="button" class="btn btn-outline-primary" id="btn-rechercher-existant">
+                                            <i class="fas fa-search"></i> Rechercher
+                                        </button>
+                                    </div>
+                                    <div class="form-text">Recherchez un responsable existant par son numéro de téléphone</div>
+                                    
+                                    <!-- Zone de résultats de recherche -->
+                                    <div id="resultats-recherche-existant" class="mt-2" style="display: none;">
+                                        <div class="alert alert-info">
+                                            <strong>Responsables trouvés :</strong>
+                                            <div id="liste-responsables-existant"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Création nouveau responsable -->
+                    <div id="nouveau-responsable" class="d-none">
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Nouveau responsable</strong> - Remplissez les informations ci-dessous
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Prénom <span class="required">*</span></label>
+                                    {{ responsable_principal_form.prenom }}
+                                    {% if responsable_principal_form.prenom.errors %}
+                                        <div class="text-danger small mt-1">{{ responsable_principal_form.prenom.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Nom <span class="required">*</span></label>
+                                    {{ responsable_principal_form.nom }}
+                                    {% if responsable_principal_form.nom.errors %}
+                                        <div class="text-danger small mt-1">{{ responsable_principal_form.nom.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Relation <span class="required">*</span></label>
+                                    {{ responsable_principal_form.relation }}
+                                    {% if responsable_principal_form.relation.errors %}
+                                        <div class="text-danger small mt-1">{{ responsable_principal_form.relation.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Téléphone <span class="required">*</span></label>
+                                    <div class="input-group">
+                                        {{ responsable_principal_form.telephone }}
+                                        <button type="button" class="btn btn-outline-primary" id="btn-rechercher-responsable">
+                                            <i class="fas fa-search"></i> Rechercher
+                                        </button>
+                                    </div>
+                                    {% if responsable_principal_form.telephone.errors %}
+                                        <div class="text-danger small mt-1">{{ responsable_principal_form.telephone.errors.0 }}</div>
+                                    {% endif %}
+                                    <div class="form-text">Entrez 8 à 9 chiffres (local) ou un numéro avec indicatif (+224XXXXXXXXX). Le numéro sera normalisé automatiquement à l'enregistrement.</div>
+                                    
+                                    <!-- Zone de résultats de recherche -->
+                                    <div id="resultats-recherche" class="mt-2" style="display: none;">
+                                        <div class="alert alert-info">
+                                            <strong>Responsables trouvés :</strong>
+                                            <div id="liste-responsables"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Email</label>
+                                    {{ responsable_principal_form.email }}
+                                    {% if responsable_principal_form.email.errors %}
+                                        <div class="text-danger small mt-1">{{ responsable_principal_form.email.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label">Profession</label>
+                                    {{ responsable_principal_form.profession }}
+                                    {% if responsable_principal_form.profession.errors %}
+                                        <div class="text-danger small mt-1">{{ responsable_principal_form.profession.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="form-group">
+                                    <label class="form-label">Adresse</label>
+                                    {{ responsable_principal_form.adresse }}
+                                    {% if responsable_principal_form.adresse.errors %}
+                                        <div class="text-danger small mt-1">{{ responsable_principal_form.adresse.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Photo (optionnel) -->
+                    <h4 class="section-title mt-4"><i class="fas fa-camera me-2"></i>Photo (optionnel)</h4>
+                    
+                    <div class="row">
+                        <div class="col-md-12">
+                            <div class="form-group">
+                                <label class="form-label">Photo de l'élève</label>
+                                <div class="d-flex align-items-center gap-3 flex-wrap">
+                                    {{ form.photo }}
+                                    <button class="btn btn-outline-primary" data-open-camera-for="id_photo">
+                                        <i class="fas fa-camera me-2"></i>Prendre une photo
+                                    </button>
+                                    <img data-photo-preview style="display:none; max-width:120px; max-height:120px; border-radius:8px; border:1px solid #dee2e6;"/>
+                                </div>
+                                {% if form.photo.errors %}
+                                    <div class="text-danger small mt-1">{{ form.photo.errors.0 }}</div>
+                                {% endif %}
+                                <div class="form-text">Formats acceptés: JPG, PNG. Taille max: 2MB</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Bouton d'enregistrement -->
+                    <div class="row mt-5">
+                        <div class="col-12 text-center">
+                            <button type="submit" class="btn btn-save me-3">
+                                <i class="fas fa-save me-2"></i>Enregistrer l'élève
+                            </button>
+                            <a href="{% url 'eleves:liste_eleves' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-times me-2"></i>Annuler
+                            </a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Statistiques (sidebar) -->
+        <div class="col-lg-4">
+            <div class="form-container">
+                <h5 class="section-title"><i class="fas fa-chart-bar me-2"></i>Statistiques</h5>
+                <div class="row text-center">
+                    <div class="col-6 mb-3">
+                        <div class="bg-primary text-white rounded p-3">
+                            <h4>{{ stats.total_eleves }}</h4>
+                            <small>Total Élèves</small>
+                        </div>
+                    </div>
+                    <div class="col-6 mb-3">
+                        <div class="bg-success text-white rounded p-3">
+                            <h4>{{ stats.eleves_actifs }}</h4>
+                            <small>Actifs</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="row text-center">
+                    <div class="col-12">
+                        <div class="bg-warning text-white rounded p-3">
+                            <h4>{{ stats.eleves_exclus }}</h4>
+                            <small>Exclus</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% include 'eleves/partials/_camera_modal.html' %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// JavaScript minimal - pas d'interférence avec la soumission
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Formulaire d\'ajout d\'élève chargé et prêt');
+    
+    // Gestion de la saisie manuelle du matricule
+    const checkboxSaisieManuelle = document.getElementById('saisie-manuelle-matricule');
+    const inputMatricule = document.getElementById('matricule-input');
+    const helpTextMatricule = document.getElementById('matricule-help-text');
+    
+    if (checkboxSaisieManuelle && inputMatricule && helpTextMatricule) {
+        function toggleMatriculeSaisie() {
+            if (checkboxSaisieManuelle.checked) {
+                // Mode saisie manuelle
+                inputMatricule.removeAttribute('readonly');
+                inputMatricule.setAttribute('required', 'required');
+                inputMatricule.placeholder = 'Saisir le matricule (ex: PN3-001)';
+                inputMatricule.classList.add('bg-white');
+                helpTextMatricule.textContent = 'Saisissez le matricule manuellement.';
+                console.log('Mode: Saisie manuelle du matricule activée');
+            } else {
+                // Mode génération automatique
+                inputMatricule.setAttribute('readonly', 'readonly');
+                inputMatricule.removeAttribute('required');
+                inputMatricule.placeholder = 'Généré automatiquement (ex: PN3-001)';
+                inputMatricule.value = '';  // Vider le champ
+                inputMatricule.classList.remove('bg-white');
+                helpTextMatricule.textContent = 'Sera généré automatiquement après enregistrement.';
+                console.log('Mode: Génération automatique du matricule');
+            }
+        }
+        
+        // Écouter les changements de la checkbox
+        checkboxSaisieManuelle.addEventListener('change', toggleMatriculeSaisie);
+        
+        // Initialiser l'état au chargement
+        toggleMatriculeSaisie();
+    }
+    
+    // Gestion du basculement responsable existant/nouveau
+    const checkboxNouveau = document.querySelector('input[name="responsable_principal_nouveau"]');
+    const responsableExistant = document.getElementById('responsable-existant');
+    const nouveauResponsable = document.getElementById('nouveau-responsable');
+    const selectResponsable = document.querySelector('select[name="responsable_principal"]');
+    
+    if (checkboxNouveau && responsableExistant && nouveauResponsable) {
+        // Fonction pour basculer l'affichage
+        function toggleResponsableForm() {
+            if (checkboxNouveau.checked) {
+                // Afficher le formulaire de création
+                responsableExistant.classList.add('d-none');
+                nouveauResponsable.classList.remove('d-none');
+                
+                // Désactiver le select existant (pas de required pour éviter les conflits)
+                if (selectResponsable) {
+                    selectResponsable.value = '';
+                    selectResponsable.disabled = true;
+                }
+
+                // Rendre les champs du nouveau responsable requis
+                const champsRequis = [
+                    'resp_principal-prenom',
+                    'resp_principal-nom',
+                    'resp_principal-relation',
+                    'resp_principal-telephone'
+                ];
+                champsRequis.forEach(name => {
+                    const el = nouveauResponsable.querySelector(`[name="${name}"]`);
+                    if (el) el.setAttribute('required', 'required');
+                });
+                // Ne pas imposer de pattern JS ici; laisser le widget Django gérer (accepte local 8–9 chiffres ou +224...)
+                
+                console.log('Mode: Créer nouveau responsable');
+            } else {
+                // Afficher la sélection existante
+                responsableExistant.classList.remove('d-none');
+                nouveauResponsable.classList.add('d-none');
+                
+                // Activer le select existant
+                if (selectResponsable) {
+                    selectResponsable.disabled = false;
+                }
+                
+                // Vider les champs du nouveau responsable
+                const nouveauChamps = nouveauResponsable.querySelectorAll('input, select, textarea');
+                nouveauChamps.forEach(champ => {
+                    champ.value = '';
+                });
+
+                // Retirer l'obligation des champs du nouveau responsable
+                const champsRequis = [
+                    'resp_principal-prenom',
+                    'resp_principal-nom',
+                    'resp_principal-relation',
+                    'resp_principal-telephone'
+                ];
+                champsRequis.forEach(name => {
+                    const el = nouveauResponsable.querySelector(`[name="${name}"]`);
+                    if (el) el.removeAttribute('required');
+                });
+                
+                console.log('Mode: Sélectionner responsable existant');
+            }
+        }
+        
+        // Écouter les changements de la checkbox
+        checkboxNouveau.addEventListener('change', toggleResponsableForm);
+        
+        // Initialiser l'état au chargement
+        toggleResponsableForm();
+    }
+    
+    // Aperçu de la photo (optionnel)
+    const photoInput = document.querySelector('input[type="file"]');
+    if (photoInput) {
+        photoInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                console.log('Photo sélectionnée:', file.name);
+            }
+        });
+    }
+    
+    // Fonction pour mettre à jour les statistiques
+    function updateStatistics() {
+        fetch('{% url "eleves:ajax_statistiques_eleves" %}')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Mettre à jour les valeurs dans l'interface
+                    const totalElem = document.querySelector('.bg-primary h4');
+                    const actifsElem = document.querySelector('.bg-success h4');
+                    const exclusElem = document.querySelector('.bg-warning h4');
+                    
+                    if (totalElem) totalElem.textContent = data.stats.total_eleves;
+                    if (actifsElem) actifsElem.textContent = data.stats.eleves_actifs;
+                    if (exclusElem) exclusElem.textContent = data.stats.eleves_exclus;
+                    
+                    console.log('Statistiques mises à jour:', data.stats);
+                }
+            })
+            .catch(error => {
+                console.error('Erreur lors de la mise à jour des statistiques:', error);
+            });
+    }
+    
+    // Mettre à jour les statistiques au chargement de la page
+    updateStatistics();
+    
+    // Mettre à jour les statistiques toutes les 30 secondes (optionnel)
+    setInterval(updateStatistics, 30000);
+    
+    // Fonctionnalité de recherche de responsable par téléphone (pour nouveau responsable)
+    const btnRechercher = document.getElementById('btn-rechercher-responsable');
+    const inputTelephone = document.querySelector('input[name="resp_principal-telephone"]');
+    const resultatsRecherche = document.getElementById('resultats-recherche');
+    const listeResponsables = document.getElementById('liste-responsables');
+    
+    // Fonctionnalité de recherche pour responsable existant
+    const btnRechercherExistant = document.getElementById('btn-rechercher-existant');
+    const inputTelephoneExistant = document.getElementById('search-telephone');
+    const resultatsRechercheExistant = document.getElementById('resultats-recherche-existant');
+    const listeResponsablesExistant = document.getElementById('liste-responsables-existant');
+    const selectResponsablePrincipal = document.querySelector('select[name="responsable_principal"]');
+    
+    // Fonction commune pour la recherche
+    function rechercherResponsable(telephone, onSuccess, onError) {
+        fetch(`{% url 'eleves:ajax_rechercher_responsable_telephone' %}?telephone=${encodeURIComponent(telephone)}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    onSuccess(data);
+                } else {
+                    onError(data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                onError('Erreur lors de la recherche');
+            });
+    }
+    
+    // Recherche pour responsable existant
+    if (btnRechercherExistant && inputTelephoneExistant) {
+        btnRechercherExistant.addEventListener('click', function() {
+            const telephone = inputTelephoneExistant.value.trim();
+            
+            if (!telephone) {
+                alert('Veuillez entrer un numéro de téléphone');
+                return;
+            }
+            
+            btnRechercherExistant.disabled = true;
+            btnRechercherExistant.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Recherche...';
+            
+            rechercherResponsable(telephone, 
+                function(data) {
+                    if (data.responsables.length > 0) {
+                        let html = '<div class="list-group">';
+                        data.responsables.forEach(resp => {
+                            html += `
+                                <div class="list-group-item list-group-item-action" style="cursor: pointer;" 
+                                     onclick="selectionnerResponsableExistant(${resp.id}, '${resp.prenom}', '${resp.nom}', '${resp.relation}')">
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <h6 class="mb-1">${resp.prenom} ${resp.nom}</h6>
+                                        <small>${resp.telephone}</small>
+                                    </div>
+                                    <p class="mb-1"><strong>Relation:</strong> ${resp.relation}</p>
+                                    ${resp.email ? `<small><strong>Email:</strong> ${resp.email}</small><br>` : ''}
+                                    ${resp.profession ? `<small><strong>Profession:</strong> ${resp.profession}</small>` : ''}
+                                </div>
+                            `;
+                        });
+                        html += '</div>';
+                        html += '<div class="mt-2"><small class="text-muted">Cliquez sur un responsable pour le sélectionner</small></div>';
+                        
+                        listeResponsablesExistant.innerHTML = html;
+                        resultatsRechercheExistant.style.display = 'block';
+                    } else {
+                        listeResponsablesExistant.innerHTML = '<p class="text-muted">Aucun responsable trouvé avec ce numéro de téléphone.</p>';
+                        resultatsRechercheExistant.style.display = 'block';
+                    }
+                },
+                function(error) {
+                    alert('Erreur: ' + error);
+                }
+            ).finally(() => {
+                btnRechercherExistant.disabled = false;
+                btnRechercherExistant.innerHTML = '<i class="fas fa-search"></i> Rechercher';
+            });
+        });
+    }
+    
+    if (btnRechercher && inputTelephone) {
+        btnRechercher.addEventListener('click', function() {
+            const telephone = inputTelephone.value.trim();
+            
+            if (!telephone) {
+                alert('Veuillez entrer un numéro de téléphone');
+                return;
+            }
+            
+            // Désactiver le bouton pendant la recherche
+            btnRechercher.disabled = true;
+            btnRechercher.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Recherche...';
+            
+            // Requête AJAX
+            fetch(`{% url 'eleves:ajax_rechercher_responsable_telephone' %}?telephone=${encodeURIComponent(telephone)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        if (data.responsables.length > 0) {
+                            // Afficher les résultats
+                            let html = '<div class="list-group">';
+                            data.responsables.forEach(resp => {
+                                html += `
+                                    <div class="list-group-item list-group-item-action" style="cursor: pointer;" 
+                                         onclick="remplirResponsable(${resp.id}, '${resp.prenom}', '${resp.nom}', '${resp.relation}', '${resp.telephone}', '${resp.email || ''}', '${resp.profession || ''}', '${resp.adresse || ''}')">
+                                        <div class="d-flex w-100 justify-content-between">
+                                            <h6 class="mb-1">${resp.prenom} ${resp.nom}</h6>
+                                            <small>${resp.telephone}</small>
+                                        </div>
+                                        <p class="mb-1"><strong>Relation:</strong> ${resp.relation}</p>
+                                        ${resp.email ? `<small><strong>Email:</strong> ${resp.email}</small><br>` : ''}
+                                        ${resp.profession ? `<small><strong>Profession:</strong> ${resp.profession}</small>` : ''}
+                                    </div>
+                                `;
+                            });
+                            html += '</div>';
+                            html += '<div class="mt-2"><small class="text-muted">Cliquez sur un responsable pour remplir automatiquement les champs</small></div>';
+                            
+                            listeResponsables.innerHTML = html;
+                            resultatsRecherche.style.display = 'block';
+                        } else {
+                            listeResponsables.innerHTML = '<p class="text-muted">Aucun responsable trouvé avec ce numéro de téléphone.</p>';
+                            resultatsRecherche.style.display = 'block';
+                        }
+                    } else {
+                        alert('Erreur: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Erreur:', error);
+                    alert('Erreur lors de la recherche');
+                })
+                .finally(() => {
+                    // Réactiver le bouton
+                    btnRechercher.disabled = false;
+                    btnRechercher.innerHTML = '<i class="fas fa-search"></i> Rechercher';
+                });
+        });
+    }
+});
+
+// Fonction globale pour remplir les champs du responsable
+function remplirResponsable(id, prenom, nom, relation, telephone, email, profession, adresse) {
+    // Remplir les champs du formulaire
+    const prenomField = document.querySelector('input[name="resp_principal-prenom"]');
+    const nomField = document.querySelector('input[name="resp_principal-nom"]');
+    const relationField = document.querySelector('select[name="resp_principal-relation"]');
+    const telephoneField = document.querySelector('input[name="resp_principal-telephone"]');
+    const emailField = document.querySelector('input[name="resp_principal-email"]');
+    const professionField = document.querySelector('input[name="resp_principal-profession"]');
+    const adresseField = document.querySelector('textarea[name="resp_principal-adresse"]');
+    
+    if (prenomField) prenomField.value = prenom;
+    if (nomField) nomField.value = nom;
+    if (relationField) relationField.value = relation;
+    if (telephoneField) telephoneField.value = telephone;
+    if (emailField) emailField.value = email;
+    if (professionField) professionField.value = profession;
+    if (adresseField) adresseField.value = adresse;
+    
+    // Masquer les résultats
+    document.getElementById('resultats-recherche').style.display = 'none';
+    
+    // Afficher un message de confirmation
+    const alert = document.createElement('div');
+    alert.className = 'alert alert-success alert-dismissible fade show mt-2';
+    alert.innerHTML = `
+        <strong>Responsable trouvé!</strong> Les informations de ${prenom} ${nom} ont été remplies automatiquement.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    // Insérer l'alerte après le champ téléphone
+    const telephoneGroup = telephoneField.closest('.form-group');
+    telephoneGroup.appendChild(alert);
+    
+    // Supprimer l'alerte après 5 secondes
+    setTimeout(() => {
+        if (alert.parentNode) {
+            alert.remove();
+        }
+    }, 5000);
+}
+
+// Fonction pour sélectionner un responsable existant
+function selectionnerResponsableExistant(id, prenom, nom, relation) {
+    // Sélectionner dans le dropdown
+    const selectResponsable = document.querySelector('select[name="responsable_principal"]');
+    if (selectResponsable) {
+        selectResponsable.value = id;
+        
+        // Déclencher l'événement change pour que le formulaire soit mis à jour
+        selectResponsable.dispatchEvent(new Event('change'));
+    }
+    
+    // Masquer les résultats
+    document.getElementById('resultats-recherche-existant').style.display = 'none';
+    
+    // Vider le champ de recherche
+    document.getElementById('search-telephone').value = '';
+    
+    // Afficher un message de confirmation
+    const alert = document.createElement('div');
+    alert.className = 'alert alert-success alert-dismissible fade show mt-2';
+    alert.innerHTML = `
+        <strong>Responsable sélectionné!</strong> ${prenom} ${nom} (${relation}) a été sélectionné.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    // Insérer l'alerte après la zone de recherche
+    const searchGroup = document.getElementById('search-telephone').closest('.form-group');
+    searchGroup.appendChild(alert);
+    
+    // Supprimer l'alerte après 5 secondes
+    setTimeout(() => {
+        if (alert.parentNode) {
+            alert.remove();
+        }
+    }, 5000);
+}
+</script>
+{% endblock %}

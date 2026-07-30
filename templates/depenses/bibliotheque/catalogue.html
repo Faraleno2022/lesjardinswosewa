@@ -1,0 +1,146 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-book text-primary"></i> {{ titre_page }}</h2>
+                    <p class="text-muted">Catalogue complet de la bibliothèque</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="{% url 'depenses:creer_livre' %}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Ajouter un livre
+                    </a>
+                    <a href="{% url 'depenses:gestion_categories_livres' %}" class="btn btn-outline-primary">
+                        <i class="fas fa-tags"></i> Catégories
+                    </a>
+                    <a href="{% url 'depenses:dashboard_bibliotheque' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Recherche</label>
+                    <input type="text" name="q" class="form-control" placeholder="Titre, auteur, ISBN..." value="{{ q }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Catégorie</label>
+                    <select name="categorie" class="form-select">
+                        <option value="">Toutes</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat.id }}" {% if categorie_id == cat.id|stringformat:"s" %}selected{% endif %}>
+                            {{ cat.nom }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Statut</label>
+                    <select name="statut" class="form-select">
+                        <option value="">Tous</option>
+                        <option value="DISPONIBLE" {% if statut == 'DISPONIBLE' %}selected{% endif %}>Disponible</option>
+                        <option value="EMPRUNTE" {% if statut == 'EMPRUNTE' %}selected{% endif %}>Emprunté</option>
+                        <option value="RESERVE" {% if statut == 'RESERVE' %}selected{% endif %}>Réservé</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Langue</label>
+                    <select name="langue" class="form-select">
+                        <option value="">Toutes</option>
+                        <option value="Français" {% if langue == 'Français' %}selected{% endif %}>Français</option>
+                        <option value="Anglais" {% if langue == 'Anglais' %}selected{% endif %}>Anglais</option>
+                        <option value="Arabe" {% if langue == 'Arabe' %}selected{% endif %}>Arabe</option>
+                    </select>
+                </div>
+                <div class="col-md-1 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Catalogue -->
+    <div class="row">
+        {% for livre in livres %}
+        <div class="col-md-6 col-lg-3 mb-4">
+            <div class="card h-100">
+                {% if livre.couverture %}
+                <img src="{{ livre.couverture.url }}" class="card-img-top" alt="{{ livre.titre }}" style="height: 250px; object-fit: cover;">
+                {% else %}
+                <div class="card-img-top bg-light d-flex align-items-center justify-content-center" style="height: 250px;">
+                    <i class="fas fa-book fa-4x text-muted"></i>
+                </div>
+                {% endif %}
+                <div class="card-body">
+                    <h6 class="card-title">{{ livre.titre|truncatewords:8 }}</h6>
+                    <p class="card-text">
+                        <small class="text-muted">
+                            <i class="fas fa-user"></i> {{ livre.auteur|truncatewords:3 }}<br>
+                            {% if livre.editeur %}
+                            <i class="fas fa-building"></i> {{ livre.editeur|truncatewords:2 }}<br>
+                            {% endif %}
+                            <i class="fas fa-calendar"></i> {{ livre.annee_publication|default:"-" }}
+                        </small>
+                    </p>
+                    <div class="mb-2">
+                        <span class="badge bg-info">{{ livre.categorie.nom }}</span>
+                        <span class="badge 
+                            {% if livre.statut == 'DISPONIBLE' %}bg-success
+                            {% elif livre.statut == 'EMPRUNTE' %}bg-warning
+                            {% else %}bg-secondary{% endif %}">
+                            {{ livre.get_statut_display }}
+                        </span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            <i class="fas fa-copy"></i> {{ livre.exemplaires_disponibles }}/{{ livre.nombre_exemplaires }}
+                        </small>
+                        <div class="d-flex gap-1">
+                            <a href="{% url 'depenses:modifier_livre' livre.id %}" class="btn btn-sm btn-outline-primary" title="Modifier">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <form method="post" action="{% url 'depenses:supprimer_livre' livre.id %}" class="d-inline"
+                                  onsubmit="return confirm('Retirer « {{ livre.titre|escapejs }} » du catalogue ?');">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Retirer">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </form>
+                            {% if livre.est_disponible %}
+                            <a href="{% url 'depenses:creer_emprunt' %}?livre={{ livre.id }}" class="btn btn-sm btn-success">
+                                <i class="fas fa-hand-holding-heart"></i> Emprunter
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
+                    <p class="text-muted">Aucun livre trouvé</p>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

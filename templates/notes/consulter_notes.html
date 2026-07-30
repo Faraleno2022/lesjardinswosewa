@@ -1,0 +1,838 @@
+{% extends 'base.html' %}
+{% load notes_tags %}
+{% load notes_extras %}
+
+{% block title %}Consulter les Notes{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stats-card {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        border-radius: 15px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 4px 15px rgba(0, 123, 255, 0.2);
+    }
+    
+    .stats-card h3 {
+        font-size: 2rem;
+        font-weight: 700;
+        margin: 0;
+    }
+    
+    .stats-card p {
+        margin: 0;
+        opacity: 0.9;
+    }
+    
+    .filter-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        margin-bottom: 2rem;
+    }
+    
+    .table-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    .table thead {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+    }
+    
+    .table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .badge-present {
+        background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+        color: white;
+        padding: 0.4rem 0.8rem;
+        border-radius: 20px;
+    }
+    
+    .badge-absent {
+        background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+        color: white;
+        padding: 0.4rem 0.8rem;
+        border-radius: 20px;
+    }
+    
+    .badge-non-saisi {
+        background: linear-gradient(135deg, #6c757d 0%, #545b62 100%);
+        color: white;
+        padding: 0.4rem 0.8rem;
+        border-radius: 20px;
+    }
+    
+    /* Styles pour le podium */
+    .table tbody tr:has(td:first-child:contains("🥇")) {
+        background-color: #fff3cd !important;
+    }
+    
+    .rang-1 {
+        background-color: #fff3cd !important;
+        font-weight: bold;
+    }
+    
+    .rang-2 {
+        background-color: #e7f3ff !important;
+    }
+    
+    .rang-3 {
+        background-color: #ffe7d9 !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3"><i class="fas fa-eye me-2"></i>Consulter les Notes</h1>
+        <div>
+            <a href="{% url 'notes:saisir_notes' %}" class="btn btn-primary">
+                <i class="fas fa-edit me-2"></i>Saisir des Notes
+            </a>
+            <a href="{% url 'notes:tableau_bord' %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Retour
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="filter-card">
+        <h4 class="mb-4"><i class="fas fa-filter me-2"></i>Filtres de Recherche</h4>
+        <form method="get" id="filterForm">
+            <div class="row">
+                <!-- Classe -->
+                <div class="col-md-6 mb-3">
+                    <label for="classe_id" class="form-label">
+                        <i class="fas fa-school me-1"></i>Classe *
+                    </label>
+                    <select name="classe_id" id="classe_id" class="form-select" required onchange="this.form.submit()">
+                        <option value="">Sélectionner une classe</option>
+                        {% for classe in classes %}
+                            <option value="{{ classe.id }}" {% if classe_selectionnee and classe.id == classe_selectionnee.id %}selected{% endif %}>
+                                {{ classe.nom }} - {{ classe.annee_scolaire }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <!-- Période de classement -->
+                <div class="col-md-6 mb-3">
+                    <label for="periode" class="form-label">
+                        <i class="fas fa-calendar-alt me-1"></i>Période de classement
+                    </label>
+                    <select name="periode" id="periode" class="form-select" onchange="this.form.submit()">
+                        <option value="">Toutes les périodes (année complète)</option>
+                        <optgroup label="Mois">
+                            <option value="OCTOBRE" {% if periode_classement == 'OCTOBRE' %}selected{% endif %}>Octobre</option>
+                            <option value="NOVEMBRE" {% if periode_classement == 'NOVEMBRE' %}selected{% endif %}>Novembre</option>
+                            <option value="DECEMBRE" {% if periode_classement == 'DECEMBRE' %}selected{% endif %}>Décembre</option>
+                            <option value="JANVIER" {% if periode_classement == 'JANVIER' %}selected{% endif %}>Janvier</option>
+                            <option value="FEVRIER" {% if periode_classement == 'FEVRIER' %}selected{% endif %}>Février</option>
+                            <option value="MARS" {% if periode_classement == 'MARS' %}selected{% endif %}>Mars</option>
+                            <option value="AVRIL" {% if periode_classement == 'AVRIL' %}selected{% endif %}>Avril</option>
+                            <option value="MAI" {% if periode_classement == 'MAI' %}selected{% endif %}>Mai</option>
+                            <option value="JUIN" {% if periode_classement == 'JUIN' %}selected{% endif %}>Juin</option>
+                        </optgroup>
+                        <optgroup label="Trimestres">
+                            <option value="TRIMESTRE_1" {% if periode_classement == 'TRIMESTRE_1' %}selected{% endif %}>1er Trimestre</option>
+                            <option value="TRIMESTRE_2" {% if periode_classement == 'TRIMESTRE_2' %}selected{% endif %}>2ème Trimestre</option>
+                            <option value="TRIMESTRE_3" {% if periode_classement == 'TRIMESTRE_3' %}selected{% endif %}>3ème Trimestre</option>
+                        </optgroup>
+                        <optgroup label="Semestres">
+                            <option value="SEMESTRE_1" {% if periode_classement == 'SEMESTRE_1' %}selected{% endif %}>1er Semestre</option>
+                            <option value="SEMESTRE_2" {% if periode_classement == 'SEMESTRE_2' %}selected{% endif %}>2ème Semestre</option>
+                        </optgroup>
+                        <optgroup label="Résultat Annuel">
+                            <option value="ANNUEL_TRIM" {% if periode_classement == 'ANNUEL_TRIM' %}selected{% endif %}>Résultat Annuel (Trimestres)</option>
+                            <option value="ANNUEL_SEM" {% if periode_classement == 'ANNUEL_SEM' %}selected{% endif %}>Résultat Annuel (Semestres)</option>
+                        </optgroup>
+                    </select>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    {% if statistiques %}
+    <!-- Statistiques -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stats-card">
+                <h3>{{ statistiques.moyenne }}</h3>
+                <p><i class="fas fa-chart-line me-2"></i>Moyenne de Classe</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card" style="background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);">
+                <h3>{{ statistiques.note_max }}</h3>
+                <p><i class="fas fa-arrow-up me-2"></i>Note Maximale</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);">
+                <h3>{{ statistiques.note_min }}</h3>
+                <p><i class="fas fa-arrow-down me-2"></i>Note Minimale</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card" style="background: linear-gradient(135deg, #17a2b8 0%, #117a8b 100%);">
+                <h3>{{ statistiques.total_notes }}/{{ statistiques.total_eleves }}</h3>
+                <p><i class="fas fa-users me-2"></i>Notes Saisies</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Résumé -->
+    <div class="alert alert-info mb-4">
+        <i class="fas fa-info-circle me-2"></i>
+        <strong>Résumé:</strong> 
+        {{ statistiques.total_notes }} note(s) saisie(s), 
+        {{ statistiques.absents }} absent(s), 
+        {{ statistiques.non_saisis }} non saisi(s)
+    </div>
+    {% endif %}
+
+    {% if classe_selectionnee %}
+    {% if est_maternelle %}
+    <div class="alert alert-info mb-4">
+        <i class="fas fa-baby me-2"></i>
+        <strong>Classe de Maternelle</strong> - Affichage des appréciations qualitatives (pas de notes numériques ni de classement).
+    </div>
+    {% endif %}
+    
+    <!-- Vue Complète: Toutes les matières -->
+    <div class="table-card">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <h5 class="mb-0"><i class="fas fa-table me-2"></i>{% if est_maternelle %}Appréciations{% else %}Récapitulatif{% endif %} - {{ classe_selectionnee.nom }} - {{ periode_selectionnee|default:"Toutes périodes" }}</h5>
+            <div class="d-flex flex-wrap gap-1">
+                <!-- Export complet avec toutes les notes par matière -->
+                <div class="dropdown">
+                    <button class="btn btn-primary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-table me-1"></i>Notes
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#" onclick="exporterNotesCompletExcel(); return false;">
+                            <i class="fas fa-file-excel text-success me-2"></i>Excel
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" onclick="exporterNotesCompletPDF(); return false;">
+                            <i class="fas fa-file-pdf text-danger me-2"></i>PDF
+                        </a></li>
+                    </ul>
+                </div>
+                <!-- Export classement simple -->
+                <div class="dropdown">
+                    <button class="btn btn-warning btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-trophy me-1"></i>Classement
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#" onclick="exporterResultatsExcel(); return false;">
+                            <i class="fas fa-file-excel text-success me-2"></i>Excel
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" onclick="exporterResultatsPDF(); return false;">
+                            <i class="fas fa-file-pdf text-danger me-2"></i>PDF
+                        </a></li>
+                    </ul>
+                </div>
+                <!-- Certificats d'appréciation Top 5 -->
+                <button class="btn btn-success btn-sm" onclick="imprimerCertificats(); return false;" title="Certificats Top 5">
+                    <i class="fas fa-award me-1"></i>Top 5
+                </button>
+                {% if est_maternelle and periode_selectionnee %}
+                <!-- Fiches Recommandations - Bouton direct -->
+                <a href="{% url 'notes:fiches_recommandations_pdf' %}?classe={{ classe_selectionnee.id }}&trimestre={{ periode_selectionnee }}" 
+                   class="btn btn-info btn-sm" target="_blank" title="Télécharger les fiches de recommandations vierges">
+                    <i class="fas fa-clipboard-list me-1"></i>Fiches Recommandations
+                </a>
+                <!-- Bulletins Maternelle -->
+                <div class="btn-group">
+                    <button type="button" class="btn btn-secondary btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-child me-1"></i>Bulletins
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#modalBulletinsMaternelle">
+                            <i class="fas fa-user-edit me-1"></i>Saisir Analyses/Recommandations
+                        </a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li class="dropdown-header">Modèle 1 (Lettres A-E)</li>
+                        <li><a class="dropdown-item" href="{% url 'notes:bulletins_classe_maternelle_v2_pdf' %}?classe={{ classe_selectionnee.id }}&trimestre={{ periode_selectionnee }}">
+                            <i class="fas fa-file-pdf me-1"></i>Imprimer tous les bulletins
+                        </a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li class="dropdown-header">Modèle 2 (Tableau Activités)</li>
+                        <li><a class="dropdown-item" href="{% url 'notes:bulletins_classe_maternelle_modele2_pdf' %}?classe={{ classe_selectionnee.id }}&trimestre={{ periode_selectionnee }}">
+                            <i class="fas fa-table me-1"></i>Imprimer tous les bulletins (Modèle 2)
+                        </a></li>
+                    </ul>
+                </div>
+                {% endif %}
+                <a href="{% url 'notes:importer_notes' %}" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-file-upload me-1"></i>Importer
+                </a>
+            </div>
+        </div>
+        
+        <!-- Filtres Dynamiques -->
+        <div class="row mb-3">
+            <div class="col-md-3">
+                <label class="form-label"><i class="fas fa-filter me-1"></i>Filtrer par Matière</label>
+                <select id="filtreMatiere" class="form-select form-select-sm">
+                    <option value="">Toutes les matières</option>
+                    {% for matiere in matieres %}
+                    <option value="{{ matiere.id }}">{{ matiere.nom }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label"><i class="fas fa-calendar me-1"></i>Filtrer par Période</label>
+                <select id="filtrePeriode" class="form-select form-select-sm">
+                    <option value="" {% if not request.GET.periode %}selected{% endif %}>Toutes les périodes</option>
+                    <optgroup label="Mois">
+                        <option value="OCTOBRE" {% if request.GET.periode == 'OCTOBRE' %}selected{% endif %}>Octobre</option>
+                        <option value="NOVEMBRE" {% if request.GET.periode == 'NOVEMBRE' %}selected{% endif %}>Novembre</option>
+                        <option value="DECEMBRE" {% if request.GET.periode == 'DECEMBRE' %}selected{% endif %}>Décembre</option>
+                        <option value="JANVIER" {% if request.GET.periode == 'JANVIER' %}selected{% endif %}>Janvier</option>
+                        <option value="FEVRIER" {% if request.GET.periode == 'FEVRIER' %}selected{% endif %}>Février</option>
+                        <option value="MARS" {% if request.GET.periode == 'MARS' %}selected{% endif %}>Mars</option>
+                        <option value="AVRIL" {% if request.GET.periode == 'AVRIL' %}selected{% endif %}>Avril</option>
+                        <option value="MAI" {% if request.GET.periode == 'MAI' %}selected{% endif %}>Mai</option>
+                        <option value="JUIN" {% if request.GET.periode == 'JUIN' %}selected{% endif %}>Juin</option>
+                    </optgroup>
+                    <optgroup label="Trimestres">
+                        <option value="TRIMESTRE_1" {% if request.GET.periode == 'TRIMESTRE_1' %}selected{% endif %}>1er Trimestre</option>
+                        <option value="TRIMESTRE_2" {% if request.GET.periode == 'TRIMESTRE_2' %}selected{% endif %}>2ème Trimestre</option>
+                        <option value="TRIMESTRE_3" {% if request.GET.periode == 'TRIMESTRE_3' %}selected{% endif %}>3ème Trimestre</option>
+                    </optgroup>
+                    <optgroup label="Semestres">
+                        <option value="SEMESTRE_1" {% if request.GET.periode == 'SEMESTRE_1' %}selected{% endif %}>1er Semestre</option>
+                        <option value="SEMESTRE_2" {% if request.GET.periode == 'SEMESTRE_2' %}selected{% endif %}>2ème Semestre</option>
+                    </optgroup>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label"><i class="fas fa-list me-1"></i>Filtrer par Type</label>
+                <select id="filtreType" class="form-select form-select-sm">
+                    <option value="">Tous les types</option>
+                    <option value="mensuelle">Mensuelle</option>
+                    <option value="trimestrielle">Trimestrielle</option>
+                    <option value="semestrielle">Semestrielle</option>
+                    <option value="composition">Composition</option>
+                    <option value="appreciation">Appréciation</option>
+                    <option value="moyenne">Moyennes uniquement</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label"><i class="fas fa-search me-1"></i>Rechercher Élève</label>
+                <input type="text" id="rechercheEleve" class="form-control form-control-sm" placeholder="Nom, prénom ou matricule...">
+            </div>
+        </div>
+
+        {% if eleves_toutes_notes %}
+        <!-- Afficher le tableau si des données existent -->
+        <div class="table-responsive">
+            <table class="table table-bordered table-sm" id="notesTableComplete" style="font-size: 0.85rem;">
+                <thead class="table-primary">
+                    <tr>
+                        <th rowspan="2" class="align-middle">N°</th>
+                        <th rowspan="2" class="align-middle">Matricule</th>
+                        <th rowspan="2" class="align-middle">Nom Complet</th>
+                        <th rowspan="2" class="align-middle">Rang</th>
+                        <th rowspan="2" class="align-middle">{% if est_maternelle %}Acquisition{% elif est_primaire %}Moyenne /10{% else %}Moyenne /20{% endif %}</th>
+                        {% for matiere in matieres %}
+                        <th colspan="{{ evaluations_par_matiere|get_item:matiere.id|length|add:1 }}" class="text-center matiere-col" data-matiere-id="{{ matiere.id|stringformat:"d" }}">
+                            {% if est_maternelle or est_primaire %}
+                            {{ matiere.nom }}
+                            {% else %}
+                            {{ matiere.nom }} (Coef: {{ matiere.coefficient }})
+                            {% endif %}
+                        </th>
+                        {% endfor %}
+                    </tr>
+                    <tr>
+                        {% for matiere in matieres %}
+                            {% for evaluation in evaluations_par_matiere|get_item:matiere.id %}
+                            <th class="text-center periode-col" data-matiere-id="{{ matiere.id|stringformat:"d" }}" data-periode="{{ evaluation.periode }}" style="font-size: 0.75rem;">
+                                {% if est_maternelle %}Appréciation{% else %}{{ evaluation.titre|truncatewords:2 }}{% endif %}
+                            </th>
+                            {% endfor %}
+                            {% if not est_maternelle %}
+                            <th class="text-center bg-light periode-col" data-matiere-id="{{ matiere.id|stringformat:"d" }}" data-periode="moyenne" style="font-size: 0.75rem;">Moy</th>
+                            {% endif %}
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for eleve_data in eleves_toutes_notes %}
+                    <tr>
+                        <td class="text-center">{{ forloop.counter }}</td>
+                        <td><small><strong>{{ eleve_data.eleve.matricule }}</strong></small></td>
+                        <td><small>{{ eleve_data.eleve.prenom }} {{ eleve_data.eleve.nom }}</small></td>
+                        <td class="text-center">
+                            {% if eleve_data.rang %}
+                                {{ eleve_data.rang }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if eleve_data.moyenne_generale is not None %}
+                                {% if est_maternelle %}
+                                    <strong class="text-success">{{ eleve_data.moyenne_generale }}%</strong>
+                                {% else %}
+                                    <strong class="text-primary">{{ eleve_data.moyenne_generale }}</strong>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        {% for matiere in matieres %}
+                            {% with notes_matiere=eleve_data.notes_par_matiere|get_item:matiere.id %}
+                                {% for note_info in notes_matiere.notes %}
+                                <td class="text-center note-cell" data-matiere-id="{{ matiere.id|stringformat:"d" }}" data-periode="{% if note_info.evaluation %}{{ note_info.evaluation.periode }}{% else %}mensuelle{% endif %}">
+                                    {% if note_info.absent %}
+                                        <span class="text-danger">ABS</span>
+                                    {% elif est_maternelle %}
+                                        {% if note_info.appreciation %}
+                                            {% if note_info.appreciation == 'A+' %}
+                                                <span class="badge" style="background-color: #198754; color: white;">{{ note_info.appreciation_display }}</span>
+                                            {% elif note_info.appreciation == 'A' %}
+                                                <span class="badge" style="background-color: #20c997; color: white;">{{ note_info.appreciation_display }}</span>
+                                            {% elif note_info.appreciation == 'B+' %}
+                                                <span class="badge" style="background-color: #0d6efd; color: white;">{{ note_info.appreciation_display }}</span>
+                                            {% elif note_info.appreciation == 'B' %}
+                                                <span class="badge" style="background-color: #6f42c1; color: white;">{{ note_info.appreciation_display }}</span>
+                                            {% elif note_info.appreciation == 'B-' %}
+                                                <span class="badge" style="background-color: #fd7e14; color: white;">{{ note_info.appreciation_display }}</span>
+                                            {% elif note_info.appreciation == 'C' %}
+                                                <span class="badge" style="background-color: #ffc107; color: #212529;">{{ note_info.appreciation_display }}</span>
+                                            {% elif note_info.appreciation == 'D' %}
+                                                <span class="badge" style="background-color: #dc3545; color: white;">{{ note_info.appreciation_display }}</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">{{ note_info.appreciation_display }}</span>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    {% elif note_info.note is not None %}
+                                        {{ note_info.note }}
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                {% endfor %}
+                                {% if not est_maternelle %}
+                                <td class="text-center bg-light note-cell" data-matiere-id="{{ matiere.id|stringformat:"d" }}" data-periode="moyenne">
+                                    {% if notes_matiere.moyenne %}
+                                        <strong class="text-primary">{{ notes_matiere.moyenne }}</strong>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                {% endif %}
+                            {% endwith %}
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <!-- Message si aucune donnée -->
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <strong>Aucune donnée disponible</strong><br>
+            Aucune note n'a été saisie pour cette classe et cette période. Utilisez le bouton "Importer Notes" pour ajouter des notes.
+        </div>
+        {% endif %}
+        
+        <div class="mt-3">
+            <p class="text-muted">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>{{ eleves_toutes_notes|length }}</strong> élève(s) - 
+                <strong>{{ matieres|length }}</strong> matière(s) - 
+                {{ periode_selectionnee|default:"Toutes périodes" }}
+            </p>
+        </div>
+    </div>
+    
+    {% else %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle me-2"></i>
+        Veuillez sélectionner une classe pour consulter les notes.
+    </div>
+    {% endif %}
+</div>
+
+{% load static %}
+{% block extra_js %}
+<script>
+// Filtres dynamiques pour la vue complète
+document.addEventListener('DOMContentLoaded', function() {
+    const filtreMatiere = document.getElementById('filtreMatiere');
+    const filtrePeriode = document.getElementById('filtrePeriode');
+    const filtreType = document.getElementById('filtreType');
+    const rechercheEleve = document.getElementById('rechercheEleve');
+    
+    if (!filtreMatiere || !filtrePeriode || !rechercheEleve) return;
+    
+    function appliquerFiltres() {
+        const matiereSelectionnee = filtreMatiere.value;
+        const periodeSelectionnee = filtrePeriode.value;
+        const typeSelectionne = filtreType ? filtreType.value : '';
+        const rechercheTexte = rechercheEleve.value.toLowerCase();
+        
+        // Filtrer les colonnes d'en-tête (matières)
+        const matieresCols = document.querySelectorAll('.matiere-col');
+        const periodesCols = document.querySelectorAll('.periode-col');
+        
+        matieresCols.forEach(col => {
+            const matiereId = col.dataset.matiereId;
+            if (matiereSelectionnee === '' || matiereId === matiereSelectionnee) {
+                col.style.display = '';
+            } else {
+                col.style.display = 'none';
+            }
+        });
+        
+        periodesCols.forEach(col => {
+            const matiereId = col.dataset.matiereId;
+            const periode = col.dataset.periode;
+            
+            let afficher = true;
+            
+            // Filtre par matière
+            if (matiereSelectionnee !== '' && matiereId !== matiereSelectionnee) {
+                afficher = false;
+            }
+            
+            // Filtre par période (Trimestre/Semestre)
+            if (periodeSelectionnee !== '') {
+                if (periode === 'moyenne') {
+                    // Toujours afficher la colonne moyenne
+                    afficher = afficher && true;
+                } else if (periode !== periodeSelectionnee) {
+                    afficher = false;
+                }
+            }
+            
+            // Filtre par type
+            if (typeSelectionne !== '' && periode !== 'moyenne') {
+                const typeEval = col.dataset.typeEvaluation || '';
+                
+                if (typeSelectionne === 'moyenne') {
+                    // Afficher uniquement les colonnes moyennes
+                    afficher = false;
+                } else if (typeSelectionne === 'mensuelle') {
+                    // Afficher uniquement les notes mensuelles
+                    const mois = ['OCTOBRE', 'NOVEMBRE', 'DECEMBRE', 'JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN'];
+                    if (!mois.includes(periode.toUpperCase())) {
+                        afficher = false;
+                    }
+                } else if (typeSelectionne === 'trimestrielle') {
+                    // Afficher uniquement les notes trimestrielles
+                    if (!periode.includes('TRIMESTRE')) {
+                        afficher = false;
+                    }
+                } else if (typeSelectionne === 'semestrielle') {
+                    // Afficher uniquement les notes semestrielles
+                    if (!periode.includes('SEMESTRE')) {
+                        afficher = false;
+                    }
+                } else if (typeSelectionne === 'composition') {
+                    // Afficher uniquement les compositions
+                    const titre = col.textContent.toLowerCase();
+                    if (!titre.includes('comp')) {
+                        afficher = false;
+                    }
+                } else if (typeSelectionne === 'appreciation') {
+                    // Afficher uniquement les appréciations
+                    const titre = col.textContent.toLowerCase();
+                    if (!titre.includes('appr')) {
+                        afficher = false;
+                    }
+                }
+            } else if (typeSelectionne === 'moyenne') {
+                // Si type = moyenne, afficher uniquement les colonnes moyennes
+                afficher = afficher && (periode === 'moyenne');
+            }
+            
+            col.style.display = afficher ? '' : 'none';
+        });
+        
+        // Filtrer les cellules de données
+        const noteCells = document.querySelectorAll('.note-cell');
+        noteCells.forEach(cell => {
+            const matiereId = cell.dataset.matiereId;
+            const periode = cell.dataset.periode;
+            
+            let afficher = true;
+            
+            // Filtre par matière
+            if (matiereSelectionnee !== '' && matiereId !== matiereSelectionnee) {
+                afficher = false;
+            }
+            
+            // Filtre par période (Trimestre/Semestre)
+            if (periodeSelectionnee !== '') {
+                if (periode === 'moyenne') {
+                    afficher = afficher && true;
+                } else if (periode !== periodeSelectionnee) {
+                    afficher = false;
+                }
+            }
+            
+            // Filtre par type
+            if (typeSelectionne !== '' && periode !== 'moyenne') {
+                if (typeSelectionne === 'moyenne') {
+                    afficher = false;
+                } else if (typeSelectionne === 'mensuelle') {
+                    const mois = ['OCTOBRE', 'NOVEMBRE', 'DECEMBRE', 'JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN'];
+                    if (!mois.includes(periode.toUpperCase())) {
+                        afficher = false;
+                    }
+                } else if (typeSelectionne === 'trimestrielle') {
+                    if (!periode.includes('TRIMESTRE')) {
+                        afficher = false;
+                    }
+                } else if (typeSelectionne === 'semestrielle') {
+                    if (!periode.includes('SEMESTRE')) {
+                        afficher = false;
+                    }
+                } else if (typeSelectionne === 'composition' || typeSelectionne === 'appreciation') {
+                    // Pour composition et appréciation, on filtre par le titre de la colonne
+                    // Ces filtres sont gérés au niveau des colonnes
+                }
+            } else if (typeSelectionne === 'moyenne') {
+                afficher = afficher && (periode === 'moyenne');
+            }
+            
+            cell.style.display = afficher ? '' : 'none';
+        });
+        
+        // Filtrer les lignes (élèves)
+        const tbody = document.querySelector('#notesTableComplete tbody');
+        if (tbody) {
+            const rows = tbody.querySelectorAll('tr');
+            rows.forEach(row => {
+                const matricule = row.cells[1]?.textContent.toLowerCase() || '';
+                const nom = row.cells[2]?.textContent.toLowerCase() || '';
+                
+                if (rechercheTexte === '' || 
+                    matricule.includes(rechercheTexte) || 
+                    nom.includes(rechercheTexte)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        }
+    }
+    
+    // Événements
+    filtreMatiere.addEventListener('change', appliquerFiltres);
+    filtrePeriode.addEventListener('change', appliquerFiltres);
+    if (filtreType) filtreType.addEventListener('change', appliquerFiltres);
+    rechercheEleve.addEventListener('input', appliquerFiltres);
+});
+
+// Fonction pour imprimer le tableau de notes PDF optimisé
+function imprimerTableauNotes() {
+    const classeId = "{{ classe_selectionnee.id }}";
+    const periode = "{{ periode_selectionnee }}";
+    
+    if (!classeId || !periode) {
+        alert('Veuillez sélectionner une classe et une période');
+        return;
+    }
+    
+    const url = "{% url 'notes:imprimer_tableau_notes_html' %}?classe_id=" + classeId + "&periode=" + periode;
+    window.open(url, '_blank');
+}
+
+// Fonction pour exporter les résultats en PDF
+function exporterResultatsPDF() {
+    const classeId = "{{ classe_selectionnee.id|default:'' }}";
+    // Récupérer la période depuis le sélecteur du formulaire
+    const periodeSelect = document.getElementById('periode');
+    const periode = periodeSelect ? periodeSelect.value : '';
+    
+    if (!classeId) {
+        alert('Veuillez sélectionner une classe');
+        return;
+    }
+    
+    // Construire l'URL pour l'export PDF
+    let url = "{% url 'notes:exporter_resultats_pdf' %}?classe_id=" + classeId;
+    if (periode) {
+        url += "&periode=" + encodeURIComponent(periode);
+    }
+    
+    // Ouvrir dans un nouvel onglet pour télécharger
+    window.open(url, '_blank');
+}
+
+// Fonction pour exporter les résultats en Excel
+function exporterResultatsExcel() {
+    const classeId = "{{ classe_selectionnee.id|default:'' }}";
+    // Récupérer la période depuis le sélecteur du formulaire
+    const periodeSelect = document.getElementById('periode');
+    const periode = periodeSelect ? periodeSelect.value : '';
+    
+    if (!classeId) {
+        alert('Veuillez sélectionner une classe');
+        return;
+    }
+    
+    // Construire l'URL pour l'export Excel
+    let url = "{% url 'notes:exporter_resultats_excel' %}?classe_id=" + classeId;
+    if (periode) {
+        url += "&periode=" + encodeURIComponent(periode);
+    }
+    
+    // Télécharger via un lien
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'resultats_classe.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// Fonction pour exporter les notes complètes en Excel (toutes les matières)
+function exporterNotesCompletExcel() {
+    const classeId = "{{ classe_selectionnee.id|default:'' }}";
+    const periodeSelect = document.getElementById('periode');
+    const periode = periodeSelect ? periodeSelect.value : 'OCTOBRE';
+    
+    if (!classeId) {
+        alert('Veuillez sélectionner une classe');
+        return;
+    }
+    
+    if (!periode) {
+        alert('Veuillez sélectionner une période');
+        return;
+    }
+    
+    let url = "{% url 'notes:exporter_notes_complet_excel' %}?classe_id=" + classeId + "&periode=" + encodeURIComponent(periode);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'notes_completes.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// Fonction pour exporter les notes complètes en PDF (toutes les matières)
+function exporterNotesCompletPDF() {
+    const classeId = "{{ classe_selectionnee.id|default:'' }}";
+    const periodeSelect = document.getElementById('periode');
+    const periode = periodeSelect ? periodeSelect.value : 'OCTOBRE';
+    
+    if (!classeId) {
+        alert('Veuillez sélectionner une classe');
+        return;
+    }
+    
+    if (!periode) {
+        alert('Veuillez sélectionner une période');
+        return;
+    }
+    
+    let url = "{% url 'notes:exporter_notes_complet_pdf' %}?classe_id=" + classeId + "&periode=" + encodeURIComponent(periode);
+    window.open(url, '_blank');
+}
+
+// Fonction pour imprimer les certificats d'appréciation des 5 premiers
+function imprimerCertificats() {
+    const classeId = "{{ classe_selectionnee.id|default:'' }}";
+    const periodeSelect = document.getElementById('periode');
+    const periode = periodeSelect ? periodeSelect.value : '';
+    
+    if (!classeId) {
+        alert('Veuillez sélectionner une classe');
+        return;
+    }
+    
+    if (!periode) {
+        alert('Veuillez sélectionner une période pour générer les certificats');
+        return;
+    }
+    
+    let url = "{% url 'notes:certificats_appreciation_pdf' %}?classe_id=" + classeId + "&periode=" + encodeURIComponent(periode);
+    window.open(url, '_blank');
+}
+
+</script>
+
+{% if est_maternelle and periode_selectionnee %}
+<!-- Modal pour sélectionner un élève pour le bulletin maternelle -->
+<div class="modal fade" id="modalBulletinsMaternelle" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title"><i class="fas fa-child me-2"></i>Bulletins Maternelle - Saisie Analyses/Recommandations</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-3">Sélectionnez un élève pour saisir les analyses et recommandations de son bulletin :</p>
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-hover table-sm">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>Matricule</th>
+                                <th>Nom Complet</th>
+                                <th>Appréciation</th>
+                                <th class="text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for eleve_data in eleves_toutes_notes %}
+                            <tr>
+                                <td><small>{{ eleve_data.eleve.matricule }}</small></td>
+                                <td>{{ eleve_data.eleve.prenom }} {{ eleve_data.eleve.nom }}</td>
+                                <td>
+                                    {% if eleve_data.moyenne_generale %}
+                                        <span class="badge bg-success">{{ eleve_data.moyenne_generale }}%</span>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    <a href="{% url 'notes:saisie_bulletin_maternelle' eleve_id=eleve_data.eleve.id classe_id=classe_selectionnee.id trimestre=periode_selectionnee %}" 
+                                       class="btn btn-sm btn-outline-primary" title="Saisir analyses et recommandations">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <a href="{% url 'notes:bulletin_maternelle_v2_pdf' eleve_id=eleve_data.eleve.id classe_id=classe_selectionnee.id trimestre=periode_selectionnee %}" 
+                                       class="btn btn-sm btn-outline-danger" title="Générer PDF" target="_blank">
+                                        <i class="fas fa-file-pdf"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center text-muted">Aucun élève trouvé</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+{% endblock %}

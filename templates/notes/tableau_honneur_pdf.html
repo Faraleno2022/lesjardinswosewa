@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<style>
+    @page {
+        size: A4 landscape;
+        margin: 8mm;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+        font-family: Arial, sans-serif;
+        color: #222;
+        font-size: 10px;
+    }
+
+    /* ── En-tête compact ── */
+    .header {
+        width: 100%;
+        border-bottom: 3px solid #1a6fc4;
+        padding-bottom: 5px;
+        margin-bottom: 6px;
+        overflow: hidden;
+    }
+    .header-left  { float: left;  }
+    .header-right { float: right; text-align: right; }
+    .header::after { content: ''; display: block; clear: both; }
+
+    .header-left-inner { display: inline-block; vertical-align: middle; }
+    .header-logo { display: inline-block; vertical-align: middle; margin-right: 8px; }
+    .header-logo img { width: 40px; height: 40px; object-fit: contain; }
+    .school-name    { font-size: 13px; font-weight: 700; color: #1a1a2e; }
+    .school-details { font-size: 8px; color: #666; }
+    .annee { font-size: 11px; font-weight: 600; color: #1a6fc4; }
+    .date  { font-size: 8px; color: #777; }
+
+    /* ── Titre ── */
+    .main-title { text-align: center; margin-bottom: 8px; }
+    .main-title h1 {
+        font-size: 16px; font-weight: 800;
+        color: #1a6fc4; text-transform: uppercase; letter-spacing: 2px;
+    }
+    .subtitle { font-size: 9px; color: #666; margin-top: 2px; }
+
+    /* ── Grille badges : table 3 colonnes ── */
+    .badges-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 8px 8px;
+    }
+    .badges-table td {
+        width: 33.33%;
+        padding: 0;
+        vertical-align: top;
+    }
+
+    /* ── Badge carte paysage ── */
+    .badge-card {
+        border: 2px solid #1a6fc4;
+        border-radius: 12px;
+        overflow: hidden;
+        background: #fff;
+        page-break-inside: avoid;
+        height: 145px;
+    }
+    .badge-card.gold   { border-color: #d4a017; }
+    .badge-card.silver { border-color: #8a8a8a; }
+    .badge-card.bronze { border-color: #b87333; }
+
+    /* Layout horizontal : photo à gauche, infos à droite */
+    .badge-inner {
+        display: table;
+        width: 100%;
+        height: 100%;
+    }
+    .badge-photo-cell {
+        display: table-cell;
+        width: 115px;
+        height: 145px;
+        vertical-align: top;
+        position: relative;
+    }
+    .badge-info-cell {
+        display: table-cell;
+        vertical-align: top;
+        padding: 8px 10px 6px 10px;
+        position: relative;
+    }
+
+    /* Zone photo à gauche */
+    .badge-photo {
+        width: 115px;
+        height: 145px;
+        overflow: hidden;
+        background: linear-gradient(135deg, #4a90d9 0%, #1a6fc4 50%, #0d3b8c 100%);
+        position: relative;
+    }
+    .badge-photo img {
+        width: 115px;
+        height: 145px;
+        object-fit: contain;
+        display: block;
+    }
+    .badge-photo .no-photo {
+        width: 115px;
+        height: 145px;
+        text-align: center;
+        padding-top: 40px;
+        font-size: 50px;
+        color: rgba(255,255,255,0.35);
+    }
+
+    /* Badge rang superposé en haut à gauche de la photo */
+    .rang-badge {
+        position: absolute;
+        top: 6px;
+        left: 6px;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        text-align: center;
+        line-height: 28px;
+        font-weight: 800;
+        font-size: 11px;
+        color: #fff;
+        z-index: 3;
+        border: 2px solid #fff;
+    }
+    .rang-gold   { background: linear-gradient(135deg, #ffd700, #d4a017); color: #333; }
+    .rang-silver { background: linear-gradient(135deg, #d4d4d4, #8a8a8a); color: #333; }
+    .rang-bronze { background: linear-gradient(135deg, #cd7f32, #b87333); }
+    .rang-other  { background: #1a6fc4; }
+
+    /* ── Infos élève à droite ── */
+    .badge-niveau {
+        display: inline-block;
+        font-size: 7px;
+        font-weight: 700;
+        text-transform: uppercase;
+        padding: 2px 8px;
+        border-radius: 8px;
+        color: #fff;
+        margin-bottom: 5px;
+        letter-spacing: 0.5px;
+    }
+    .niveau-maternelle  { background: #28a745; }
+    .niveau-primaire    { background: #1a6fc4; }
+    .niveau-secondaire  { background: #6c757d; }
+
+    .badge-name {
+        font-size: 12px;
+        font-weight: 800;
+        color: #1a1a2e;
+        text-transform: uppercase;
+        line-height: 1.3;
+        margin-bottom: 2px;
+        letter-spacing: 0.3px;
+    }
+    .badge-classe {
+        font-size: 9px;
+        color: #1a6fc4;
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+
+    /* Stats boxes côte à côte */
+    .badge-stats {
+        overflow: hidden;
+    }
+    .stat-pill {
+        display: inline-block;
+        width: 47%;
+        border-radius: 8px;
+        padding: 4px 0;
+        text-align: center;
+        vertical-align: top;
+        margin-right: 2%;
+    }
+    .stat-pill:last-child { margin-right: 0; }
+
+    .stat-pill-moyenne { background: #eef4ff; border: 1px solid #c7deff; }
+    .stat-pill-rang    { background: #eefbf0; border: 1px solid #b8e6c0; }
+
+    .stat-pill .label {
+        display: block;
+        font-size: 6.5px;
+        text-transform: uppercase;
+        color: #888;
+        letter-spacing: 0.5px;
+        margin-bottom: 1px;
+    }
+    .stat-pill .value {
+        font-size: 11px;
+        font-weight: 800;
+    }
+    .stat-pill-moyenne .value { color: #1a6fc4; }
+    .stat-pill-rang .value    { color: #28a745; }
+
+    /* ── Ruban décoratif diagonal pour le top 3 ── */
+    .badge-ribbon {
+        position: absolute;
+        top: -1px;
+        right: -1px;
+        width: 0;
+        height: 0;
+        border-style: solid;
+        border-width: 0 40px 40px 0;
+        z-index: 2;
+    }
+    .ribbon-gold   { border-color: transparent #ffd700 transparent transparent; }
+    .ribbon-silver { border-color: transparent #c0c0c0 transparent transparent; }
+    .ribbon-bronze { border-color: transparent #cd7f32 transparent transparent; }
+
+    /* ── Footer ── */
+    .footer {
+        margin-top: 8px;
+        padding-top: 5px;
+        border-top: 2px solid #1a6fc4;
+        overflow: hidden;
+        font-size: 8px;
+    }
+    .footer-left  { float: left;  color: #999; }
+    .footer-right { float: right; text-align: right; color: #444; font-weight: 600; }
+    .footer::after { content: ''; display: block; clear: both; }
+    .signature-line {
+        margin-top: 14px;
+        border-top: 1px solid #555;
+        width: 130px;
+        display: inline-block;
+    }
+</style>
+</head>
+<body>
+<div class="page-container">
+
+    <!-- En-tête -->
+    <div class="header">
+        <div class="header-left">
+            {% if logo_base64 %}
+            <span class="header-logo"><img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo"></span>
+            {% endif %}
+            <span class="header-left-inner">
+                <div class="school-name">{{ ecole.nom|default:"Établissement" }}</div>
+                <div class="school-details">
+                    {% if ecole.adresse %}{{ ecole.adresse }}{% endif %}
+                    {% if ecole.telephone %} &mdash; T&eacute;l: {{ ecole.tous_telephones }}{% endif %}
+                </div>
+            </span>
+        </div>
+        <div class="header-right">
+            <div class="annee">Ann&eacute;e scolaire {{ annee_scolaire }}</div>
+            <div class="date">&Eacute;dit&eacute; le {{ date_emission }}</div>
+        </div>
+    </div>
+
+    <!-- Titre -->
+    <div class="main-title">
+        <h1>&#9733; Tableau d'Honneur &#9733;</h1>
+        <div class="subtitle">Premiers de chaque classe &mdash; P&eacute;riode : {{ periode_label }}{% if niveau_filtre %} &mdash; Niveau : {{ niveau_label }}{% endif %}</div>
+    </div>
+
+    <!-- Grille badges : 3 colonnes x 2 lignes par page -->
+    <table class="badges-table">
+        {% for p in premiers %}
+        {% if forloop.counter0|divisibleby:3 %}<tr>{% endif %}
+        <td>
+        <div class="badge-card {% if p.rang_premiers == 1 %}gold{% elif p.rang_premiers == 2 %}silver{% elif p.rang_premiers == 3 %}bronze{% endif %}">
+            <div class="badge-inner">
+                <!-- Photo à gauche -->
+                <div class="badge-photo-cell">
+                    <div class="badge-photo">
+                        <div class="rang-badge {% if p.rang_premiers == 1 %}rang-gold{% elif p.rang_premiers == 2 %}rang-silver{% elif p.rang_premiers == 3 %}rang-bronze{% else %}rang-other{% endif %}">
+                            {% if p.rang_premiers == 1 %}&#9733;{% else %}{{ p.rang_premiers_formate }}{% endif %}
+                        </div>
+                        {% if p.photo_base64 %}
+                        <img src="data:{{ p.photo_mime }};base64,{{ p.photo_base64 }}" alt="Photo">
+                        {% else %}
+                        <div class="no-photo">&#128100;</div>
+                        {% endif %}
+                    </div>
+                </div>
+                <!-- Infos à droite -->
+                <div class="badge-info-cell">
+                    {% if p.rang_premiers <= 3 %}
+                    <div class="badge-ribbon {% if p.rang_premiers == 1 %}ribbon-gold{% elif p.rang_premiers == 2 %}ribbon-silver{% elif p.rang_premiers == 3 %}ribbon-bronze{% endif %}"></div>
+                    {% endif %}
+
+                    {% if not niveau_filtre %}
+                    <span class="badge-niveau {% if p.niveau == 'MATERNELLE' %}niveau-maternelle{% elif p.niveau == 'PRIMAIRE' %}niveau-primaire{% else %}niveau-secondaire{% endif %}">{{ p.niveau }}</span>
+                    {% endif %}
+
+                    <div class="badge-name">{{ p.eleve.prenom }} {{ p.eleve.nom }}</div>
+                    <div class="badge-classe">{{ p.classe_nom }}</div>
+
+                    <div class="badge-stats">
+                        <div class="stat-pill stat-pill-moyenne">
+                            <span class="label">Moyenne</span>
+                            <span class="value">{{ p.moyenne }}/{{ p.note_max }}</span>
+                        </div>
+                        <div class="stat-pill stat-pill-rang">
+                            <span class="label">Rang</span>
+                            <span class="value">{{ p.rang_formate }}/{{ p.total_eleves }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        </td>
+        {% if forloop.counter|divisibleby:3 or forloop.last %}</tr>{% endif %}
+        {% endfor %}
+    </table>
+
+    <!-- Pied de page -->
+    <div class="footer">
+        <div class="footer-left">{{ ecole.nom|default:"Établissement" }} &mdash; Tableau d'Honneur {{ periode_label }} {{ annee_scolaire }}</div>
+        <div class="footer-right">
+            <div>Le Directeur G&eacute;n&eacute;ral</div>
+            {% if ecole.directeur %}<div>{{ ecole.directeur }}</div>{% endif %}
+            <div class="signature-line"></div>
+        </div>
+    </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,538 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }} - myschool{% endblock %}
+
+{% block breadcrumb_items %}
+    <li class="breadcrumb-item"><a href="{% url 'paiements:tableau_bord' %}">Paiements</a></li>
+    <li class="breadcrumb-item active">Liste des paiements</li>
+{% endblock %}
+
+{% block page_actions %}
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        <a href="{% url 'paiements:ajouter_paiement' %}" class="btn btn-primary">
+            <i class="fas fa-plus me-1"></i>Nouveau Paiement
+        </a>
+        <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#filtresModal">
+            <i class="fas fa-filter me-1"></i>Filtres
+        </button>
+        <div class="btn-group">
+            <button type="button" class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-download me-1"></i>Exporter
+            </button>
+            <ul class="dropdown-menu">
+                <li>
+                    <a class="dropdown-item fw-bold" href="#" onclick="exportFiltresExcel(); return false;">
+                        <i class="fas fa-file-excel text-success me-2"></i>Excel (résultats filtrés)
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item fw-bold" href="#" onclick="exportFiltresPdf(); return false;">
+                        <i class="fas fa-file-pdf text-danger me-2"></i>PDF (résultats filtrés)
+                    </a>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <a class="dropdown-item" href="#" onclick="exportListeExcel(); return false;">
+                        <i class="fas fa-file-excel me-2"></i>Excel (liste affichée)
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="{% url 'paiements:export_recap_par_classe_excel' %}{% if q %}?q={{ q|urlencode }}{% endif %}">
+                        <i class="fas fa-file-excel me-2"></i>Excel (récap par classe)
+                    </a>
+                </li>
+                <li><a class="dropdown-item" href="?export=pdf"><i class="fas fa-file-pdf me-2"></i>PDF</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <a class="dropdown-item" href="#" onclick="exportTranchesParClassePdf(); return false;">
+                        <i class="fas fa-file-pdf me-2"></i>Tranches par classe (PDF)
+                    </a>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <a class="dropdown-item fw-bold" href="#" data-bs-toggle="modal" data-bs-target="#rapportComptableModal">
+                        <i class="fas fa-book me-2"></i>Rapport comptable complet…
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Modal Rapport comptable complet -->
+        <div class="modal fade" id="rapportComptableModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title"><i class="fas fa-book me-2"></i>Rapport comptable complet</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted small mb-3">
+                            Paiements, retards et relances par classe, avec statistiques de
+                            rapprochement par mode (Espèces, Chèque, Virement…).
+                        </p>
+                        <div class="mb-3">
+                            <label class="form-label">Classe (vide = tout l'établissement)</label>
+                            <select id="rcClasse" class="form-select">
+                                <option value="">— Tout l'établissement —</option>
+                                {% for classe in classes_rapport %}
+                                <option value="{{ classe.id }}">{{ classe.nom }} ({{ classe.annee_scolaire }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="row">
+                            <div class="col-6 mb-3">
+                                <label class="form-label">Du (optionnel)</label>
+                                <input type="date" id="rcDu" class="form-control">
+                            </div>
+                            <div class="col-6 mb-3">
+                                <label class="form-label">Au (optionnel)</label>
+                                <input type="date" id="rcAu" class="form-control">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-danger" onclick="ouvrirRapportComptable('pdf')">
+                            <i class="fas fa-file-pdf me-1"></i>PDF
+                        </button>
+                        <button type="button" class="btn btn-success" onclick="ouvrirRapportComptable('excel')">
+                            <i class="fas fa-file-excel me-1"></i>Excel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="vr mx-2 d-none d-md-block"></div>
+        <div class="btn-toolbar gap-2">
+            <a href="{% url 'paiements:liste_paiements' %}" class="btn btn-outline-info">
+                <i class="fas fa-list me-1"></i>Tous les Paiements
+            </a>
+            <a href="{% url 'paiements:liste_eleves_soldes' %}" class="btn btn-outline-success">
+                <i class="fas fa-check-circle me-1"></i>Élèves soldés
+            </a>
+            <a href="{% url 'paiements:liste_relances' %}" class="btn btn-outline-warning">
+                <i class="fas fa-bell me-1"></i>Relances
+            </a>
+            {% if perms.utilisateurs.peut_consulter_rapports %}
+            <a href="{% url 'paiements:rapport_remises' %}" class="btn btn-outline-success">
+                <i class="fas fa-percent me-1"></i>Rapport des remises
+            </a>
+            {% endif %}
+            <a href="{% url 'paiements:tableau_bord' %}" class="btn btn-secondary">
+                <i class="fas fa-chart-line me-1"></i>Tableau de bord
+            </a>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .search-card {
+        background: white;
+        border-radius: 15px;
+        padding: 25px;
+        margin-bottom: 25px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        border-left: 5px solid #007bff;
+    }
+    
+    .stats-row {
+        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 25px;
+    }
+    
+    .stat-card {
+        text-align: center;
+        padding: 20px;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        transition: transform 0.2s ease;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-2px);
+    }
+    
+    .stat-value {
+        font-size: 1.8rem;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+    
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    .payments-table {
+        background: white;
+        border-radius: 15px;
+        overflow: hidden;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    .table thead th {
+        background: #007bff;
+        color: white;
+        border: none;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+        letter-spacing: 0.5px;
+        padding: 15px 12px;
+    }
+    
+    .table tbody tr {
+        transition: all 0.2s ease;
+    }
+    
+    .table tbody tr:hover {
+        background: #f8f9fa;
+        transform: scale(1.01);
+    }
+    
+    .table tbody td {
+        padding: 15px 12px;
+        vertical-align: middle;
+        border-top: 1px solid #dee2e6;
+    }
+    
+    .status-badge {
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .status-valide { background: #d4edda; color: #155724; }
+    .status-attente { background: #fff3cd; color: #856404; }
+    .status-rejete { background: #f8d7da; color: #721c24; }
+    .status-annule { background: #e2e3e5; color: #383d41; }
+    
+    .montant-cell {
+        font-weight: bold;
+        font-size: 1.1rem;
+    }
+    
+    .eleve-info {
+        display: flex;
+        align-items: center;
+    }
+    
+    .eleve-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        margin-right: 10px;
+        object-fit: cover;
+    }
+    
+    .eleve-placeholder {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: #007bff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 10px;
+        color: white;
+        font-weight: bold;
+    }
+    
+    .pagination-wrapper {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-top: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    
+    .btn-action {
+        padding: 5px 10px;
+        margin: 0 2px;
+        border-radius: 5px;
+        font-size: 0.8rem;
+    }
+    
+    .search-input {
+        border-radius: 25px;
+        padding: 12px 20px;
+        border: 2px solid #e9ecef;
+        transition: all 0.3s ease;
+    }
+    
+    .search-input:focus {
+        border-color: #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25);
+    }
+    
+    .filter-badge {
+        background: #007bff;
+        color: white;
+        padding: 5px 10px;
+        border-radius: 15px;
+        font-size: 0.8rem;
+        margin: 2px;
+        display: inline-block;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+    <!-- Recherche (une seule zone multi-critères) -->
+    <div class="search-card">
+        <form method="get" class="row g-3 align-items-end" id="filtresForm">
+            <div class="col-md-12">
+                <label for="q" class="form-label">Recherche</label>
+                <input type="text" class="form-control search-input" id="q" name="q"
+                       value="{{ q }}"
+                       placeholder="Nom, Prénoms, N° Reçu, Matricule, Référence...">
+            </div>
+
+            <div class="col-md-3">
+                <label for="f_classe" class="form-label">Classe</label>
+                <select class="form-select" id="f_classe" name="classe_id" onchange="this.form.submit()">
+                    <option value="">Toutes les classes</option>
+                    {% for classe in classes_filtre %}
+                    <option value="{{ classe.id }}" {% if filtre_classe_id == classe.id|stringformat:"s" %}selected{% endif %}>{{ classe.nom }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label for="f_situation" class="form-label">Niveau de paiement</label>
+                <select class="form-select" id="f_situation" name="situation" onchange="this.form.submit()">
+                    <option value="">Tous</option>
+                    <option value="retard" {% if filtre_situation == 'retard' %}selected{% endif %}>En retard</option>
+                    <option value="reste" {% if filtre_situation == 'reste' %}selected{% endif %}>Reste à payer (à tout payer)</option>
+                    <option value="solde" {% if filtre_situation == 'solde' %}selected{% endif %}>Soldé (à jour)</option>
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label for="f_mode" class="form-label">Type de paiement (mode)</label>
+                <select class="form-select" id="f_mode" name="mode_id" onchange="this.form.submit()">
+                    <option value="">Tous les modes</option>
+                    {% for mode in modes_filtre %}
+                    <option value="{{ mode.id }}" {% if filtre_mode_id == mode.id|stringformat:"s" %}selected{% endif %}>{{ mode.nom }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label for="f_type" class="form-label">Nature (type)</label>
+                <select class="form-select" id="f_type" name="type_id" onchange="this.form.submit()">
+                    <option value="">Toutes les natures</option>
+                    {% for type in types_filtre %}
+                    <option value="{{ type.id }}" {% if filtre_type_id == type.id|stringformat:"s" %}selected{% endif %}>{{ type.nom }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-6">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-search me-1"></i>Rechercher
+                </button>
+                <a href="{% url 'paiements:liste_paiements' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-times me-1"></i>Réinitialiser
+                </a>
+            </div>
+        </form>
+
+        {% if q or filtre_classe_id or filtre_situation or filtre_mode_id or filtre_type_id %}
+        <div class="mt-3">
+            <strong>Filtres actifs :</strong>
+            {% if q %}<span class="filter-badge">Recherche: "{{ q }}"</span>{% endif %}
+            {% if filtre_situation == 'retard' %}<span class="filter-badge bg-danger text-white">En retard</span>{% endif %}
+            {% if filtre_situation == 'reste' %}<span class="filter-badge bg-warning">Reste à payer</span>{% endif %}
+            {% if filtre_situation == 'solde' %}<span class="filter-badge bg-success text-white">Soldé</span>{% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Conteneur des résultats dynamiques -->
+    <div id="paiements-results">
+        {% include 'paiements/_paiements_resultats.html' %}
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('q');
+    const results = document.getElementById('paiements-results');
+    const form = searchInput ? searchInput.form : null;
+    let searchTimeout;
+
+    async function loadResults(url) {
+        try {
+            const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            if (!resp.ok) return;
+            const html = await resp.text();
+            // Remplace uniquement le contenu pour éviter les mouvements de page
+            results.innerHTML = html;
+            wirePagination();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function buildUrl(page) {
+        const u = new URL(window.location.origin + window.location.pathname);
+        // Sérialiser tous les champs du formulaire de filtres (q + listes déroulantes)
+        if (form) {
+            const data = new FormData(form);
+            for (const [key, val] of data.entries()) {
+                const v = (val || '').toString().trim();
+                if (v) u.searchParams.set(key, v);
+            }
+        }
+        if (page) u.searchParams.set('page', page);
+        return u.toString();
+    }
+
+    function wirePagination() {
+        // Intercepter les clics de pagination dans le fragment
+        results.querySelectorAll('.pagination a.page-link').forEach(a => {
+            a.addEventListener('click', function(ev) {
+                ev.preventDefault();
+                const target = new URL(a.href, window.location.origin);
+                const page = target.searchParams.get('page');
+                const url = buildUrl(page);
+                history.replaceState({}, '', url);
+                loadResults(url);
+            });
+        });
+    }
+
+    if (searchInput && form) {
+        // Empêcher le submit classique
+        form.addEventListener('submit', function(e){
+            e.preventDefault();
+            const url = buildUrl();
+            history.replaceState({}, '', url);
+            loadResults(url);
+        });
+
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                const url = buildUrl();
+                history.replaceState({}, '', url);
+                loadResults(url);
+            }, 250);
+        });
+    }
+
+    // Initial wiring
+    wirePagination();
+    
+    // Animation des cartes statistiques
+    const statCards = document.querySelectorAll('.stat-card');
+    statCards.forEach((card, index) => {
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(20px)';
+        setTimeout(() => {
+            card.style.transition = 'all 0.5s ease';
+            card.style.opacity = '1';
+            card.style.transform = 'translateY(0)';
+        }, 100 * (index + 1));
+    });
+});
+
+// Ouvre l'export PDF "Tranches par classe" en conservant les filtres de l'URL
+function exportTranchesParClassePdf() {
+    const u = new URL(window.location.href);
+    const base = '{% url "paiements:export_tranches_par_classe_pdf" %}';
+    const out = new URL(base, window.location.origin);
+    const annee = u.searchParams.get('annee_scolaire');
+    const classe = u.searchParams.get('classe') || u.searchParams.get('classe_id'); // compat
+    const ecole = u.searchParams.get('ecole');
+
+    if (annee) out.searchParams.set('annee_scolaire', annee);
+    if (classe) out.searchParams.set('classe', classe);
+    if (ecole) out.searchParams.set('ecole', ecole);
+
+    window.open(out.toString(), '_blank');
+}
+
+// Export des résultats filtrés (reprend tous les filtres actifs du formulaire)
+function _urlExportFiltres(base) {
+    const out = new URL(base, window.location.origin);
+    const form = document.getElementById('filtresForm');
+    if (form) {
+        const data = new FormData(form);
+        for (const [key, val] of data.entries()) {
+            const v = (val || '').toString().trim();
+            if (v) out.searchParams.set(key, v);
+        }
+    }
+    return out.toString();
+}
+function exportFiltresExcel() {
+    window.open(_urlExportFiltres('{% url "paiements:export_paiements_filtres_excel" %}'), '_blank');
+}
+function exportFiltresPdf() {
+    window.open(_urlExportFiltres('{% url "paiements:export_paiements_filtres_pdf" %}'), '_blank');
+}
+
+// Rapport comptable complet (paiements + retards + relances + rapprochement par mode)
+function ouvrirRapportComptable(format) {
+    const base = format === 'pdf'
+        ? '{% url "paiements:export_comptabilite_pdf" %}'
+        : '{% url "paiements:export_comptabilite_excel" %}';
+    const out = new URL(base, window.location.origin);
+    const classe = document.getElementById('rcClasse').value;
+    const du = document.getElementById('rcDu').value;
+    const au = document.getElementById('rcAu').value;
+    if (classe) out.searchParams.set('classe_id', classe);
+    if (du) out.searchParams.set('du', du);
+    if (au) out.searchParams.set('au', au);
+    window.open(out.toString(), '_blank');
+}
+
+// Export Excel de la liste courante (préserve le filtre q)
+function exportListeExcel() {
+    const u = new URL(window.location.href);
+    const base = '{% url "paiements:export_liste_paiements_excel" %}';
+    const out = new URL(base, window.location.origin);
+    const q = u.searchParams.get('q') || (document.getElementById('q')?.value || '').trim();
+    const statut = u.searchParams.get('statut');
+    if (q) out.searchParams.set('q', q);
+    if (statut) out.searchParams.set('statut', statut);
+    window.open(out.toString(), '_blank');
+}
+
+function rejeterPaiement(paiementId) {
+    if (!confirm('Êtes-vous sûr de vouloir rejeter ce paiement ?')) return;
+    // Utilise csrfFetch (défini globalement dans base.html)
+    csrfFetch(`/paiements/${paiementId}/rejeter/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Erreur lors du rejet du paiement');
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        alert('Erreur lors du rejet du paiement');
+    });
+}
+</script>
+{% endblock %}

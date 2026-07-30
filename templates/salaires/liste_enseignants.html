@@ -1,0 +1,644 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Liste des Enseignants{% endblock %}
+
+{% block extra_css %}
+<style>
+    .teacher-card {
+        background: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+        border-left: 4px solid #007bff;
+    }
+    .teacher-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .teacher-card.inactive {
+        border-left-color: #6c757d;
+        background: #f8f9fa;
+        opacity: 0.8;
+    }
+    .teacher-card.hourly {
+        border-left-color: #17a2b8;
+    }
+    .teacher-card.fixed {
+        border-left-color: #28a745;
+    }
+    .teacher-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: 1rem;
+    }
+    .teacher-name {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 0.25rem;
+    }
+    .teacher-meta {
+        color: #6c757d;
+        font-size: 0.9rem;
+        margin-bottom: 0.5rem;
+    }
+    .teacher-contact {
+        font-size: 0.85rem;
+        color: #6c757d;
+    }
+    .teacher-salary {
+        text-align: right;
+    }
+    .salary-amount {
+        font-size: 1.25rem;
+        font-weight: bold;
+        color: #2c3e50;
+    }
+    .salary-type {
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+    .teacher-details {
+        background: #f8f9fa;
+        border-radius: 6px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    .detail-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.5rem;
+        font-size: 0.9rem;
+    }
+    .detail-row:last-child {
+        margin-bottom: 0;
+    }
+    .teacher-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    .btn-action {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+        border-radius: 6px;
+    }
+    .status-badge {
+        padding: 0.4rem 0.8rem;
+        border-radius: 15px;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+    .status-active {
+        background: #d4edda;
+        color: #155724;
+    }
+    .status-inactive {
+        background: #f8d7da;
+        color: #721c24;
+    }
+    .status-leave {
+        background: #fff3cd;
+        color: #856404;
+    }
+    .type-badge {
+        padding: 0.3rem 0.6rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        margin-right: 0.5rem;
+    }
+    .type-garderie {
+        background: #e1f5fe;
+        color: #01579b;
+    }
+    .type-maternelle {
+        background: #f3e5f5;
+        color: #4a148c;
+    }
+    .type-primaire {
+        background: #e8f5e8;
+        color: #1b5e20;
+    }
+    .type-secondaire {
+        background: #fff3e0;
+        color: #e65100;
+    }
+    .type-administrateur {
+        background: #fce4ec;
+        color: #880e4f;
+    }
+    .filter-section {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    .stats-overview {
+        background: linear-gradient(135deg, #0d6efd 0%, #1e59d9 100%);
+        color: white;
+        border-radius: 10px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+        text-align: center;
+    }
+    .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+    }
+    .stat-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #6c757d;
+    }
+    .empty-state i {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+    .assignments-list {
+        max-height: 150px;
+        overflow-y: auto;
+        background: #ffffff;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 0.5rem;
+    }
+    .assignment-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.25rem 0;
+        border-bottom: 1px solid #f1f3f4;
+        font-size: 0.85rem;
+    }
+    .assignment-item:last-child {
+        border-bottom: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Token CSRF pour les actions JavaScript -->
+    {% csrf_token %}
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">
+                <i class="fas fa-users text-primary"></i>
+                Liste des Enseignants
+            </h1>
+            <p class="text-muted mb-0">Gestion et suivi des enseignants</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <a href="{% url 'salaires:ajouter_enseignant' %}" class="btn btn-success me-2">
+                <i class="fas fa-plus"></i> Nouvel Enseignant
+            </a>
+            <a href="{% url 'salaires:tableau_bord' %}" class="btn btn-primary me-2">
+                <i class="fas fa-tachometer-alt"></i> Tableau de Bord
+            </a>
+            {% with qs=request.GET.urlencode %}
+            <a href="{% url 'salaires:export_enseignants_csv' %}{% if qs %}?{{ qs }}{% endif %}" class="btn btn-outline-success">
+                <i class="fas fa-file-csv me-1"></i> Exporter CSV
+            </a>
+            <a href="{% url 'salaires:export_enseignants_pdf' %}{% if qs %}?{{ qs }}{% endif %}" class="btn btn-outline-danger">
+                <i class="fas fa-file-pdf me-1"></i> Exporter PDF
+            </a>
+            {% endwith %}
+        </div>
+    </div>
+
+    <!-- Statistiques générales -->
+    <div class="stats-overview">
+        <div class="stat-grid">
+            <div>
+                <div class="stat-number" data-target="{{ stats.total_enseignants }}">0</div>
+                <div class="stat-label">Total Enseignants</div>
+            </div>
+            <div>
+                <div class="stat-number" data-target="{{ stats.enseignants_actifs }}">0</div>
+                <div class="stat-label">Actifs</div>
+            </div>
+            <div>
+                <div class="stat-number" data-target="{{ stats.salaire_fixe }}">0</div>
+                <div class="stat-label">Salaire Fixe</div>
+            </div>
+            <div>
+                <div class="stat-number" data-target="{{ stats.taux_horaire }}">0</div>
+                <div class="stat-label">Taux Horaire</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="filter-section">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">École</label>
+                <select name="ecole" class="form-select">
+                    <option value="">Toutes les écoles</option>
+                    {% for ecole in ecoles %}
+                    <option value="{{ ecole.id }}" {% if request.GET.ecole == ecole.id|stringformat:"s" %}selected{% endif %}>
+                        {{ ecole.nom }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Type</label>
+                <select name="type_enseignant" class="form-select">
+                    <option value="">Tous les types</option>
+                    <option value="GARDERIE" {% if request.GET.type_enseignant == "GARDERIE" %}selected{% endif %}>Garderie</option>
+                    <option value="MATERNELLE" {% if request.GET.type_enseignant == "MATERNELLE" %}selected{% endif %}>Maternelle</option>
+                    <option value="PRIMAIRE" {% if request.GET.type_enseignant == "PRIMAIRE" %}selected{% endif %}>Primaire</option>
+                    <option value="SECONDAIRE" {% if request.GET.type_enseignant == "SECONDAIRE" %}selected{% endif %}>Secondaire</option>
+                    <option value="ADMINISTRATEUR" {% if request.GET.type_enseignant == "ADMINISTRATEUR" %}selected{% endif %}>Administrateur</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Statut</label>
+                <select name="statut" class="form-select">
+                    <option value="">Tous les statuts</option>
+                    <option value="ACTIF" {% if request.GET.statut == "ACTIF" %}selected{% endif %}>Actif</option>
+                    <option value="CONGE" {% if request.GET.statut == "CONGE" %}selected{% endif %}>En congé</option>
+                    <option value="SUSPENDU" {% if request.GET.statut == "SUSPENDU" %}selected{% endif %}>Suspendu</option>
+                    <option value="DEMISSIONNAIRE" {% if request.GET.statut == "DEMISSIONNAIRE" %}selected{% endif %}>Démissionnaire</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">&nbsp;</label>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-filter"></i> Filtrer
+                    </button>
+                    <a href="{% url 'salaires:liste_enseignants' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-times"></i> Reset
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Liste des enseignants -->
+    {% if page_obj %}
+    <div class="row">
+        {% for enseignant in page_obj %}
+        <div class="col-lg-6">
+            <div class="teacher-card {% if enseignant.statut != 'ACTIF' %}inactive{% elif enseignant.type_enseignant == 'SECONDAIRE' %}hourly{% else %}fixed{% endif %}">
+                <div class="teacher-header">
+                    <div class="teacher-info flex-grow-1">
+                        <div class="teacher-name">{{ enseignant.nom_complet }}</div>
+                        <div class="teacher-meta">
+                            <i class="fas fa-school me-1"></i>{{ enseignant.ecole.nom }}
+                        </div>
+                        <div class="teacher-meta">
+                            <span class="type-badge type-{{ enseignant.type_enseignant|lower }}">
+                                {{ enseignant.get_type_enseignant_display }}
+                            </span>
+                            <span class="status-badge {% if enseignant.statut == 'ACTIF' %}status-active{% elif enseignant.statut == 'CONGE' %}status-leave{% else %}status-inactive{% endif %}">
+                                {{ enseignant.get_statut_display }}
+                            </span>
+                        </div>
+                        <div class="teacher-contact">
+                            {% if enseignant.telephone %}
+                            <i class="fas fa-phone me-1"></i>{{ enseignant.telephone }}
+                            {% endif %}
+                            {% if enseignant.email %}
+                            <span class="ms-2"><i class="fas fa-envelope me-1"></i>{{ enseignant.email }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="teacher-salary">
+                        {% if enseignant.type_enseignant == 'SECONDAIRE' %}
+                        <div class="salary-amount">{{ enseignant.taux_horaire|intcomma }} GNF</div>
+                        <div class="salary-type">par heure</div>
+                        {% else %}
+                        <div class="salary-amount">{{ enseignant.salaire_fixe|intcomma }} GNF</div>
+                        <div class="salary-type">fixe/mois</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Détails de l'enseignant -->
+                <div class="teacher-details">
+                    <div class="detail-row">
+                        <span><strong>Date d'embauche:</strong></span>
+                        <span>{{ enseignant.date_embauche|date:"d/m/Y" }}</span>
+                    </div>
+                    {% if enseignant.adresse %}
+                    <div class="detail-row">
+                        <span><strong>Adresse:</strong></span>
+                        <span>{{ enseignant.adresse|truncatechars:40 }}</span>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Affectations de classes -->
+                    {% if enseignant.affectations.exists %}
+                    <div class="detail-row">
+                        <span><strong>Classes assignées:</strong></span>
+                        <div class="assignments-list">
+                            {% for affectation in enseignant.affectations.all %}
+                            {% if affectation.actif %}
+                            <div class="assignment-item">
+                                <span>{{ affectation.classe.nom }}</span>
+                                {% if enseignant.type_enseignant == 'SECONDAIRE' %}
+                                <span class="text-info">{{ affectation.heures_par_semaine }}h/sem</span>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Statistiques récentes -->
+                    {% with derniers_etats=enseignant.etats_salaire.all|slice:":3" %}
+                    {% if derniers_etats %}
+                    <div class="detail-row">
+                        <span><strong>Derniers salaires:</strong></span>
+                        <div>
+                            {% for etat in derniers_etats %}
+                            <small class="d-block">
+                                {{ etat.periode }}: {{ etat.salaire_net|intcomma }} GNF
+                                {% if etat.paye %}
+                                <i class="fas fa-check-circle text-success"></i>
+                                {% elif etat.valide %}
+                                <i class="fas fa-check text-warning"></i>
+                                {% else %}
+                                <i class="fas fa-clock text-muted"></i>
+                                {% endif %}
+                            </small>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% endwith %}
+                </div>
+
+                <!-- Actions -->
+                <div class="teacher-actions">
+                    <a href="{% url 'salaires:detail_enseignant' enseignant.id %}" 
+                       class="btn btn-primary btn-action" title="Voir le détail">
+                        <i class="fas fa-eye"></i> Détail
+                    </a>
+                    
+                    <a href="{% url 'salaires:modifier_enseignant' enseignant.id %}" 
+                       class="btn btn-warning btn-action" title="Modifier l'enseignant">
+                        <i class="fas fa-edit"></i> Modifier
+                    </a>
+                    
+                    <a href="{% url 'salaires:etats_salaire' %}?enseignant={{ enseignant.id }}" 
+                       class="btn btn-info btn-action" title="Voir les salaires">
+                        <i class="fas fa-file-invoice-dollar"></i> Salaires
+                    </a>
+                    
+                    <button class="btn btn-danger btn-action" 
+                            onclick="confirmerSuppression({{ enseignant.id }}, '{{ enseignant.nom_complet|escapejs }}')"
+                            title="Supprimer l'enseignant">
+                        <i class="fas fa-trash"></i> Supprimer
+                    </button>
+                    
+                    {% if enseignant.statut == 'ACTIF' %}
+                    <button class="btn btn-outline-warning btn-action" 
+                            onclick="changerStatut({{ enseignant.id }}, 'CONGE')"
+                            title="Mettre en congé">
+                        <i class="fas fa-pause"></i> Congé
+                    </button>
+                    {% else %}
+                    <button class="btn btn-outline-success btn-action" 
+                            onclick="changerStatut({{ enseignant.id }}, 'ACTIF')"
+                            title="Réactiver">
+                        <i class="fas fa-play"></i> Réactiver
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <nav aria-label="Navigation des enseignants">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page=1{% if request.GET.ecole %}&ecole={{ request.GET.ecole }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.statut %}&statut={{ request.GET.statut }}{% endif %}">
+                    <i class="fas fa-angle-double-left"></i>
+                </a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.ecole %}&ecole={{ request.GET.ecole }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.statut %}&statut={{ request.GET.statut }}{% endif %}">
+                    <i class="fas fa-angle-left"></i>
+                </a>
+            </li>
+            {% endif %}
+            
+            {% for num in page_obj.paginator.page_range %}
+            {% if page_obj.number == num %}
+            <li class="page-item active">
+                <span class="page-link">{{ num }}</span>
+            </li>
+            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ num }}{% if request.GET.ecole %}&ecole={{ request.GET.ecole }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.statut %}&statut={{ request.GET.statut }}{% endif %}">{{ num }}</a>
+            </li>
+            {% endif %}
+            {% endfor %}
+            
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.ecole %}&ecole={{ request.GET.ecole }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.statut %}&statut={{ request.GET.statut }}{% endif %}">
+                    <i class="fas fa-angle-right"></i>
+                </a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if request.GET.ecole %}&ecole={{ request.GET.ecole }}{% endif %}{% if request.GET.type %}&type={{ request.GET.type }}{% endif %}{% if request.GET.statut %}&statut={{ request.GET.statut }}{% endif %}">
+                    <i class="fas fa-angle-double-right"></i>
+                </a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <!-- État vide -->
+    <div class="empty-state">
+        <i class="fas fa-users"></i>
+        <h4>Aucun enseignant trouvé</h4>
+        <p class="text-muted">
+            {% if request.GET.ecole or request.GET.type or request.GET.statut %}
+            Aucun enseignant ne correspond aux filtres sélectionnés.
+            <br><a href="{% url 'salaires:liste_enseignants' %}">Réinitialiser les filtres</a>
+            {% else %}
+            Commencez par ajouter des enseignants à votre école.
+            <br><button class="btn btn-success mt-2" data-bs-toggle="modal" data-bs-target="#nouvelEnseignantModal">
+                <i class="fas fa-plus"></i> Ajouter un Enseignant
+            </button>
+            {% endif %}
+        </p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal Nouvel Enseignant -->
+<div class="modal fade" id="nouvelEnseignantModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus me-2"></i>Nouvel Enseignant
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Cette fonctionnalité sera bientôt disponible. Pour l'instant, les enseignants sont gérés via le script d'initialisation.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times"></i> Fermer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Animation des cartes
+        const teacherCards = document.querySelectorAll('.teacher-card');
+        teacherCards.forEach((card, index) => {
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(20px)';
+            setTimeout(() => {
+                card.style.transition = 'all 0.5s ease';
+                card.style.opacity = '1';
+                card.style.transform = 'translateY(0)';
+            }, index * 100);
+        });
+
+        // Animation des statistiques
+        const statNumbers = document.querySelectorAll('.stat-number[data-target]');
+        statNumbers.forEach(stat => {
+            const target = parseInt(stat.getAttribute('data-target'));
+            let current = 0;
+            const increment = Math.ceil(target / 20);
+            
+            const counter = setInterval(() => {
+                current += increment;
+                if (current >= target) {
+                    current = target;
+                    clearInterval(counter);
+                }
+                stat.textContent = current;
+            }, 50);
+        });
+
+        // Auto-submit des filtres
+        let filterTimeout;
+        document.querySelectorAll('.filter-section select').forEach(select => {
+            select.addEventListener('change', function() {
+                clearTimeout(filterTimeout);
+                filterTimeout = setTimeout(() => {
+                    this.form.submit();
+                }, 500);
+            });
+        });
+    });
+
+    function confirmerSuppression(enseignantId, nomComplet) {
+        if (confirm(`⚠️ ATTENTION ⚠️\n\nÊtes-vous sûr de vouloir supprimer l'enseignant "${nomComplet}" ?\n\nCette action est irréversible. Si l'enseignant a des états de salaire ou des affectations, la suppression sera refusée.`)) {
+            // Créer un formulaire pour envoyer la requête POST
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/salaires/enseignants/${enseignantId}/supprimer/`;
+            
+            // Ajouter le token CSRF
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]');
+            if (csrfToken) {
+                const csrfInput = document.createElement('input');
+                csrfInput.type = 'hidden';
+                csrfInput.name = 'csrfmiddlewaretoken';
+                csrfInput.value = csrfToken.value;
+                form.appendChild(csrfInput);
+            }
+            
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+
+    function changerStatut(enseignantId, nouveauStatut) {
+        const action = nouveauStatut === 'ACTIF' ? 'réactiver' : 'mettre en congé';
+        if (confirm(`Êtes-vous sûr de vouloir ${action} cet enseignant ?`)) {
+            // Créer un formulaire pour envoyer la requête POST
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = `/salaires/enseignants/changer-statut/${enseignantId}/`;
+            
+            // Ajouter le token CSRF
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]');
+            if (csrfToken) {
+                const csrfInput = document.createElement('input');
+                csrfInput.type = 'hidden';
+                csrfInput.name = 'csrfmiddlewaretoken';
+                csrfInput.value = csrfToken.value;
+                form.appendChild(csrfInput);
+            }
+            
+            // Ajouter le nouveau statut
+            const statutInput = document.createElement('input');
+            statutInput.type = 'hidden';
+            statutInput.name = 'nouveau_statut';
+            statutInput.value = nouveauStatut;
+            form.appendChild(statutInput);
+            
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+
+    // Recherche en temps réel (à implémenter)
+    function rechercherEnseignant(terme) {
+        // Logique de recherche à implémenter
+        console.log('Recherche:', terme);
+    }
+
+    // Export des données (à implémenter)
+    function exporterEnseignants() {
+        const params = new URLSearchParams();
+        const search = document.querySelector('[name="search"]');
+        const ecole = document.querySelector('[name="ecole"]');
+        const type = document.querySelector('[name="type_enseignant"]');
+        const statut = document.querySelector('[name="statut"]');
+        if (search && search.value) params.set('search', search.value);
+        if (ecole && ecole.value) params.set('ecole', ecole.value);
+        if (type && type.value) params.set('type_enseignant', type.value);
+        if (statut && statut.value) params.set('statut', statut.value);
+        const qs = params.toString();
+        const url = '{% url "salaires:export_enseignants_csv" %}' + (qs ? ('?' + qs) : '');
+        window.location.href = url;
+    }
+</script>
+{% endblock %}

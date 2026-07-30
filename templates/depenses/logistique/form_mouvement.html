@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <!-- En-tête -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2><i class="fas fa-plus text-success"></i> {{ titre_page }}</h2>
+                </div>
+                <div>
+                    <a href="{% url 'depenses:liste_mouvements' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Retour
+                    </a>
+                </div>
+            </div>
+
+            <!-- Formulaire -->
+            <div class="card">
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Article *</label>
+                                {{ form.article }}
+                                {% if form.article.errors %}
+                                <div class="text-danger">{{ form.article.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">Type *</label>
+                                {{ form.type_mouvement }}
+                                {% if form.type_mouvement.errors %}
+                                <div class="text-danger">{{ form.type_mouvement.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">Motif *</label>
+                                {{ form.motif }}
+                                {% if form.motif.errors %}
+                                <div class="text-danger">{{ form.motif.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Quantité *</label>
+                                {{ form.quantite }}
+                                {% if form.quantite.errors %}
+                                <div class="text-danger">{{ form.quantite.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Prix Unitaire (GNF)</label>
+                                {{ form.prix_unitaire }}
+                                {% if form.prix_unitaire.errors %}
+                                <div class="text-danger">{{ form.prix_unitaire.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Date *</label>
+                                {{ form.date_mouvement }}
+                                {% if form.date_mouvement.errors %}
+                                <div class="text-danger">{{ form.date_mouvement.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Destinataire/Fournisseur</label>
+                                {{ form.destinataire }}
+                                {% if form.destinataire.errors %}
+                                <div class="text-danger">{{ form.destinataire.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Document de référence</label>
+                                {{ form.document_reference }}
+                                {% if form.document_reference.errors %}
+                                <div class="text-danger">{{ form.document_reference.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Observations</label>
+                            {{ form.observations }}
+                            {% if form.observations.errors %}
+                            <div class="text-danger">{{ form.observations.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'depenses:liste_mouvements' %}" class="btn btn-secondary">
+                                <i class="fas fa-times"></i> Annuler
+                            </a>
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="fas fa-save"></i> Enregistrer
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

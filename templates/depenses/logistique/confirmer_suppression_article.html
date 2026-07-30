@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-6 offset-md-3">
+            <div class="card border-danger mt-4">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0"><i class="fas fa-exclamation-triangle"></i> Archiver l'article</h5>
+                </div>
+                <div class="card-body">
+                    <p>Voulez-vous vraiment archiver l'article
+                        <strong>{{ article.nom }}</strong> ({{ article.code_article }}) ?</p>
+                    <p class="text-muted">
+                        L'article sera masqué des listes mais son historique de mouvements est conservé.
+                    </p>
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'depenses:detail_article' article.id %}" class="btn btn-secondary">
+                                <i class="fas fa-times"></i> Annuler
+                            </a>
+                            <button type="submit" class="btn btn-danger">
+                                <i class="fas fa-archive"></i> Archiver
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

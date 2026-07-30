@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MySchoolGN — Application fermée</title>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #1a3a5c;
+            color: #fff;
+        }
+        .wrap {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .card {
+            background: #22496f;
+            border-radius: 16px;
+            padding: 40px 48px;
+            text-align: center;
+            max-width: 460px;
+            box-shadow: 0 10px 40px rgba(0,0,0,.35);
+        }
+        .icon { font-size: 56px; margin-bottom: 8px; }
+        h1 { font-size: 22px; margin: 8px 0 12px; }
+        p { color: #cfe0f0; line-height: 1.5; margin: 6px 0; }
+        .small { font-size: 13px; color: #9db8d3; margin-top: 18px; }
+        button {
+            margin-top: 22px;
+            background: #e74c3c;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 22px;
+            font-size: 15px;
+            cursor: pointer;
+        }
+        button:hover { background: #c0392b; }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="card">
+            <div class="icon">✅</div>
+            <h1>Application fermée</h1>
+            <p>Le serveur MySchoolGN a été arrêté avec succès.</p>
+            <p>Vous pouvez maintenant lancer une autre application.</p>
+            <button type="button" onclick="fermerFenetre()">Fermer la fenêtre</button>
+            <p class="small">Cette fenêtre va se fermer automatiquement…</p>
+        </div>
+    </div>
+    <script>
+        function fermerFenetre() {
+            try { window.open('', '_self'); window.close(); } catch (e) {}
+            try { window.opener = null; window.top.close(); } catch (e) {}
+            try { location.replace('about:blank'); } catch (e) {}
+        }
+        // Fermeture automatique après un court instant
+        setTimeout(fermerFenetre, 1500);
+    </script>
+</body>
+</html>

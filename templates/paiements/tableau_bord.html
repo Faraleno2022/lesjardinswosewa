@@ -1,0 +1,482 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }} - myschool{% endblock %}
+
+{% block breadcrumb_items %}
+    <li class="breadcrumb-item active">Paiements</li>
+{% endblock %}
+
+{% block page_actions %}
+    <div>
+        <a href="{% url 'paiements:ajouter_paiement' %}" class="btn btn-primary">
+            <i class="fas fa-plus me-1"></i>Nouveau Paiement
+        </a>
+        <a href="{% url 'paiements:liste_paiements' %}" class="btn btn-outline-info">
+            <i class="fas fa-list me-1"></i>Tous les Paiements
+        </a>
+        <a href="{% url 'paiements:liste_eleves_soldes' %}" class="btn btn-outline-success">
+            <i class="fas fa-check-circle me-1"></i>Élèves soldés
+        </a>
+        <a href="{% url 'paiements:liste_eleves_impayes' %}" class="btn btn-outline-danger">
+            <i class="fas fa-exclamation-triangle me-1"></i>Élèves impayés
+        </a>
+        <a href="{% url 'paiements:liste_relances' %}" class="btn btn-outline-warning">
+            <i class="fas fa-bell me-1"></i>Relances
+        </a>
+        {% if user.is_superuser %}
+        <a href="{% url 'administration:system_logs' %}" class="btn btn-outline-danger">
+            <i class="fas fa-exclamation-triangle me-1"></i>Logs système
+        </a>
+        {% endif %}
+        <a href="{% url 'rapports:rapport_remises' %}" class="btn btn-outline-success">
+            <i class="fas fa-percent me-1"></i>Rapport des remises
+        </a>
+    </div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-card {
+        background: white;
+        border-radius: 10px;
+        padding: 25px;
+        text-align: center;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        border-top: 4px solid #007bff;
+        margin-bottom: 20px;
+        transition: transform 0.2s;
+    }
+    .stat-card:hover {
+        transform: translateY(-2px);
+    }
+    .stat-number {
+        font-size: 1.8rem;
+        font-weight: bold;
+        color: #007bff;
+        margin-bottom: 10px;
+        line-height: 1.2;
+    }
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    .stat-card.success { border-top-color: #28a745; }
+    .stat-card.success .stat-number { color: #28a745; }
+    .stat-card.warning { border-top-color: #ffc107; }
+    .stat-card.warning .stat-number { color: #ffc107; }
+    .stat-card.danger { border-top-color: #dc3545; }
+    .stat-card.danger .stat-number { color: #dc3545; }
+    
+    .recent-payments {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    
+    .payment-item {
+        border-left: 4px solid #007bff;
+        padding: 15px;
+        margin-bottom: 10px;
+        background: #f8f9fa;
+        border-radius: 0 8px 8px 0;
+    }
+    
+    .payment-item.validated { border-left-color: #28a745; }
+    .payment-item.pending { border-left-color: #ffc107; }
+    .payment-item.rejected { border-left-color: #dc3545; }
+
+    .director-card {
+        background: #ffffff;
+        border: 1px solid #e9ecef;
+        border-radius: 10px;
+        padding: 18px;
+        height: 100%;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    }
+    .director-label {
+        color: #6c757d;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: .06rem;
+        margin-bottom: 6px;
+    }
+    .director-value {
+        font-size: 1.35rem;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+    .risk-table td,
+    .risk-table th {
+        vertical-align: middle;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+    <!-- Statistiques principales -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stat-card success">
+                <div class="stat-number">{{ stats.total_paiements_mois|floatformat:0|intcomma }}</div>
+                <div class="stat-label">GNF ce mois</div>
+                <small class="text-muted">Paiements validés</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-number">{{ stats.nombre_paiements_mois|intcomma }}</div>
+                <div class="stat-label">Paiements</div>
+                <small class="text-muted">Ce mois</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card warning">
+                <div class="stat-number">{{ stats.eleves_en_retard|intcomma }}</div>
+                <div class="stat-label">Élèves en retard</div>
+                <small class="text-muted">À relancer</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card danger">
+                <div class="stat-number">{{ stats.paiements_en_attente|intcomma }}</div>
+                <div class="stat-label">En attente</div>
+                <small class="text-muted">À valider</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vue directeur : recouvrement et prévisions -->
+    <div class="card mb-4 border-0 shadow-sm">
+        <div class="card-header bg-primary text-white d-flex flex-column flex-md-row justify-content-between align-items-md-center">
+            <div>
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-chart-line me-2"></i>Tableau de bord directeur
+                </h5>
+                <small>Recouvrement global{% if finance_direction.annee_active %} - année {{ finance_direction.annee_active }}{% endif %}</small>
+            </div>
+            <a href="{% url 'paiements:export_recap_par_classe_excel' %}" class="btn btn-light btn-sm mt-2 mt-md-0">
+                <i class="fas fa-file-excel me-1"></i>Exporter par classe
+            </a>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 mb-4">
+                <div class="col-md-6 col-xl-3">
+                    <div class="director-card">
+                        <div class="director-label">Total attendu</div>
+                        <div class="director-value text-primary">{{ finance_direction.total_du|floatformat:0|intcomma }} GNF</div>
+                        <small class="text-muted">{{ finance_direction.eleves_suivis|intcomma }} élèves suivis</small>
+                    </div>
+                </div>
+                <div class="col-md-6 col-xl-3">
+                    <div class="director-card">
+                        <div class="director-label">Déjà encaissé</div>
+                        <div class="director-value text-success">{{ finance_direction.total_encaisse|floatformat:0|intcomma }} GNF</div>
+                        <small class="text-muted">{{ finance_direction.taux_recouvrement }}% de recouvrement</small>
+                    </div>
+                </div>
+                <div class="col-md-6 col-xl-3">
+                    <div class="director-card">
+                        <div class="director-label">Reste à encaisser</div>
+                        <div class="director-value text-danger">{{ finance_direction.reste_a_encaisser|floatformat:0|intcomma }} GNF</div>
+                        <small class="text-muted">{{ finance_direction.eleves_non_soldes|intcomma }} élèves non soldés</small>
+                    </div>
+                </div>
+                <div class="col-md-6 col-xl-3">
+                    <div class="director-card">
+                        <div class="director-label">Prévision 30 jours</div>
+                        <div class="director-value text-warning">{{ finance_direction.prevision_30j|floatformat:0|intcomma }} GNF</div>
+                        <small class="text-muted">Échéances proches non réglées</small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <div class="d-flex justify-content-between mb-1">
+                    <span class="fw-semibold">Progression du recouvrement</span>
+                    <span>{{ finance_direction.taux_recouvrement }}%</span>
+                </div>
+                <div class="progress" style="height: 12px;">
+                    <div class="progress-bar bg-success" role="progressbar" style="width: {{ finance_direction.taux_recouvrement_bar }}%;" aria-valuenow="{{ finance_direction.taux_recouvrement_bar }}" aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-lg-8">
+                    <h6 class="text-uppercase text-muted mb-3">Classes à surveiller</h6>
+                    {% if classes_a_risque %}
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover risk-table">
+                                <thead>
+                                    <tr>
+                                        <th>Classe</th>
+                                        <th>Élèves</th>
+                                        <th>Reste</th>
+                                        <th>Retard</th>
+                                        <th>Recouvrement</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for classe in classes_a_risque %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ classe.classe_nom }}</strong>
+                                            {% if classe.ecole_nom %}<br><small class="text-muted">{{ classe.ecole_nom }}</small>{% endif %}
+                                        </td>
+                                        <td>{{ classe.eleves_count|intcomma }}</td>
+                                        <td>{{ classe.reste|floatformat:0|intcomma }} GNF</td>
+                                        <td>
+                                            {% if classe.retard > 0 %}
+                                                <span class="badge bg-danger">{{ classe.retard|floatformat:0|intcomma }} GNF</span>
+                                            {% else %}
+                                                <span class="badge bg-success">À jour</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ classe.taux }}%</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">Aucune classe à risque détectée pour le moment.</p>
+                    {% endif %}
+                </div>
+                <div class="col-lg-4">
+                    <h6 class="text-uppercase text-muted mb-3">Modes d'encaissement du mois</h6>
+                    {% if modes_encaissement %}
+                        <div class="list-group">
+                            {% for mode in modes_encaissement %}
+                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>{{ mode.mode_paiement__nom|default:"Non précisé" }}</strong>
+                                    <br><small class="text-muted">{{ mode.nombre|intcomma }} paiement(s)</small>
+                                </div>
+                                <span class="fw-semibold">{{ mode.total|floatformat:0|intcomma }} GNF</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">Aucun encaissement validé ce mois.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Paiements récents -->
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-clock me-2"></i>Paiements récents
+                    </h5>
+                    <a href="{% url 'paiements:liste_paiements' %}" class="btn btn-sm btn-outline-primary">
+                        Voir tout
+                    </a>
+                </div>
+                <div class="card-body p-0">
+                    {% if paiements_recents %}
+                        <div class="recent-payments">
+                            {% for paiement in paiements_recents %}
+                                <div class="payment-item {% if paiement.statut == 'VALIDE' %}validated{% elif paiement.statut == 'EN_ATTENTE' %}pending{% else %}rejected{% endif %}">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <h6 class="mb-1">
+                                                <a href="{% url 'paiements:detail_paiement' paiement.id %}" class="text-decoration-none">
+                                                    {{ paiement.eleve.prenom }} {{ paiement.eleve.nom }}
+                                                </a>
+                                            </h6>
+                                            <p class="mb-1">
+                                                <span class="badge bg-info">{{ paiement.type_paiement.nom }}</span>
+                                                <span class="badge bg-secondary">{{ paiement.mode_paiement.nom }}</span>
+                                            </p>
+                                            <small class="text-muted">
+                                                <i class="fas fa-calendar me-1"></i>{{ paiement.date_paiement|date:"d/m/Y" }}
+                                                <i class="fas fa-receipt ms-2 me-1"></i>{{ paiement.numero_recu }}
+                                            </small>
+                                        </div>
+                                        <div class="text-end">
+                                            <h6 class="mb-1">{{ paiement.montant|floatformat:0|intcomma }} GNF</h6>
+                                            {% if paiement.statut == 'VALIDE' %}
+                                                <span class="badge bg-success">Validé</span>
+                                            {% elif paiement.statut == 'EN_ATTENTE' %}
+                                                <span class="badge bg-warning">En attente</span>
+                                            {% else %}
+                                                <span class="badge bg-danger">{{ paiement.get_statut_display }}</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-receipt fa-3x text-muted mb-3"></i>
+                            <h6 class="text-muted">Aucun paiement récent</h6>
+                            <p class="text-muted">Les paiements apparaîtront ici</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Élèves en retard -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-exclamation-triangle me-2 text-warning"></i>Retards de paiement
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if eleves_en_retard %}
+                        <div class="list-group list-group-flush">
+                            {% for echeancier in eleves_en_retard %}
+                                <div class="list-group-item">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <h6 class="mb-1">
+                                                <a href="{% url 'paiements:echeancier_eleve' echeancier.eleve.id %}" class="text-decoration-none">
+                                                    {{ echeancier.eleve.prenom }} {{ echeancier.eleve.nom }}
+                                                </a>
+                                            </h6>
+                                            <p class="mb-1">
+                                                <small class="text-muted">{{ echeancier.eleve.classe.nom }} - {{ echeancier.eleve.classe.ecole.nom }}</small>
+                                            </p>
+                                            <small class="text-danger">
+                                                <i class="fas fa-clock me-1"></i>Retard: {{ echeancier.retard_db|floatformat:0|intcomma }} GNF
+                                            </small>
+                                        </div>
+                                        <div class="text-end">
+                                            <a href="{% url 'paiements:ajouter_paiement_eleve' echeancier.eleve.id %}" 
+                                               class="btn btn-sm btn-outline-primary" title="Ajouter paiement">
+                                                <i class="fas fa-plus"></i>
+                                            </a>
+                                            <form method="post" action="{% url 'paiements:relancer_eleve' echeancier.eleve.id %}" class="d-inline ms-1">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="next" value="{% url 'paiements:tableau_bord' %}">
+                                                <button type="submit" class="btn btn-sm btn-warning" title="Relancer" onclick="return confirm('Envoyer une relance à ce responsable ?');">
+                                                    <i class="fas fa-bell"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                            <h6 class="text-success">Aucun retard</h6>
+                            <p class="text-muted">Tous les élèves sont à jour</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Actions rapides -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-bolt me-2"></i>Actions rapides
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'paiements:ajouter_paiement' %}" class="btn btn-primary">
+                            <i class="fas fa-plus me-2"></i>Nouveau Paiement
+                        </a>
+                        <a href="{% url 'paiements:liste_paiements' %}?statut=EN_ATTENTE" class="btn btn-warning">
+                            <i class="fas fa-clock me-2"></i>Paiements à valider
+                        </a>
+                        <a href="{% url 'paiements:liste_relances' %}" class="btn btn-outline-warning">
+                            <i class="fas fa-bell me-2"></i>Voir les relances
+                        </a>
+                        {% if user.is_superuser %}
+                        <a href="{% url 'administration:system_logs' %}" class="btn btn-danger">
+                            <i class="fas fa-list-alt me-2"></i>Logs système
+                        </a>
+                        {% endif %}
+                        <a href="{% url 'paiements:liste_eleves_soldes' %}" class="btn btn-outline-success">
+                            <i class="fas fa-check-circle me-2"></i>Élèves soldés
+                        </a>
+                        <a href="{% url 'eleves:liste_eleves' %}" class="btn btn-info">
+                            <i class="fas fa-users me-2"></i>Gérer les Élèves
+                        </a>
+                        <a href="{% url 'rapports:rapport_remises' %}" class="btn btn-success">
+                            <i class="fas fa-tags me-2"></i>Rapport des remises
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Animation des cartes statistiques
+    const statCards = document.querySelectorAll('.stat-card');
+    statCards.forEach(card => {
+        card.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateY(-5px)';
+        });
+        card.addEventListener('mouseleave', function() {
+            this.style.transform = 'translateY(0)';
+        });
+    });
+    
+    // Fonction pour mettre à jour les statistiques
+    function updateStatistics() {
+        fetch('{% url "paiements:ajax_statistiques_paiements" %}')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Mettre à jour les valeurs dans l'interface
+                    const stats = data.stats;
+                    
+                    // Total paiements ce mois
+                    const totalElem = document.querySelector('.stat-card.success .stat-number');
+                    if (totalElem) {
+                        totalElem.textContent = new Intl.NumberFormat('fr-FR').format(stats.total_paiements_mois);
+                    }
+                    
+                    // Nombre de paiements ce mois
+                    const nombreElem = document.querySelector('.stat-card:not(.success):not(.warning):not(.danger) .stat-number');
+                    if (nombreElem) {
+                        nombreElem.textContent = new Intl.NumberFormat('fr-FR').format(stats.nombre_paiements_mois);
+                    }
+                    
+                    // Élèves en retard
+                    const retardElem = document.querySelector('.stat-card.warning .stat-number');
+                    if (retardElem) {
+                        retardElem.textContent = new Intl.NumberFormat('fr-FR').format(stats.eleves_en_retard);
+                    }
+                    
+                    // Paiements en attente
+                    const attenteElem = document.querySelector('.stat-card.danger .stat-number');
+                    if (attenteElem) {
+                        attenteElem.textContent = new Intl.NumberFormat('fr-FR').format(stats.paiements_en_attente);
+                    }
+                    
+                    console.log('Statistiques paiements mises à jour:', stats);
+                }
+            })
+            .catch(error => {
+                console.error('Erreur lors de la mise à jour des statistiques:', error);
+            });
+    }
+    
+    // Mettre à jour les statistiques au chargement
+    updateStatistics();
+    
+    // Actualisation automatique toutes les 30 secondes
+    setInterval(updateStatistics, 30000);
+});
+</script>
+{% endblock %}

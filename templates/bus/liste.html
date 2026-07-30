@@ -1,0 +1,390 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}Bus scolaire - Abonnements{% endblock %}
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="{% url 'bus:index' %}">Bus scolaire</a></li>
+<li class="breadcrumb-item active" aria-current="page">Liste</li>
+{% endblock %}
+{% block page_actions %}
+<a class="btn btn-success" href="{% url 'bus:nouveau' %}"><i class="fas fa-plus me-1"></i>Nouvel abonnement</a>
+{% endblock %}
+{% block content %}
+<form method="get" class="row g-2 mb-3">
+  <div class="col-md-4">
+    <input type="text" name="q" class="form-control" placeholder="Rechercher (élève, zone, arrêt, contact)" value="{{ q }}">
+  </div>
+  <div class="col-md-2">
+    <button class="btn btn-primary w-100" type="submit"><i class="fas fa-search me-1"></i>Rechercher</button>
+  </div>
+</form>
+
+<!-- Filtres rapides -->
+<div class="mb-3">
+  <div class="btn-group" role="group" aria-label="Filtres abonnements">
+    <a class="btn btn-sm {% if not filtre %}btn-primary{% else %}btn-outline-primary{% endif %}"
+       href="{% url 'bus:liste' %}?{% if q %}q={{ q|urlencode }}&{% endif %}">
+      <i class="fas fa-list me-1"></i>Tous
+    </a>
+    <a class="btn btn-sm {% if filtre == 'expires' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+       href="{% url 'bus:liste' %}?{% if q %}q={{ q|urlencode }}&{% endif %}filtre=expires">
+      <i class="fas fa-times-circle me-1"></i>Expirés
+    </a>
+    <a class="btn btn-sm {% if filtre == 'suspendus' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+       href="{% url 'bus:liste' %}?{% if q %}q={{ q|urlencode }}&{% endif %}filtre=suspendus">
+      <i class="fas fa-pause-circle me-1"></i>Suspendus
+    </a>
+    <a class="btn btn-sm {% if filtre == 'proches' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+       href="{% url 'bus:liste' %}?{% if q %}q={{ q|urlencode }}&{% endif %}filtre=proches">
+      <i class="fas fa-hourglass-half me-1"></i>Proches d'expiration
+    </a>
+    <a class="btn btn-sm {% if filtre == 'depassees' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+       href="{% url 'bus:liste' %}?{% if q %}q={{ q|urlencode }}&{% endif %}filtre=depassees">
+      <i class="fas fa-exclamation-triangle me-1"></i>Expiration dépassée
+    </a>
+  </div>
+  {% if filtre %}
+    <span class="ms-2 text-muted small">Filtre actif: {{ filtre }}</span>
+  {% endif %}
+  {% if q %}
+    <span class="ms-2 badge text-bg-light">Recherche: "{{ q }}"</span>
+  {% endif %}
+  
+  <div class="mt-2 text-muted small">
+    <span class="me-3">Actifs: {{ nb_actifs|default:0|intcomma }}</span>
+    <span class="me-3">Expirés: {{ nb_expires|default:0|intcomma }}</span>
+    <span class="me-3">Suspendus: {{ nb_suspendus|default:0|intcomma }}</span>
+    <span class="me-3">Proches: {{ nb_expiration_proche|default:0|intcomma }}</span>
+    <span class="me-3">Dépassée: {{ nb_expiration_depassee|default:0|intcomma }}</span>
+  </div>
+</div>
+
+<!-- Cartes de synthèse -->
+<div class="row g-3 mb-3">
+  <div class="col-md-3">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-muted small">Total abonnements</div>
+            <div class="h4 mb-0">{{ total_count|intcomma }}</div>
+          </div>
+          <i class="fas fa-bus fa-2x text-primary"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <div class="text-muted small">Actifs</div>
+        <div class="h4 mb-1">{{ nb_actifs|intcomma }}</div>
+        <div class="text-success">{{ montant_actifs|default:0|intcomma }} GNF</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <div class="text-muted small">Expirés</div>
+        <div class="h4 mb-1">{{ nb_expires|intcomma }}</div>
+        <div class="text-danger">{{ montant_expires|default:0|intcomma }} GNF</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <div class="text-muted small">Suspendus</div>
+        <div class="h4 mb-1">{{ nb_suspendus|intcomma }}</div>
+        <div class="text-warning">{{ montant_suspendus|default:0|intcomma }} GNF</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Expiration: proches et dépassées -->
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header py-2"><i class="fas fa-hourglass-half me-1"></i>Proches d'expiration</div>
+      <div class="card-body">
+        <div class="display-6">{{ nb_expiration_proche|intcomma }}</div>
+        <div class="text-muted">Dans la fenêtre d'alerte</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header py-2"><i class="fas fa-times-circle me-1"></i>Expiration dépassée</div>
+      <div class="card-body">
+        <div class="display-6 text-danger">{{ nb_expiration_depassee|intcomma }}</div>
+        <div class="text-muted">À relancer</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Répartitions -->
+<div class="row g-3 mb-4">
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header d-flex justify-content-between align-items-center py-2">
+        <span><i class="fas fa-stream me-1"></i>Répartition par périodicité</span>
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'bus:export_breakdown_csv' 'periodicite' %}?q={{ q|urlencode }}"><i class="fas fa-file-csv me-1"></i>Exporter CSV</a>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive mt-3">
+          <table class="table table-sm table-striped">
+            <thead><tr><th>Périodicité</th><th class="text-end">Nombre</th><th class="text-end">Montant</th></tr></thead>
+            <tbody>
+              {% for r in periodicite_rows %}
+              <tr>
+                <td>{{ r.label }}</td>
+                <td class="text-end">{{ r.nb|intcomma }}</td>
+                <td class="text-end">{{ r.montant|intcomma }} GNF</td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="3" class="text-center text-muted">Aucune donnée</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header d-flex justify-content-between align-items-center py-2">
+        <span><i class="fas fa-map-marker-alt me-1"></i>Top zones</span>
+        <a class="btn btn-sm btn-outline-secondary" href="{% url 'bus:export_breakdown_csv' 'zone' %}?q={{ q|urlencode }}"><i class="fas fa-file-csv me-1"></i>Exporter CSV</a>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive mt-3">
+          <table class="table table-sm table-striped">
+            <thead><tr><th>Zone</th><th class="text-end">Nombre</th><th class="text-end">Montant</th></tr></thead>
+            <tbody>
+              {% for r in zone_rows %}
+              <tr>
+                <td>{{ r.zone }}</td>
+                <td class="text-end">{{ r.nb|intcomma }}</td>
+                <td class="text-end">{{ r.montant|intcomma }} GNF</td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="3" class="text-center text-muted">Aucune donnée</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="table-container-scrollable">
+<table class="table table-striped table-hover align-middle">
+  <thead>
+    <tr>
+      <th>Élève</th>
+      <th>Classe</th>
+      <th>Périodicité</th>
+      <th>Montant</th>
+      <th>Début</th>
+      <th>Expiration</th>
+      <th>Statut</th>
+      <th>Zone</th>
+      <th>Arrêt</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for a in abonnements %}
+    <tr class="{% if a.est_expire %}table-danger{% elif a.est_proche_expiration %}table-warning{% endif %}">
+      <td>{{ a.eleve.prenom }} {{ a.eleve.nom }} ({{ a.eleve.matricule }})</td>
+      <td>{{ a.eleve.classe.nom }}</td>
+      <td>{{ a.get_periodicite_display }}</td>
+      <td>{{ a.montant|intcomma }} GNF</td>
+      <td>{{ a.date_debut|date:'d/m/Y' }}</td>
+      <td>{{ a.date_expiration|date:'d/m/Y' }}</td>
+      <td>{{ a.get_statut_display }}</td>
+      <td>{{ a.zone }}</td>
+      <td>{{ a.point_arret }}</td>
+      <td>
+        <div class="btn-group btn-group-sm">
+          <a class="btn btn-outline-primary" href="{% url 'bus:modifier' a.id %}" title="Modifier"><i class="fas fa-edit"></i></a>
+          <a class="btn btn-outline-secondary" href="{% url 'bus:recu_pdf' a.id %}" target="_blank" title="Reçu PDF"><i class="fas fa-file-pdf"></i></a>
+          <button type="button" class="btn btn-success" onclick="envoyerAbonnementWhatsApp({{ a.id }})" title="Envoyer par WhatsApp"><i class="fab fa-whatsapp"></i></button>
+        </div>
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="10" class="text-center text-muted py-4">Aucun abonnement trouvé</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Modal WhatsApp pour abonnement bus -->
+<div class="modal fade" id="whatsappBusModal" tabindex="-1" aria-labelledby="whatsappBusModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header" style="background: #25D366; color: white;">
+                <h5 class="modal-title" id="whatsappBusModalLabel">
+                    <i class="fab fa-whatsapp me-2"></i>Envoyer l'abonnement par WhatsApp
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="whatsappBusContent">
+                    <div class="text-center">
+                        <div class="spinner-border text-success" role="status">
+                            <span class="visually-hidden">Chargement...</span>
+                        </div>
+                        <p class="mt-2">Préparation du message...</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-success" id="btnOuvrirWhatsAppBus" disabled>
+                    <i class="fab fa-whatsapp me-2"></i>Ouvrir WhatsApp
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let whatsappBusModal;
+let currentWhatsAppLinkBus = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    whatsappBusModal = new bootstrap.Modal(document.getElementById('whatsappBusModal'));
+    
+    document.getElementById('btnOuvrirWhatsAppBus').addEventListener('click', function() {
+        if (currentWhatsAppLinkBus) {
+            window.open(currentWhatsAppLinkBus, '_blank');
+            whatsappBusModal.hide();
+            
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-success alert-dismissible fade show mb-3';
+            alertDiv.innerHTML = `
+                <i class="fab fa-whatsapp me-2"></i>
+                <strong>WhatsApp ouvert !</strong> Le message avec le reçu d'abonnement a été pré-rempli.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            const container = document.querySelector('.container-fluid') || document.querySelector('form');
+            if (container) {
+                container.parentNode.insertBefore(alertDiv, container);
+                window.scrollTo(0, 0);
+            }
+        }
+    });
+});
+
+function envoyerAbonnementWhatsApp(aboId) {
+    whatsappBusModal.show();
+    chargerApercuWhatsAppBus(aboId);
+}
+
+function chargerApercuWhatsAppBus(aboId) {
+    const content = document.getElementById('whatsappBusContent');
+    const btnOuvrir = document.getElementById('btnOuvrirWhatsAppBus');
+    
+    btnOuvrir.disabled = true;
+    currentWhatsAppLinkBus = null;
+    content.innerHTML = `
+        <div class="text-center">
+            <div class="spinner-border text-success" role="status">
+                <span class="visually-hidden">Chargement...</span>
+            </div>
+            <p class="mt-2">Préparation du message...</p>
+        </div>
+    `;
+    
+    fetch(`{% url 'bus:apercu_whatsapp_abonnement' %}?abo_id=${aboId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                afficherApercuWhatsAppBus(data);
+                if (data.whatsapp_link) {
+                    currentWhatsAppLinkBus = data.whatsapp_link;
+                    btnOuvrir.disabled = false;
+                }
+            } else {
+                content.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle me-2"></i>
+                        <strong>Erreur:</strong> ${data.error}
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            content.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    <strong>Erreur:</strong> Erreur de connexion
+                </div>
+            `;
+        });
+}
+
+function afficherApercuWhatsAppBus(data) {
+    const content = document.getElementById('whatsappBusContent');
+    
+    content.innerHTML = `
+        <div class="row">
+            <div class="col-md-5">
+                <h6><i class="fas fa-bus me-2"></i>Détails de l'abonnement</h6>
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <p><strong>Élève:</strong> ${data.eleve_nom}</p>
+                        <p><strong>Classe:</strong> ${data.classe}</p>
+                        <hr>
+                        <p><strong>Périodicité:</strong> ${data.periodicite}</p>
+                        <p><strong>Montant:</strong> <span class="badge bg-primary">${data.montant} GNF</span></p>
+                        <p><strong>Début:</strong> ${data.date_debut}</p>
+                        <p><strong>Expiration:</strong> ${data.date_expiration}</p>
+                        <p><strong>Statut:</strong> ${data.statut}</p>
+                        <p><strong>Zone:</strong> ${data.zone}</p>
+                        <p class="mb-0"><strong>Point d'arrêt:</strong> ${data.point_arret}</p>
+                    </div>
+                </div>
+                
+                ${data.pdf_url ? `
+                <div class="alert alert-success mt-3">
+                    <i class="fas fa-file-pdf me-2"></i>
+                    <strong>Reçu PDF inclus !</strong><br>
+                    <small>Le lien de téléchargement sera inclus dans le message.</small>
+                </div>
+                ` : ''}
+                
+                ${!data.telephone ? `
+                <div class="alert alert-warning mt-3">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Attention:</strong> Aucun numéro WhatsApp trouvé.
+                </div>
+                ` : `
+                <div class="alert alert-info mt-3">
+                    <i class="fas fa-phone me-2"></i>
+                    <strong>Destinataire:</strong> ${data.telephone}
+                </div>
+                `}
+            </div>
+            
+            <div class="col-md-7">
+                <h6><i class="fab fa-whatsapp me-2"></i>Aperçu du message</h6>
+                <div class="card">
+                    <div class="card-body" style="background: #e7ffdb; font-family: 'Segoe UI', sans-serif; max-height: 350px; overflow-y: auto;">
+                        <div style="white-space: pre-line; font-size: 13px;">${data.message}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+</script>
+{% endblock %}

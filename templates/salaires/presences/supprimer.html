@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Supprimer Présence - Salaires{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2><i class="fas fa-trash"></i> Supprimer Présence</h2>
+                <a href="{% url 'salaires:liste_presences' %}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Retour
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-danger">
+        <div class="card-header bg-danger text-white">
+            <h5 class="mb-0">
+                <i class="fas fa-exclamation-triangle"></i> Confirmation de Suppression
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-circle"></i>
+                <strong>Attention !</strong> Vous êtes sur le point de supprimer définitivement cette présence.
+                Cette action est irréversible.
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h6 class="card-title">Détails de la présence à supprimer :</h6>
+                    <table class="table table-bordered">
+                        <tr>
+                            <th width="200">Enseignant</th>
+                            <td>{{ presence.enseignant.nom_complet }}</td>
+                        </tr>
+                        <tr>
+                            <th>Date</th>
+                            <td>{{ presence.date|date:"d/m/Y" }}</td>
+                        </tr>
+                        <tr>
+                            <th>Statut</th>
+                            <td>
+                                {% if presence.statut == 'PRESENT' %}
+                                <span class="badge bg-success">{{ presence.get_statut_display }}</span>
+                                {% elif presence.statut == 'ABSENT' %}
+                                <span class="badge bg-danger">{{ presence.get_statut_display }}</span>
+                                {% elif presence.statut == 'RETARD' %}
+                                <span class="badge bg-warning">{{ presence.get_statut_display }}</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ presence.get_statut_display }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Heure d'arrivée</th>
+                            <td>{{ presence.heure_arrivee|time:"H:i"|default:"-" }}</td>
+                        </tr>
+                        <tr>
+                            <th>Heure de départ</th>
+                            <td>{{ presence.heure_depart|time:"H:i"|default:"-" }}</td>
+                        </tr>
+                        <tr>
+                            <th>Heures travaillées</th>
+                            <td>{{ presence.heures_travaillees|default:"-" }}h</td>
+                        </tr>
+                        <tr>
+                            <th>Justifié</th>
+                            <td>
+                                {% if presence.justifie %}
+                                <i class="fas fa-check-circle text-success"></i> Oui
+                                {% else %}
+                                <i class="fas fa-times-circle text-danger"></i> Non
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% if presence.observations %}
+                        <tr>
+                            <th>Observations</th>
+                            <td>{{ presence.observations }}</td>
+                        </tr>
+                        {% endif %}
+                        <tr>
+                            <th>Pointé par</th>
+                            <td>{{ presence.pointe_par.get_full_name|default:presence.pointe_par.username }}</td>
+                        </tr>
+                        <tr>
+                            <th>Date de création</th>
+                            <td>{{ presence.date_creation|date:"d/m/Y H:i" }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <form method="post">
+                {% csrf_token %}
+                <div class="d-flex justify-content-between">
+                    <a href="{% url 'salaires:liste_presences' %}" class="btn btn-secondary btn-lg">
+                        <i class="fas fa-times"></i> Annuler
+                    </a>
+                    <button type="submit" class="btn btn-danger btn-lg" onclick="return confirm('Êtes-vous vraiment sûr de vouloir supprimer cette présence ?');">
+                        <i class="fas fa-trash"></i> Confirmer la Suppression
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

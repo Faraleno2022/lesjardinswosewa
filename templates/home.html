@@ -1,0 +1,784 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Les Jardins Wosewa — Groupe Scolaire Privé à Conakry (Maternelle, Primaire, Collège, Lycée){% endblock %}
+{% block meta_description %}Les Jardins Wosewa est une institution privée d'enseignement général à Kipé T2, Conakry. Programme franco-guinéen de la maternelle au lycée, dans un cadre d'apprentissage, de créativité et d'excellence.{% endblock %}
+{% block og_title %}Les Jardins Wosewa — Un cadre d'apprentissage, de créativité et d'excellence{% endblock %}
+{% block og_description %}Institution privée d'enseignement général à Conakry : maternelle, primaire, collège et lycée, programme franco-guinéen.{% endblock %}
+{% block twitter_title %}Les Jardins Wosewa — Groupe Scolaire Privé à Conakry{% endblock %}
+{% block twitter_description %}Maternelle, primaire, collège et lycée à Kipé T2, Conakry. Programme franco-guinéen.{% endblock %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "School",
+  "name": "Groupe Scolaire Privé Les Jardins Wosewa",
+  "description": "Institution privée d'enseignement général proposant un programme franco-guinéen de la maternelle au lycée.",
+  "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "Carrefour Métal Guinée, Kipé T2",
+    "addressLocality": "Conakry",
+    "addressCountry": "GN"
+  },
+  "image": "{{ request.scheme }}://{{ request.get_host }}{% static 'images/optimized/ecole.webp' %}",
+  "url": "{{ request.scheme }}://{{ request.get_host }}/"
+}
+</script>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* ===== Palette de l'école (reprise du logo) ===== */
+  .wosewa {
+    --w-blue: #1657a8;
+    --w-blue-dark: #0f3f7d;
+    --w-blue-soft: #eaf1fb;
+    --w-orange: #f28c1e;
+    --w-orange-soft: #fff2e2;
+    --w-ink: #24303f;
+    --w-muted: #5b6979;
+  }
+
+  /* Pleine largeur : annule le padding du <main> de base.html */
+  .w-bleed {
+    margin-left: -1.5rem;
+    margin-right: -1.5rem;
+  }
+
+  /* ===== Bannière sous la navbar ===== */
+  .w-hero {
+    margin-top: -1.5rem;
+    background: #eef4fc;
+    line-height: 0;
+  }
+
+  .w-hero img {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  .w-hero-actions {
+    background: linear-gradient(135deg, var(--w-blue) 0%, var(--w-blue-dark) 100%);
+    padding: 1.15rem 1.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: .65rem;
+  }
+
+  .w-hero-actions .btn {
+    min-height: 46px;
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    font-weight: 600;
+    border-radius: 999px;
+    padding-inline: 1.35rem;
+  }
+
+  .w-hero-actions .btn-w-orange {
+    background: var(--w-orange);
+    border-color: var(--w-orange);
+    color: #fff;
+  }
+
+  .w-hero-actions .btn-w-orange:hover {
+    background: #dd7a10;
+    border-color: #dd7a10;
+    color: #fff;
+  }
+
+  /* ===== Titres de section ===== */
+  .w-section {
+    padding: 3.5rem 0;
+  }
+
+  .w-section--soft {
+    background: var(--w-blue-soft);
+  }
+
+  .w-eyebrow {
+    display: inline-block;
+    background: var(--w-orange-soft);
+    color: #b96407;
+    font-weight: 700;
+    font-size: .78rem;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    padding: .35rem 1rem;
+    border-radius: 999px;
+    margin-bottom: .85rem;
+  }
+
+  .w-title {
+    color: var(--w-blue);
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: 1rem;
+  }
+
+  .w-title--rule::after {
+    content: "";
+    display: block;
+    width: 68px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--w-orange);
+    margin-top: .85rem;
+  }
+
+  .w-lead {
+    color: var(--w-muted);
+    font-size: 1.06rem;
+    line-height: 1.75;
+  }
+
+  /* ===== Cycles ===== */
+  .w-cycle {
+    height: 100%;
+    background: #fff;
+    border: 1px solid #e3ebf5;
+    border-radius: 1rem;
+    padding: 1.75rem 1.25rem;
+    text-align: center;
+    transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+  }
+
+  .w-cycle:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 14px 30px rgba(22, 87, 168, .14);
+    border-color: #c9dcf3;
+  }
+
+  .w-cycle__icon {
+    width: 62px;
+    height: 62px;
+    margin: 0 auto 1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    background: var(--w-blue-soft);
+    color: var(--w-blue);
+  }
+
+  .w-cycle:nth-child(even) .w-cycle__icon {
+    background: var(--w-orange-soft);
+    color: var(--w-orange);
+  }
+
+  .w-cycle h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--w-ink);
+    margin-bottom: .35rem;
+  }
+
+  .w-cycle p {
+    color: var(--w-muted);
+    font-size: .92rem;
+    margin-bottom: 0;
+  }
+
+  /* ===== Cartes mission / approche ===== */
+  .w-card {
+    height: 100%;
+    background: #fff;
+    border: 1px solid #e3ebf5;
+    border-left: 5px solid var(--w-blue);
+    border-radius: .9rem;
+    padding: 1.85rem;
+  }
+
+  .w-card--orange {
+    border-left-color: var(--w-orange);
+  }
+
+  .w-card h3 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--w-blue);
+    margin-bottom: .85rem;
+  }
+
+  .w-card--orange h3 {
+    color: #c26a06;
+  }
+
+  .w-card p {
+    color: var(--w-muted);
+    line-height: 1.75;
+    margin-bottom: 0;
+  }
+
+  /* ===== Engagements ===== */
+  .w-commit {
+    display: flex;
+    gap: .9rem;
+    align-items: flex-start;
+    background: #fff;
+    border-radius: .8rem;
+    padding: 1.15rem 1.25rem;
+    height: 100%;
+    box-shadow: 0 2px 10px rgba(15, 63, 125, .06);
+  }
+
+  .w-commit i {
+    color: #198754;
+    font-size: 1.15rem;
+    margin-top: .15rem;
+  }
+
+  .w-commit span {
+    color: var(--w-ink);
+    font-weight: 500;
+  }
+
+  /* ===== Galerie ===== */
+  .w-gallery-item {
+    display: block;
+    position: relative;
+    border: 0;
+    padding: 0;
+    width: 100%;
+    background: #eef4fc;
+    border-radius: .9rem;
+    overflow: hidden;
+    box-shadow: 0 3px 12px rgba(15, 63, 125, .08);
+    transition: transform .28s ease, box-shadow .28s ease;
+    cursor: zoom-in;
+  }
+
+  .w-gallery-item img {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 700 / 875;
+    object-fit: cover;
+    display: block;
+    transition: transform .35s ease;
+  }
+
+  .w-gallery-item:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 16px 32px rgba(15, 63, 125, .18);
+  }
+
+  .w-gallery-item:hover img {
+    transform: scale(1.04);
+  }
+
+  .w-gallery-item:focus-visible {
+    outline: 3px solid var(--w-orange);
+    outline-offset: 3px;
+  }
+
+  .w-gallery-item::after {
+    content: "\f00e"; /* loupe Font Awesome */
+    font-family: "Font Awesome 6 Free";
+    font-weight: 900;
+    position: absolute;
+    right: .75rem;
+    bottom: .75rem;
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(22, 87, 168, .88);
+    color: #fff;
+    font-size: .95rem;
+    opacity: 0;
+    transition: opacity .25s ease;
+  }
+
+  .w-gallery-item:hover::after,
+  .w-gallery-item:focus-visible::after {
+    opacity: 1;
+  }
+
+  /* Visionneuse */
+  #wGalleryModal .modal-content {
+    background: transparent;
+    border: 0;
+  }
+
+  #wGalleryModal .modal-body {
+    padding: 0;
+    text-align: center;
+  }
+
+  #wGalleryModal img {
+    max-width: 100%;
+    max-height: 82vh;
+    border-radius: .75rem;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .5);
+  }
+
+  #wGalleryModal .w-viewer-caption {
+    color: #fff;
+    margin-top: .85rem;
+    font-size: .95rem;
+  }
+
+  #wGalleryModal .w-viewer-nav {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    border: 0;
+    background: rgba(255, 255, 255, .9);
+    color: var(--w-blue);
+    font-size: 1.1rem;
+    z-index: 5;
+  }
+
+  #wGalleryModal .w-viewer-nav:hover {
+    background: #fff;
+  }
+
+  #wGalleryModal .w-viewer-prev { left: -8px; }
+  #wGalleryModal .w-viewer-next { right: -8px; }
+
+  #wGalleryModal .w-viewer-close {
+    position: absolute;
+    top: -14px;
+    right: -8px;
+    z-index: 5;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 0;
+    background: rgba(255, 255, 255, .9);
+    color: var(--w-ink);
+  }
+
+  /* ===== Bandeau contact ===== */
+  .w-contact {
+    background: linear-gradient(135deg, var(--w-blue) 0%, var(--w-blue-dark) 100%);
+    color: #fff;
+    border-radius: 1rem;
+    padding: 2.5rem;
+  }
+
+  .w-contact .w-contact__icon {
+    width: 48px;
+    height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .16);
+    margin-bottom: .75rem;
+  }
+
+  .w-contact a.btn-light {
+    font-weight: 600;
+  }
+
+  .w-quote {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--w-blue);
+    text-align: center;
+    line-height: 1.6;
+  }
+
+  @media (max-width: 768px) {
+    /* La bannière est un visuel paysage : on la recadre à gauche pour garder
+       le logo, le nom de l'école et la signature lisibles sur petit écran. */
+    .w-hero img {
+      height: 240px;
+      object-fit: cover;
+      object-position: left center;
+    }
+    .w-section { padding: 2.5rem 0; }
+    .w-contact { padding: 1.75rem; }
+    .w-quote { font-size: 1.1rem; }
+    #wGalleryModal .w-viewer-prev { left: 4px; }
+    #wGalleryModal .w-viewer-next { right: 4px; }
+  }
+</style>
+<link rel="preload" as="image" href="{% static 'images/optimized/ecole.webp' %}" type="image/webp" imagesizes="100vw">
+{% endblock %}
+
+{% block breadcrumb %}{% endblock %}
+
+{% block content %}
+<div class="wosewa">
+
+  <!-- ===================== BANNIÈRE ===================== -->
+  <section class="w-hero w-bleed">
+    <picture>
+      <source type="image/webp" srcset="{% static 'images/optimized/ecole.webp' %}">
+      <img src="{% static 'images/optimized/ecole_optimized.jpg' %}"
+           alt="Groupe Scolaire Privé Les Jardins Wosewa — Maternelle, Primaire, Collège, Lycée. Un cadre d'apprentissage, de créativité et d'excellence."
+           width="1916" height="821"
+           loading="eager" decoding="sync" fetchpriority="high">
+    </picture>
+  </section>
+
+  <div class="w-hero-actions w-bleed">
+    <a href="#presentation" class="btn btn-light btn-lg">
+      <i class="fas fa-school"></i>Découvrir l'école
+    </a>
+    <a href="{% url 'rapport_scolaire' %}" class="btn btn-w-orange btn-lg">
+      <i class="fas fa-file-alt"></i>Espace parents — rapport scolaire
+    </a>
+    <a href="#galerie" class="btn btn-outline-light btn-lg">
+      <i class="fas fa-images"></i>Voir la galerie
+    </a>
+  </div>
+
+  <!-- ===================== PRÉSENTATION ===================== -->
+  <section class="w-section" id="presentation">
+    <div class="container">
+      <div class="row g-5 align-items-start">
+        <div class="col-lg-7">
+          <span class="w-eyebrow">Présentation de l'école</span>
+          <h1 class="w-title w-title--rule h2">Les Jardins Wosewa, une école qui place l'enfant au centre</h1>
+          <p class="w-lead">
+            <strong>Les Jardins Wosewa</strong> est une institution privée d'enseignement général située à
+            Carrefour Métal Guinée, Kipé T2, Conakry. L'établissement accueille les élèves de la maternelle
+            au lycée et propose un programme d'enseignement franco-guinéen, conçu pour offrir aux apprenants
+            une formation équilibrée, moderne et adaptée aux réalités du système éducatif guinéen.
+          </p>
+          <p class="w-lead">
+            Les Jardins Wosewa placent l'enfant au centre de leur projet pédagogique. L'école favorise
+            l'acquisition des connaissances fondamentales, le développement de l'autonomie, de la créativité,
+            de la discipline et du sens des responsabilités.
+          </p>
+          <p class="w-lead mb-0">
+            Grâce à un environnement d'apprentissage accueillant, à un encadrement attentif et à des activités
+            éducatives variées, chaque élève est accompagné dans son évolution scolaire et personnelle.
+          </p>
+        </div>
+        <div class="col-lg-5">
+          <div class="w-card">
+            <h3><i class="fas fa-circle-info me-2"></i>L'établissement en bref</h3>
+            <ul class="list-unstyled mb-0">
+              <li class="d-flex gap-3 mb-3">
+                <i class="fas fa-location-dot fa-fw mt-1" style="color: var(--w-orange);"></i>
+                <span><strong>Adresse</strong><br>
+                  <span class="text-muted">Carrefour Métal Guinée, Kipé T2 — Conakry, Guinée</span></span>
+              </li>
+              <li class="d-flex gap-3 mb-3">
+                <i class="fas fa-layer-group fa-fw mt-1" style="color: var(--w-orange);"></i>
+                <span><strong>Cycles</strong><br>
+                  <span class="text-muted">Maternelle · Primaire · Collège · Lycée</span></span>
+              </li>
+              <li class="d-flex gap-3 mb-3">
+                <i class="fas fa-book-open fa-fw mt-1" style="color: var(--w-orange);"></i>
+                <span><strong>Programme</strong><br>
+                  <span class="text-muted">Enseignement général franco-guinéen</span></span>
+              </li>
+              <li class="d-flex gap-3 mb-0">
+                <i class="fas fa-building-columns fa-fw mt-1" style="color: var(--w-orange);"></i>
+                <span><strong>Statut</strong><br>
+                  <span class="text-muted">Groupe scolaire privé</span></span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== CYCLES ===================== -->
+  <section class="w-section w-section--soft w-bleed" id="cycles">
+    <div class="container">
+      <div class="text-center mb-5">
+        <span class="w-eyebrow">Nos cycles d'enseignement</span>
+        <h2 class="w-title h2 mb-2">De la maternelle au lycée</h2>
+        <p class="w-lead mb-0">Un parcours complet et continu, pensé pour accompagner chaque élève à chaque étape de sa scolarité.</p>
+      </div>
+      <div class="row g-4">
+        <div class="col-6 col-lg-3">
+          <div class="w-cycle">
+            <div class="w-cycle__icon"><i class="fas fa-shapes"></i></div>
+            <h3>Maternelle</h3>
+            <p>Éveil, socialisation et premiers apprentissages dans un cadre bienveillant.</p>
+          </div>
+        </div>
+        <div class="col-6 col-lg-3">
+          <div class="w-cycle">
+            <div class="w-cycle__icon"><i class="fas fa-book-open-reader"></i></div>
+            <h3>Primaire</h3>
+            <p>Maîtrise des savoirs fondamentaux : lire, écrire, compter et raisonner.</p>
+          </div>
+        </div>
+        <div class="col-6 col-lg-3">
+          <div class="w-cycle">
+            <div class="w-cycle__icon"><i class="fas fa-flask"></i></div>
+            <h3>Collège</h3>
+            <p>Approfondissement des connaissances et développement de l'autonomie.</p>
+          </div>
+        </div>
+        <div class="col-6 col-lg-3">
+          <div class="w-cycle">
+            <div class="w-cycle__icon"><i class="fas fa-graduation-cap"></i></div>
+            <h3>Lycée</h3>
+            <p>Préparation aux examens et construction du projet d'orientation.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== MISSION & APPROCHE ===================== -->
+  <section class="w-section" id="mission">
+    <div class="container">
+      <div class="row g-4">
+        <div class="col-lg-6">
+          <div class="w-card">
+            <h3><i class="fas fa-bullseye me-2"></i>Notre mission</h3>
+            <p>
+              Former des élèves responsables, compétents, créatifs et ouverts sur le monde, tout en leur
+              transmettant des valeurs de respect, d'excellence, de solidarité et de citoyenneté.
+            </p>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="w-card w-card--orange">
+            <h3><i class="fas fa-lightbulb me-2"></i>Notre approche pédagogique</h3>
+            <p>
+              L'enseignement associe les cours académiques à des activités pratiques, artistiques, culturelles
+              et numériques. Cette approche permet aux élèves d'apprendre autrement, de développer leurs talents
+              et de mieux préparer leur avenir.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== ENGAGEMENTS ===================== -->
+  <section class="w-section w-section--soft w-bleed" id="engagement">
+    <div class="container">
+      <div class="text-center mb-5">
+        <span class="w-eyebrow">Notre engagement</span>
+        <h2 class="w-title h2 mb-2">Ce que nous garantissons à chaque enfant</h2>
+        <p class="w-lead mb-0">Aux Jardins Wosewa, nous nous engageons à offrir à chaque enfant&nbsp;:</p>
+      </div>
+      <div class="row g-3">
+        <div class="col-md-6 col-lg-4">
+          <div class="w-commit">
+            <i class="fas fa-circle-check"></i><span>Un enseignement de qualité</span>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-4">
+          <div class="w-commit">
+            <i class="fas fa-circle-check"></i><span>Un suivi pédagogique personnalisé</span>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-4">
+          <div class="w-commit">
+            <i class="fas fa-circle-check"></i><span>Un cadre sécurisé et stimulant</span>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-4">
+          <div class="w-commit">
+            <i class="fas fa-circle-check"></i><span>Des activités favorisant l'épanouissement</span>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-4">
+          <div class="w-commit">
+            <i class="fas fa-circle-check"></i><span>Une collaboration permanente avec les parents</span>
+          </div>
+        </div>
+        <div class="col-md-6 col-lg-4">
+          <div class="w-commit">
+            <i class="fas fa-circle-check"></i><span>Un accompagnement scolaire et personnel continu</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== GALERIE ===================== -->
+  <section class="w-section" id="galerie">
+    <div class="container">
+      <div class="text-center mb-5">
+        <span class="w-eyebrow">Galerie</span>
+        <h2 class="w-title h2 mb-2">La vie de l'école en images</h2>
+        <p class="w-lead mb-0">Ateliers créatifs, activités de classe, cérémonies et colonies de vacances&nbsp;: quelques moments marquants de nos élèves.</p>
+      </div>
+
+      <div class="row g-3 g-lg-4" id="wGallery">
+        {% comment %}Chaque visuel porte déjà son titre : la légende sert d'alternative textuelle et de légende dans la visionneuse.{% endcomment %}
+        <div class="col-6 col-md-4 col-lg-3">
+          <button type="button" class="w-gallery-item" data-full="{% static 'images/optimized/1.webp' %}" data-legende="Premiers gestes créatifs — découvrir l'art dès le plus jeune âge (Maternelle)">
+            <img src="{% static 'images/optimized/1_thumb.webp' %}" alt="Premiers gestes créatifs — atelier d'art en maternelle" width="700" height="875" loading="lazy" decoding="async">
+          </button>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3">
+          <button type="button" class="w-gallery-item" data-full="{% static 'images/optimized/3.webp' %}" data-legende="Atelier peinture — observer, imaginer et peindre">
+            <img src="{% static 'images/optimized/3_thumb.webp' %}" alt="Atelier peinture : la créativité en action" width="700" height="875" loading="lazy" decoding="async">
+          </button>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3">
+          <button type="button" class="w-gallery-item" data-full="{% static 'images/optimized/13.webp' %}" data-legende="Éveil artistique — concentration, couleur et expression">
+            <img src="{% static 'images/optimized/13_thumb.webp' %}" alt="Éveil artistique : apprendre en créant" width="700" height="875" loading="lazy" decoding="async">
+          </button>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3">
+          <button type="button" class="w-gallery-item" data-full="{% static 'images/optimized/12.webp' %}" data-legende="Activité de classe — travail et motricité fine">
+            <img src="{% static 'images/optimized/12_thumb.webp' %}" alt="Activité de classe : observer, coller et progresser" width="700" height="875" loading="lazy" decoding="async">
+          </button>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3">
+          <button type="button" class="w-gallery-item" data-full="{% static 'images/optimized/5.webp' %}" data-legende="Initiation numérique — écrire, dessiner et manipuler">
+            <img src="{% static 'images/optimized/5_thumb.webp' %}" alt="Initiation numérique : apprendre par le jeu" width="700" height="875" loading="lazy" decoding="async">
+          </button>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3">
+          <button type="button" class="w-gallery-item" data-full="{% static 'images/optimized/9.webp' %}" data-legende="Exposition des œuvres — chaque enfant présente sa création">
+            <img src="{% static 'images/optimized/9_thumb.webp' %}" alt="Exposition des œuvres réalisées par les élèves" width="700" height="875" loading="lazy" decoding="async">
+          </button>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3">
+          <button type="button" class="w-gallery-item" data-full="{% static 'images/optimized/10.webp' %}" data-legende="Activités créatives — éveil artistique et accompagnement éducatif">
+            <img src="{% static 'images/optimized/10_thumb.webp' %}" alt="Activités créatives : expression, talent et valorisation des enfants" width="700" height="875" loading="lazy" decoding="async">
+          </button>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3">
+          <button type="button" class="w-gallery-item" data-full="{% static 'images/optimized/2.webp' %}" data-legende="Cérémonie de remise des diplômes — une grande célébration de la réussite">
+            <img src="{% static 'images/optimized/2_thumb.webp' %}" alt="Remise des diplômes aux élèves lors de la cérémonie de fin d'année" width="700" height="875" loading="lazy" decoding="async">
+          </button>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3">
+          <button type="button" class="w-gallery-item" data-full="{% static 'images/optimized/4.webp' %}" data-legende="Remise d'attestations — direction, partenaires et encadrement">
+            <img src="{% static 'images/optimized/4_thumb.webp' %}" alt="Remise d'attestations à l'équipe encadrante et aux partenaires de l'école" width="700" height="875" loading="lazy" decoding="async">
+          </button>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3">
+          <button type="button" class="w-gallery-item" data-full="{% static 'images/optimized/6.webp' %}" data-legende="Colonie de vacances — joie, amitié et découverte">
+            <img src="{% static 'images/optimized/6_thumb.webp' %}" alt="Moments de partage pendant la colonie de vacances" width="700" height="875" loading="lazy" decoding="async">
+          </button>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3">
+          <button type="button" class="w-gallery-item" data-full="{% static 'images/optimized/7.webp' %}" data-legende="Colonie de vacances Bamako — « Les petits explorateurs »">
+            <img src="{% static 'images/optimized/7_thumb.webp' %}" alt="Colonie de vacances à Bamako : découverte, cohésion et épanouissement" width="700" height="875" loading="lazy" decoding="async">
+          </button>
+        </div>
+        <div class="col-6 col-md-4 col-lg-3">
+          <button type="button" class="w-gallery-item" data-full="{% static 'images/optimized/11.webp' %}" data-legende="2ᵉ édition de la colonie de vacances — découverte, cohésion et épanouissement des enfants">
+            <img src="{% static 'images/optimized/11_thumb.webp' %}" alt="Deuxième édition de la colonie de vacances Les petits explorateurs" width="700" height="875" loading="lazy" decoding="async">
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== CONTACT ===================== -->
+  <section class="w-section pt-0" id="contact">
+    <div class="container">
+      <div class="w-contact">
+        <div class="row g-4 align-items-center">
+          <div class="col-lg-7">
+            <span class="w-contact__icon"><i class="fas fa-location-dot fa-lg"></i></span>
+            <h2 class="h3 fw-bold mb-2">Venez nous rencontrer</h2>
+            <p class="mb-3 opacity-75">
+              Groupe Scolaire Privé Les Jardins Wosewa<br>
+              Carrefour Métal Guinée, Kipé T2 — Conakry, Guinée
+            </p>
+            <p class="mb-0 opacity-75">
+              Inscriptions, visite de l'établissement, informations sur les cycles&nbsp;: notre équipe se tient
+              à la disposition des familles.
+            </p>
+          </div>
+          <div class="col-lg-5">
+            <div class="d-grid gap-2">
+              <a href="{% url 'contact' %}" class="btn btn-light btn-lg">
+                <i class="fas fa-envelope me-2"></i>Nous contacter
+              </a>
+              <a href="{% url 'rapport_scolaire' %}" class="btn btn-outline-light btn-lg">
+                <i class="fas fa-file-alt me-2"></i>Consulter le rapport scolaire
+              </a>
+              <a href="{% url 'utilisateurs:login' %}" class="btn btn-outline-light btn-lg">
+                <i class="fas fa-lock me-2"></i>Espace personnel de l'école
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p class="w-quote mt-5 mb-0">
+        « Les Jardins Wosewa, un cadre d'apprentissage, de créativité et d'excellence. »
+      </p>
+    </div>
+  </section>
+</div>
+
+<!-- Visionneuse de la galerie -->
+<div class="modal fade" id="wGalleryModal" tabindex="-1" aria-labelledby="wGalleryModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content position-relative">
+      <button type="button" class="w-viewer-close" data-bs-dismiss="modal" aria-label="Fermer">
+        <i class="fas fa-xmark"></i>
+      </button>
+      <button type="button" class="w-viewer-nav w-viewer-prev" aria-label="Image précédente">
+        <i class="fas fa-chevron-left"></i>
+      </button>
+      <button type="button" class="w-viewer-nav w-viewer-next" aria-label="Image suivante">
+        <i class="fas fa-chevron-right"></i>
+      </button>
+      <div class="modal-body">
+        <img alt="" id="wViewerImage">
+        <p class="w-viewer-caption mb-0" id="wGalleryModalLabel"></p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const declencheurs = Array.from(document.querySelectorAll('#wGallery .w-gallery-item'));
+  if (!declencheurs.length) return;
+
+  const modalEl = document.getElementById('wGalleryModal');
+  const image = document.getElementById('wViewerImage');
+  const legende = document.getElementById('wGalleryModalLabel');
+  const modal = new bootstrap.Modal(modalEl);
+  let index = 0;
+
+  function afficher(i) {
+    index = (i + declencheurs.length) % declencheurs.length;
+    const bouton = declencheurs[index];
+    const vignette = bouton.querySelector('img');
+    image.src = bouton.dataset.full;
+    image.alt = vignette ? vignette.alt : '';
+    legende.textContent = bouton.dataset.legende || '';
+  }
+
+  declencheurs.forEach(function (bouton, i) {
+    bouton.addEventListener('click', function () {
+      afficher(i);
+      modal.show();
+    });
+  });
+
+  modalEl.querySelector('.w-viewer-prev').addEventListener('click', function () { afficher(index - 1); });
+  modalEl.querySelector('.w-viewer-next').addEventListener('click', function () { afficher(index + 1); });
+
+  document.addEventListener('keydown', function (e) {
+    if (!modalEl.classList.contains('show')) return;
+    if (e.key === 'ArrowLeft') afficher(index - 1);
+    if (e.key === 'ArrowRight') afficher(index + 1);
+  });
+
+  // Rendre le focus au visuel d'origine à la fermeture
+  modalEl.addEventListener('hidden.bs.modal', function () {
+    declencheurs[index].focus();
+  });
+})();
+</script>
+{% endblock %}

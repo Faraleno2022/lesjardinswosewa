@@ -1,0 +1,679 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load notes_tags %}
+
+{% block title %}Évaluation - {{ eleve.nom }} {{ eleve.prenom }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <!-- En-tête -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">
+                        <i class="fas fa-child me-2"></i>
+                        Évaluation de {{ eleve.prenom }} {{ eleve.nom }}
+                    </h4>
+                    <a href="{% url 'notes:saisie_evaluation_maternelle' %}?classe={{ classe_note.id }}&trimestre={{ trimestre }}" 
+                       class="btn btn-light btn-sm">
+                        <i class="fas fa-arrow-left me-1"></i>Retour à la liste
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <strong>Matricule:</strong> <code>{{ eleve.matricule }}</code>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Classe:</strong> {{ classe_note.nom }}
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Trimestre:</strong> {{ trimestre_display }}
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Année:</strong> {{ annee_scolaire }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <form method="POST" id="evaluation-form">
+                {% csrf_token %}
+                
+                <!-- Section 1: Notes par activité -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-graduation-cap me-2"></i>
+                            1. Notes par activité (sur 10)
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- Barème -->
+                        <div class="alert alert-light border mb-4">
+                            <div class="row text-center">
+                                <div class="col"><span class="badge bg-success">A+</span><br><small>10</small></div>
+                                <div class="col"><span class="badge bg-success">A</span><br><small>9,5</small></div>
+                                <div class="col"><span class="badge bg-primary">B+</span><br><small>8-9</small></div>
+                                <div class="col"><span class="badge bg-primary">B</span><br><small>7</small></div>
+                                <div class="col"><span class="badge bg-warning text-dark">B-</span><br><small>6</small></div>
+                                <div class="col"><span class="badge bg-warning text-dark">C</span><br><small>5-5,75</small></div>
+                                <div class="col"><span class="badge bg-danger">D</span><br><small>3-4</small></div>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-bordered">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 30%">Activité</th>
+                                        <th style="width: 15%" class="text-center">Note /10</th>
+                                        <th style="width: 10%" class="text-center">Lettre</th>
+                                        <th style="width: 20%" class="text-center">Mention</th>
+                                        <th style="width: 25%">Commentaire</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for matiere in matieres %}
+                                    <tr>
+                                        <td><strong>{{ matiere.nom }}</strong></td>
+                                        <td>
+                                            <input type="number" 
+                                                   name="note_{{ matiere.id }}" 
+                                                   class="form-control text-center note-input" 
+                                                   min="0" max="10" step="0.25"
+                                                   data-matiere="{{ matiere.id }}"
+                                                   value="{% if matiere.id in notes_existantes %}{{ notes_existantes|get_item:matiere.id|get_note }}{% endif %}"
+                                                   placeholder="0-10">
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="badge lettre-badge" id="lettre_{{ matiere.id }}">-</span>
+                                        </td>
+                                        <td class="text-center">
+                                            <span class="mention-text" id="mention_{{ matiere.id }}">-</span>
+                                        </td>
+                                        <td>
+                                            <input type="text" 
+                                                   name="commentaire_{{ matiere.id }}" 
+                                                   class="form-control form-control-sm"
+                                                   value="{% if matiere.id in notes_existantes %}{{ notes_existantes|get_item:matiere.id|get_commentaire }}{% endif %}"
+                                                   placeholder="Commentaire optionnel">
+                                        </td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted">
+                                            Aucune activité configurée pour cette classe
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot class="table-secondary">
+                                    <tr>
+                                        <th>Moyenne Générale</th>
+                                        <th class="text-center" id="moyenne_generale">-</th>
+                                        <th class="text-center"><span class="badge" id="lettre_generale">-</span></th>
+                                        <th class="text-center" id="mention_generale">-</th>
+                                        <th></th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Analyse automatique des appréciations -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-robot me-2"></i>
+                            2. Analyse automatique des appréciations
+                            <small class="text-white-50">(Intelligent)</small>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Optionnel:</strong> Saisissez une appréciation textuelle ci-dessous et le système 
+                            analysera automatiquement les cases à cocher appropriées dans les sections 
+                            "Analyse du travail" et "Recommandations".
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="appreciation_automatique" class="form-label fw-bold">
+                                <i class="fas fa-pen me-1"></i>
+                                Appréciation textuelle de l'élève
+                            </label>
+                            <textarea name="appreciation_automatique" 
+                                      id="appreciation_automatique" 
+                                      class="form-control" 
+                                      rows="4" 
+                                      placeholder="Ex: L'enfant est intelligent, comprend bien les instructions mais est un peu paresseux. Il a besoin d'encouragement et de suivi à domicile..."></textarea>
+                            <div class="form-text">
+                                <strong>Mots-clés reconnus:</strong> 
+                                <span class="badge bg-secondary">comprend</span>
+                                <span class="badge bg-secondary">intelligent</span>
+                                <span class="badge bg-secondary">paresseux</span>
+                                <span class="badge bg-secondary">attention</span>
+                                <span class="badge bg-secondary">encourager</span>
+                                <span class="badge bg-secondary">suivi</span>
+                                <span class="badge bg-secondary">amour</span>
+                                <span class="badge bg-secondary">aide</span>
+                                <span class="badge bg-secondary">etc.</span>
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button type="button" class="btn btn-outline-info" onclick="analyserAppreciation()">
+                                <i class="fas fa-magic me-1"></i>
+                                Analyser automatiquement
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="viderAnalyse()">
+                                <i class="fas fa-eraser me-1"></i>
+                                Effacer l'analyse
+                            </button>
+                        </div>
+                        
+                        <div id="resultat-analyse" class="mt-3" style="display: none;">
+                            <!-- Résultats de l'analyse seront affichés ici -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 3: Analyse du travail -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-clipboard-check me-2"></i>
+                            3. Analyse du travail de l'enfant
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="comprend_demandes" id="comprend_demandes"
+                                           {% if analyse.comprend_demandes %}checked{% endif %}>
+                                    <label class="form-check-label" for="comprend_demandes">
+                                        <i class="fas fa-check-circle text-success me-1"></i>
+                                        L'enfant comprend ce qu'on lui demande
+                                    </label>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="ne_comprend_pas" id="ne_comprend_pas"
+                                           {% if analyse.ne_comprend_pas %}checked{% endif %}>
+                                    <label class="form-check-label" for="ne_comprend_pas">
+                                        <i class="fas fa-times-circle text-danger me-1"></i>
+                                        L'enfant ne comprend pas ce qu'on lui demande
+                                    </label>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="trop_jeune" id="trop_jeune"
+                                           {% if analyse.trop_jeune %}checked{% endif %}>
+                                    <label class="form-check-label" for="trop_jeune">
+                                        <i class="fas fa-baby text-warning me-1"></i>
+                                        L'enfant est trop jeune pour cette classe
+                                    </label>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="fixe_attention" id="fixe_attention"
+                                           {% if analyse.fixe_attention %}checked{% endif %}>
+                                    <label class="form-check-label" for="fixe_attention">
+                                        <i class="fas fa-eye text-primary me-1"></i>
+                                        L'enfant fixe son attention
+                                    </label>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="est_doue" id="est_doue"
+                                           {% if analyse.est_doue %}checked{% endif %}>
+                                    <label class="form-check-label" for="est_doue">
+                                        <i class="fas fa-star text-warning me-1"></i>
+                                        L'enfant est doué
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="pas_probleme_monitrice" id="pas_probleme_monitrice"
+                                           {% if analyse.pas_probleme_monitrice %}checked{% endif %}>
+                                    <label class="form-check-label" for="pas_probleme_monitrice">
+                                        <i class="fas fa-user-tie text-success me-1"></i>
+                                        L'enfant n'a pas de problème avec sa coordinatrice
+                                    </label>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="pas_probleme_camarades" id="pas_probleme_camarades"
+                                           {% if analyse.pas_probleme_camarades %}checked{% endif %}>
+                                    <label class="form-check-label" for="pas_probleme_camarades">
+                                        <i class="fas fa-users text-success me-1"></i>
+                                        L'enfant n'a pas de problème avec ses camarades
+                                    </label>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="pas_probleme_famille" id="pas_probleme_famille"
+                                           {% if analyse.pas_probleme_famille %}checked{% endif %}>
+                                    <label class="form-check-label" for="pas_probleme_famille">
+                                        <i class="fas fa-home text-success me-1"></i>
+                                        L'enfant n'a pas de problème avec sa famille
+                                    </label>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="est_paresseux" id="est_paresseux"
+                                           {% if analyse.est_paresseux %}checked{% endif %}>
+                                    <label class="form-check-label" for="est_paresseux">
+                                        <i class="fas fa-bed text-secondary me-1"></i>
+                                        L'enfant est paresseux
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <label class="form-label fw-bold">Commentaire supplémentaire</label>
+                            <textarea name="analyse_commentaire" class="form-control" rows="2" 
+                                      placeholder="Observations personnalisées...">{{ analyse.commentaire|default:"" }}</textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 4: Recommandations -->
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header bg-warning">
+                        <h5 class="mb-0">
+                            <i class="fas fa-lightbulb me-2"></i>
+                            4. Recommandations de la coordinatrice
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="encourager_feliciter" id="encourager_feliciter"
+                                           {% if recommandations.encourager_feliciter %}checked{% endif %}>
+                                    <label class="form-check-label" for="encourager_feliciter">
+                                        <i class="fas fa-award text-success me-1"></i>
+                                        Enfant à encourager et à féliciter
+                                    </label>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="suivre_domicile" id="suivre_domicile"
+                                           {% if recommandations.suivre_domicile %}checked{% endif %}>
+                                    <label class="form-check-label" for="suivre_domicile">
+                                        <i class="fas fa-home text-primary me-1"></i>
+                                        Enfant à suivre à domicile
+                                    </label>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="gouter_dans_sac" id="gouter_dans_sac"
+                                           {% if recommandations.gouter_dans_sac %}checked{% endif %}>
+                                    <label class="form-check-label" for="gouter_dans_sac">
+                                        <i class="fas fa-cookie text-warning me-1"></i>
+                                        Mettre le goûter dans le sac de l'enfant
+                                    </label>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="aide_encouragement_parents" id="aide_encouragement_parents"
+                                           {% if recommandations.aide_encouragement_parents %}checked{% endif %}>
+                                    <label class="form-check-label" for="aide_encouragement_parents">
+                                        <i class="fas fa-hands-helping text-info me-1"></i>
+                                        L'enfant a besoin d'aide et d'encouragement des parents
+                                    </label>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="amour_parental" id="amour_parental"
+                                           {% if recommandations.amour_parental %}checked{% endif %}>
+                                    <label class="form-check-label" for="amour_parental">
+                                        <i class="fas fa-heart text-danger me-1"></i>
+                                        L'enfant a besoin de l'amour maternel et paternel
+                                    </label>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="besoin_epanouissement" id="besoin_epanouissement"
+                                           {% if recommandations.besoin_epanouissement %}checked{% endif %}>
+                                    <label class="form-check-label" for="besoin_epanouissement">
+                                        <i class="fas fa-sun text-warning me-1"></i>
+                                        L'enfant a besoin d'être épanoui
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="sorties_educatives" id="sorties_educatives"
+                                           {% if recommandations.sorties_educatives %}checked{% endif %}>
+                                    <label class="form-check-label" for="sorties_educatives">
+                                        <i class="fas fa-bus text-success me-1"></i>
+                                        L'enfant a besoin de sorties éducatives et récréatives
+                                    </label>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="aide_intellectuelle" id="aide_intellectuelle"
+                                           {% if recommandations.aide_intellectuelle %}checked{% endif %}>
+                                    <label class="form-check-label" for="aide_intellectuelle">
+                                        <i class="fas fa-brain text-purple me-1"></i>
+                                        Besoin d'aide pour développer ses facultés intellectuelles
+                                    </label>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="douceur_patience" id="douceur_patience"
+                                           {% if recommandations.douceur_patience %}checked{% endif %}>
+                                    <label class="form-check-label" for="douceur_patience">
+                                        <i class="fas fa-dove text-info me-1"></i>
+                                        L'enfant doit être pris avec douceur et patience
+                                    </label>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="besoin_fermete" id="besoin_fermete"
+                                           {% if recommandations.besoin_fermete %}checked{% endif %}>
+                                    <label class="form-check-label" for="besoin_fermete">
+                                        <i class="fas fa-hand-paper text-secondary me-1"></i>
+                                        L'enfant a besoin de fermeté
+                                    </label>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="esprit_inferiorite" id="esprit_inferiorite"
+                                           {% if recommandations.esprit_inferiorite %}checked{% endif %}>
+                                    <label class="form-check-label" for="esprit_inferiorite">
+                                        <i class="fas fa-sad-tear text-muted me-1"></i>
+                                        L'enfant a un esprit d'infériorité
+                                    </label>
+                                </div>
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" name="attention_particuliere" id="attention_particuliere"
+                                           {% if recommandations.attention_particuliere %}checked{% endif %}>
+                                    <label class="form-check-label" for="attention_particuliere">
+                                        <i class="fas fa-exclamation-circle text-danger me-1"></i>
+                                        L'enfant a besoin d'une attention particulière des parents
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <label class="form-label fw-bold">Recommandation personnalisée</label>
+                            <textarea name="recommandation_commentaire" class="form-control" rows="2" 
+                                      placeholder="Recommandations spécifiques...">{{ recommandations.commentaire|default:"" }}</textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Boutons d'action -->
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'notes:saisie_evaluation_maternelle' %}?classe={{ classe_note.id }}&trimestre={{ trimestre }}" 
+                               class="btn btn-secondary">
+                                <i class="fas fa-times me-1"></i>Annuler
+                            </a>
+                            <div>
+                                <button type="submit" class="btn btn-primary me-2">
+                                    <i class="fas fa-save me-1"></i>Enregistrer
+                                </button>
+                                <button type="submit" name="voir_bulletin" value="1" class="btn btn-success">
+                                    <i class="fas fa-file-pdf me-1"></i>Enregistrer et voir le bulletin
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Fonction pour convertir note en lettre
+    function noteVersLettre(note) {
+        if (note >= 10) return 'A+';
+        if (note >= 9.5) return 'A';
+        if (note >= 8) return 'B+';
+        if (note >= 7) return 'B';
+        if (note >= 6) return 'B-';
+        if (note >= 5) return 'C';
+        return 'D';
+    }
+    
+    // Fonction pour obtenir la mention
+    function lettreVersMention(lettre) {
+        const mentions = {
+            'A+': 'Excellent',
+            'A': 'Très bien',
+            'B+': 'Bien',
+            'B': 'Assez bien',
+            'B-': 'Moyen',
+            'C': 'Passable',
+            'D': 'Difficultés'
+        };
+        return mentions[lettre] || '';
+    }
+    
+    // Fonction pour obtenir la classe CSS du badge
+    function getLettreBadgeClass(lettre) {
+        if (['A+', 'A'].includes(lettre)) return 'bg-success';
+        if (['B+', 'B'].includes(lettre)) return 'bg-primary';
+        if (['B-', 'C'].includes(lettre)) return 'bg-warning text-dark';
+        return 'bg-danger';
+    }
+    
+    // Fonction pour mettre à jour les affichages
+    function updateDisplay(input) {
+        const matiereId = input.dataset.matiere;
+        const note = parseFloat(input.value);
+        const lettreBadge = document.getElementById('lettre_' + matiereId);
+        const mentionSpan = document.getElementById('mention_' + matiereId);
+        
+        if (!isNaN(note) && note >= 0 && note <= 10) {
+            const lettre = noteVersLettre(note);
+            const mention = lettreVersMention(lettre);
+            
+            lettreBadge.textContent = lettre;
+            lettreBadge.className = 'badge ' + getLettreBadgeClass(lettre);
+            mentionSpan.textContent = mention;
+        } else {
+            lettreBadge.textContent = '-';
+            lettreBadge.className = 'badge bg-secondary';
+            mentionSpan.textContent = '-';
+        }
+        
+        // Mettre à jour la moyenne générale
+        updateMoyenneGenerale();
+    }
+    
+    // Calculer et afficher la moyenne générale
+    function updateMoyenneGenerale() {
+        const inputs = document.querySelectorAll('.note-input');
+        let total = 0;
+        let count = 0;
+        
+        inputs.forEach(input => {
+            const note = parseFloat(input.value);
+            if (!isNaN(note) && note >= 0 && note <= 10) {
+                total += note;
+                count++;
+            }
+        });
+        
+        const moyenneSpan = document.getElementById('moyenne_generale');
+        const lettreGenerale = document.getElementById('lettre_generale');
+        const mentionGenerale = document.getElementById('mention_generale');
+        
+        if (count > 0) {
+            const moyenne = (total / count).toFixed(2);
+            const lettre = noteVersLettre(parseFloat(moyenne));
+            const mention = lettreVersMention(lettre);
+            
+            moyenneSpan.textContent = moyenne + '/10';
+            lettreGenerale.textContent = lettre;
+            lettreGenerale.className = 'badge ' + getLettreBadgeClass(lettre);
+            mentionGenerale.textContent = mention;
+        } else {
+            moyenneSpan.textContent = '-';
+            lettreGenerale.textContent = '-';
+            lettreGenerale.className = 'badge bg-secondary';
+            mentionGenerale.textContent = '-';
+        }
+    }
+    
+    // Attacher les écouteurs d'événements
+    document.querySelectorAll('.note-input').forEach(input => {
+        input.addEventListener('input', function() {
+            updateDisplay(this);
+        });
+        // Initialiser l'affichage
+        if (input.value) {
+            updateDisplay(input);
+        }
+    });
+    
+    // Initialiser la moyenne générale
+    updateMoyenneGenerale();
+    
+    // Fonction pour analyser automatiquement les appréciations
+    function analyserAppreciation() {
+        const appreciationText = document.getElementById('appreciation_automatique').value.trim();
+        
+        if (!appreciationText) {
+            alert('Veuillez saisir une appréciation textuelle avant d\'analyser.');
+            return;
+        }
+        
+        // Afficher un indicateur de chargement
+        const resultatDiv = document.getElementById('resultat-analyse');
+        resultatDiv.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin me-2"></i>Analyse en cours...</div>';
+        resultatDiv.style.display = 'block';
+        
+        // Envoyer la requête d'analyse
+        fetch('{% url "notes:analyse_appreciations_auto" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: new URLSearchParams({
+                'appreciation_text': appreciationText,
+                'evaluation_id': '{{ evaluation.id }}'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Mettre à jour les cases à cocher
+                if (data.analyses) {
+                    Object.keys(data.analyses).forEach(key => {
+                        if (key !== 'selectionnees') {
+                            const checkbox = document.getElementById(key);
+                            if (checkbox) {
+                                checkbox.checked = data.analyses[key];
+                            }
+                        }
+                    });
+                }
+                
+                if (data.recommandations) {
+                    Object.keys(data.recommandations).forEach(key => {
+                        if (key !== 'selectionnees') {
+                            const checkbox = document.getElementById(key);
+                            if (checkbox) {
+                                checkbox.checked = data.recommandations[key];
+                            }
+                        }
+                    });
+                }
+                
+                // Afficher les résultats
+                let html = '<div class="alert alert-success">';
+                html += '<h6><i class="fas fa-check-circle me-2"></i>Analyse effectuée avec succès!</h6>';
+                
+                if (data.analyses && data.analyses.selectionnees) {
+                    html += '<div class="mb-2"><strong>Analyses détectées:</strong></div>';
+                    html += '<div class="row">';
+                    data.analyses.selectionnees.forEach(analyse => {
+                        html += `<div class="col-md-6 mb-1"><i class="fas fa-check text-success me-1"></i>${analyse}</div>`;
+                    });
+                    html += '</div>';
+                }
+                
+                if (data.recommandations && data.recommandations.selectionnees) {
+                    html += '<div class="mb-2"><strong>Recommandations suggérées:</strong></div>';
+                    html += '<div class="row">';
+                    data.recommandations.selectionnees.forEach(recommandation => {
+                        html += `<div class="col-md-6 mb-1"><i class="fas fa-lightbulb text-warning me-1"></i>${recommandation}</div>`;
+                    });
+                    html += '</div>';
+                }
+                
+                html += '</div>';
+                resultatDiv.innerHTML = html;
+                
+                // Message de confirmation
+                if (data.message) {
+                    // Afficher un message temporaire
+                    const msgDiv = document.createElement('div');
+                    msgDiv.className = 'alert alert-info alert-dismissible fade show position-fixed';
+                    msgDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+                    msgDiv.innerHTML = `
+                        <i class="fas fa-info-circle me-2"></i>${data.message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `;
+                    document.body.appendChild(msgDiv);
+                    
+                    // Supprimer après 3 secondes
+                    setTimeout(() => {
+                        if (msgDiv.parentNode) {
+                            msgDiv.parentNode.removeChild(msgDiv);
+                        }
+                    }, 3000);
+                }
+            } else {
+                resultatDiv.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Erreur: ${data.error}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            resultatDiv.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Erreur lors de l\'analyse. Veuillez réessayer.</div>';
+        });
+    }
+    
+    // Fonction pour vider l'analyse
+    function viderAnalyse() {
+        document.getElementById('appreciation_automatique').value = '';
+        document.getElementById('resultat-analyse').style.display = 'none';
+        
+        // Décocher toutes les cases d'analyse et recommandations
+        const checkboxes = document.querySelectorAll('input[type="checkbox"]');
+        checkboxes.forEach(checkbox => {
+            if (checkbox.name.startsWith('comprend_') || 
+                checkbox.name.startsWith('ne_') || 
+                checkbox.name.startsWith('trop_') || 
+                checkbox.name.startsWith('fixe_') || 
+                checkbox.name.startsWith('pas_') || 
+                checkbox.name.startsWith('est_') ||
+                checkbox.name.startsWith('encourager_') || 
+                checkbox.name.startsWith('suivre_') || 
+                checkbox.name.startsWith('gouter_') || 
+                checkbox.name.startsWith('aide_') || 
+                checkbox.name.startsWith('amour_') || 
+                checkbox.name.startsWith('besoin_') || 
+                checkbox.name.startsWith('sorties_') || 
+                checkbox.name.startsWith('douceur_') || 
+                checkbox.name.startsWith('esprit_') || 
+                checkbox.name.startsWith('attention_')) {
+                checkbox.checked = false;
+            }
+        });
+    }
+});
+</script>
+
+<style>
+.form-check-input:checked + .form-check-label {
+    font-weight: 600;
+}
+.badge {
+    font-size: 0.9em;
+    min-width: 35px;
+}
+.text-purple {
+    color: #8e44ad;
+}
+</style>
+{% endblock %}

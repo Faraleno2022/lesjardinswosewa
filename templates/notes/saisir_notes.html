@@ -1,0 +1,1253 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Saisir les Notes{% endblock %}
+
+{% block extra_css %}
+<style>
+    .saisie-container {
+        background: linear-gradient(to bottom right, #e0f2fe, #dcfce7);
+        min-height: 100vh;
+        padding: 2rem;
+    }
+    
+    .main-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        max-width: 1600px;
+        margin: 0 auto;
+    }
+    
+    .selection-section {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+    }
+    
+    .eleves-table {
+        width: 100%;
+        margin-top: 2rem;
+    }
+    
+    .eleves-table thead {
+        background: linear-gradient(135deg, #e8eaed 0%, #d1d5db 100%);
+        color: #2c3e50;
+    }
+    
+    .eleves-table th {
+        padding: 1.5rem;
+        font-weight: 900;
+        text-align: left;
+        font-size: 16px;
+        color: #1a202c;
+        border: 2px solid #d1d5db;
+        background: #f7fafc;
+    }
+    
+    .eleves-table td {
+        padding: 1.2rem;
+        border-bottom: 1px solid #e5e7eb;
+        font-size: 16px;
+    }
+    
+    .eleves-table tbody tr:hover {
+        background: #f3f4f6;
+    }
+    
+    .note-input {
+        width: 140px;
+        padding: 1rem;
+        border: 2px solid #d1d5db;
+        border-radius: 6px;
+        text-align: center;
+        font-weight: 600;
+        font-size: 16px;
+    }
+    
+    .note-input:focus {
+        outline: none;
+        border-color: #16a34a;
+        box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
+    }
+    
+    .absent-checkbox {
+        width: 28px;
+        height: 28px;
+        cursor: pointer;
+    }
+    
+    .save-btn {
+        background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+        color: white;
+        padding: 1rem 2.5rem;
+        border-radius: 10px;
+        border: none;
+        font-weight: 600;
+        font-size: 1.2rem;
+        cursor: pointer;
+        transition: all 0.3s;
+        box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .save-btn:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(22, 163, 74, 0.4);
+        background: linear-gradient(135deg, #15803d 0%, #166534 100%);
+    }
+    
+    .save-btn:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+    
+    .save-btn:active:not(:disabled) {
+        transform: translateY(0);
+    }
+    
+    .custom-toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        color: white;
+        font-weight: 600;
+        z-index: 9999;
+        animation: slideIn 0.3s ease;
+    }
+    
+    .custom-toast.success {
+        background: #16a34a;
+    }
+    
+    .custom-toast.error {
+        background: #dc2626;
+    }
+    
+    @keyframes slideIn {
+        from {
+            transform: translateX(400px);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+    
+    .appreciation-select {
+        width: 250px;
+        padding: 1rem;
+        border: 2px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 16px;
+    }
+    
+    .commentaire-input {
+        width: 100%;
+        padding: 1rem;
+        border: 2px solid #d1d5db;
+        border-radius: 6px;
+        resize: vertical;
+        font-size: 16px;
+    }
+    
+    .info-badge {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-weight: 600;
+        margin-right: 1rem;
+    }
+    
+    .info-badge.classe {
+        background: #dbeafe;
+        color: #1e40af;
+    }
+    
+    .info-badge.matiere {
+        background: #fef3c7;
+        color: #92400e;
+    }
+    
+    .info-badge.periode {
+        background: #dcfce7;
+        color: #166534;
+    }
+    
+    .note-modified {
+        background: #fef3c7 !important;
+        border-left: 4px solid #f59e0b !important;
+    }
+    
+    .note-saved {
+        background: #dcfce7 !important;
+        border-left: 4px solid #16a34a !important;
+    }
+    
+    .unsaved-indicator {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        background: #f59e0b;
+        border-radius: 50%;
+        margin-left: 5px;
+        animation: pulse 1.5s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    
+    .error-details {
+        background: #fee2e2;
+        border-left: 4px solid #dc2626;
+        padding: 1rem;
+        margin-top: 1rem;
+        border-radius: 6px;
+    }
+    
+    .success-details {
+        background: #dcfce7;
+        border-left: 4px solid #16a34a;
+        padding: 1rem;
+        margin-top: 1rem;
+        border-radius: 6px;
+    }
+    
+    /* Surlignage des élèves sans note */
+    .no-note {
+        background: #fff5f5 !important;
+        border-left: 4px solid #dc2626 !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="saisie-container">
+    <div class="main-card">
+        <!-- En-tête -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h2 mb-0">
+                <i class="fas fa-edit text-success me-2"></i>
+                {% if est_maternelle %}
+                Saisie des Appréciations - Maternelle
+                {% else %}
+                Saisie des Notes - Liste Complète
+                {% endif %}
+            </h1>
+            <a href="{% url 'notes:tableau_bord' %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Retour
+            </a>
+        </div>
+        
+        {% if est_maternelle %}
+        <div class="alert alert-info mb-4">
+            <i class="fas fa-baby me-2"></i>
+            <strong>Classe de Maternelle</strong> - La saisie se fait par appréciations qualitatives (pas de notes numériques).
+            <br><small class="text-muted">Choisissez une appréciation parmi : Très Bien Acquis, Bien Acquis, En Cours d'Acquisition, Non Acquis</small>
+        </div>
+        {% endif %}
+        
+        <!-- Section de sélection -->
+        <div class="selection-section">
+            <h3 class="h5 mb-3">
+                <i class="fas fa-filter me-2"></i>Sélection
+            </h3>
+            <form method="GET" id="selectionForm">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Classe</label>
+                        <select name="classe_id" id="classeSelect" class="form-select" required>
+                            <option value="">-- Sélectionner --</option>
+                            {% for classe in classes %}
+                            <option value="{{ classe.id }}" {% if classe_selectionnee and classe.id == classe_selectionnee.id %}selected{% endif %}>
+                                {{ classe.nom }} ({{ classe.annee_scolaire }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Matière</label>
+                        <select name="matiere_id" id="matiereSelect" class="form-select" required>
+                            <option value="">-- Sélectionner --</option>
+                            {% for matiere in matieres %}
+                            <option value="{{ matiere.id }}" {% if matiere_selectionnee and matiere.id == matiere_selectionnee.id %}selected{% endif %}>
+                                {% if est_maternelle %}
+                                {{ matiere.nom }}
+                                {% else %}
+                                {{ matiere.nom }} (Coef: {{ matiere.coefficient|default:"1" }})
+                                {% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    {% if not est_maternelle %}
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">Type de Note</label>
+                        <select name="type_note" id="typeNoteSelect" class="form-select">
+                            <option value="">-- Sélectionner --</option>
+                            {% for code, label in types_notes_disponibles %}
+                            <option value="{{ code }}" {% if type_note == code %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% else %}
+                    <!-- Pour la maternelle, le type est forcé à appreciation -->
+                    <input type="hidden" name="type_note" value="appreciation">
+                    {% endif %}
+                    
+                    {% if niveau_enseignement == 'SECONDAIRE' and type_note == 'composition' %}
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">Système</label>
+                        <select name="system_type" id="systemTypeSelect" class="form-select">
+                            <option value="semestre" {% if system_type == 'semestre' %}selected{% endif %}>Semestriel</option>
+                            <option value="trimestre" {% if system_type == 'trimestre' %}selected{% endif %}>Trimestriel</option>
+                        </select>
+                    </div>
+                    {% endif %}
+                    
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">Période</label>
+                        <select name="periode" id="periodeSelect" class="form-select" required>
+                            <option value="">-- Sélectionner --</option>
+                            {% for code, label in periodes_disponibles %}
+                            <option value="{{ code }}" {% if periode == code %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">&nbsp;</label>
+                        <button type="submit" class="btn btn-light w-100">
+                            <i class="fas fa-sync me-2"></i>Charger
+                        </button>
+                    </div>
+                    {% if classe_selectionnee and matiere_selectionnee and periode %}
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">&nbsp;</label>
+                        <button type="button" class="btn btn-outline-light w-100" onclick="reloadNotesFromServer()" title="Recharger les notes depuis le serveur (après importation)">
+                            <i class="fas fa-cloud-download-alt me-2"></i>Actualiser
+                        </button>
+                    </div>
+                    {% endif %}
+                    
+                    {% if classe_selectionnee and matiere_selectionnee and periode %}
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">&nbsp;</label>
+                        <button type="button" class="btn btn-danger w-100" onclick="imprimerListePDF()" title="Imprimer la liste en PDF">
+                            <i class="fas fa-file-pdf me-2"></i>PDF
+                        </button>
+                    </div>
+                    {% endif %}
+
+                    {% if classe_selectionnee %}
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">&nbsp;</label>
+                        <a href="{% url 'notes:fiche_saisie_notes_pdf' %}?classe_id={{ classe_selectionnee.id }}{% if matiere_selectionnee %}&matiere_id={{ matiere_selectionnee.id }}{% endif %}&system_type=trimestre"
+                           class="btn btn-warning text-dark fw-bold w-100" target="_blank" title="Fiche avec colonnes trimestrielles">
+                            <i class="fas fa-print me-2"></i>Fiche Trimestre
+                        </a>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">&nbsp;</label>
+                        <a href="{% url 'notes:fiche_saisie_notes_pdf' %}?classe_id={{ classe_selectionnee.id }}{% if matiere_selectionnee %}&matiere_id={{ matiere_selectionnee.id }}{% endif %}&system_type=semestre"
+                           class="btn btn-success text-white fw-bold w-100" target="_blank" title="Fiche avec colonnes semestrielles">
+                            <i class="fas fa-print me-2"></i>Fiche Semestre
+                        </a>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">&nbsp;</label>
+                        <a href="{% url 'notes:fiche_report_notes_pdf' %}?classe_id={{ classe_selectionnee.id }}&periode={% if type_note == 'mensuelle' and periode %}{{ periode }}{% else %}OCTOBRE{% endif %}"
+                           class="btn btn-primary text-white fw-bold w-100" target="_blank" title="Fiche mensuelle avec toutes les matières de la classe en colonnes">
+                            <i class="fas fa-table me-2"></i>Fiche Mensuelle
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+                
+            </form>
+        </div>
+        
+        {% if classe_selectionnee and matiere_selectionnee and periode %}
+        <!-- Informations -->
+        <div class="mb-4">
+            <span class="info-badge classe">
+                <i class="fas fa-school me-2"></i>{{ classe_selectionnee.nom }}
+            </span>
+            <span class="info-badge matiere">
+                <i class="fas fa-book me-2"></i>{{ matiere_selectionnee.nom }}
+            </span>
+            <span class="info-badge periode">
+                <i class="fas fa-calendar me-2"></i>{{ periode|title }}
+            </span>
+        </div>
+        
+        <!-- Message d'avertissement si notes déjà saisies -->
+        {% if notes_deja_saisies %}
+        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <strong>Attention !</strong> 
+            Des notes ont déjà été enregistrées pour cette matière et cette période.
+            <br>
+            <small>
+                <i class="fas fa-info-circle me-1"></i>
+                <strong>{{ nombre_notes_existantes }}</strong> note(s) sur <strong>{{ eleves|length }}</strong> élève(s) déjà saisie(s).
+                {% if type_note == 'mensuelle' %}
+                    Mois: <strong>{{ periode|title }}</strong>
+                {% elif type_note == 'composition' %}
+                    {% if periode == 'TRIMESTRE_1' %}
+                        Trimestre: <strong>1er Trimestre</strong>
+                    {% elif periode == 'TRIMESTRE_2' %}
+                        Trimestre: <strong>2ème Trimestre</strong>
+                    {% elif periode == 'TRIMESTRE_3' %}
+                        Trimestre: <strong>3ème Trimestre</strong>
+                    {% elif periode == 'SEMESTRE_1' %}
+                        Semestre: <strong>1er Semestre</strong>
+                    {% elif periode == 'SEMESTRE_2' %}
+                        Semestre: <strong>2ème Semestre</strong>
+                    {% endif %}
+                {% elif type_note == 'appreciation' %}
+                    {% if periode == 'TRIMESTRE_1' %}
+                        Trimestre: <strong>1er Trimestre</strong>
+                    {% elif periode == 'TRIMESTRE_2' %}
+                        Trimestre: <strong>2ème Trimestre</strong>
+                    {% elif periode == 'TRIMESTRE_3' %}
+                        Trimestre: <strong>3ème Trimestre</strong>
+                    {% endif %}
+                {% endif %}
+            </small>
+            <br>
+            <small class="text-muted">
+                💡 Vous pouvez modifier les notes existantes. Les nouvelles valeurs remplaceront les anciennes.
+            </small>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endif %}
+        
+        <!-- Tableau des élèves -->
+        <div class="table-responsive">
+            <table class="eleves-table table">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">#</th>
+                        <th>Matricule</th>
+                        <th>Prénom</th>
+                        <th>Nom</th>
+                        {% if type_note == 'appreciation' %}
+                        <th style="width: 300px;">Appréciation</th>
+                        <th>Commentaire</th>
+                        {% else %}
+                        <th style="width: 160px;">Note /{{ note_sur }}</th>
+                        {% endif %}
+                        <th style="width: 80px;">Absent</th>
+                    </tr>
+                </thead>
+                <tbody id="elevesTableBody">
+                    {% for eleve in eleves %}
+                    <tr data-eleve-id="{{ eleve.id|stringformat:"d" }}">
+                        <td>{{ forloop.counter }}</td>
+                        <td>{{ eleve.matricule }}</td>
+                        <td>{{ eleve.prenom }}</td>
+                        <td><strong>{{ eleve.nom }}</strong></td>
+                        {% if type_note == 'appreciation' %}
+                        <td>
+                            <select class="appreciation-select" data-field="appreciation">
+                                <option value="">-- Sélectionner --</option>
+                                <option value="A+">A+ - Excellent (10)</option>
+                                <option value="A">A - Très bien (9,5)</option>
+                                <option value="B+">B+ - Bien (8-9)</option>
+                                <option value="B">B - Assez bien (7)</option>
+                                <option value="B-">B- - Moyen (6)</option>
+                                <option value="C">C - Passable (5-5,75)</option>
+                                <option value="D">D - Éprouve des difficultés (3-4)</option>
+                            </select>
+                        </td>
+                        <td>
+                            <input type="text" class="commentaire-input" data-field="commentaire" placeholder="Commentaire...">
+                        </td>
+                        {% else %}
+                        <td>
+                            <input type="number" 
+                                   class="note-input" 
+                                   data-field="note"
+                                   step="0.01" 
+                                   min="0" 
+                                   max="{{ note_sur }}"
+                                   placeholder="/{{ note_sur }}">
+                        </td>
+                        {% endif %}
+                        <td class="text-center">
+                            <input type="checkbox" class="absent-checkbox" data-field="absent">
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Boutons de sauvegarde et suppression -->
+        <div class="text-center mt-4">
+            <button onclick="confirmerSauvegarde()" class="save-btn" id="saveBtn">
+                <i class="fas fa-save me-2"></i>
+                <span id="saveBtnText">Sauvegarder Toutes les Notes ({{ eleves|length }} élèves)</span>
+                <span id="unsavedIndicator" style="display: none;" class="unsaved-indicator"></span>
+            </button>
+            
+            {% if notes_deja_saisies %}
+            <button onclick="confirmerSuppression()" class="btn btn-danger btn-lg ms-3" id="deleteBtn" style="padding: 1rem 2.5rem; border-radius: 10px; font-weight: 600; font-size: 1.2rem;">
+                <i class="fas fa-trash-alt me-2"></i>
+                <span id="deleteBtnText">Supprimer les Notes</span>
+            </button>
+            {% endif %}
+            <div id="saveProgress" class="mt-3" style="display: none;">
+                <div class="progress" style="height: 30px;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
+                         role="progressbar" 
+                         id="progressBar"
+                         style="width: 0%">
+                        <span id="progressText">0%</span>
+                    </div>
+                </div>
+            </div>
+            <div id="saveInfo" class="mt-2">
+                <div class="text-muted small">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Seules les lignes avec des valeurs seront enregistrées
+                </div>
+                <div class="text-primary small mt-1">
+                    <i class="fas fa-keyboard me-1"></i>
+                    <strong>Raccourci:</strong> Ctrl+S pour sauvegarder rapidement
+                </div>
+            </div>
+            
+            <!-- Zone de résultats détaillés -->
+            <div id="saveResults" class="mt-3" style="display: none;"></div>
+        </div>
+        
+        {% else %}
+        <div class="alert alert-info text-center">
+            <i class="fas fa-info-circle me-2"></i>
+            Veuillez sélectionner une classe, une matière, un type de note et une période pour commencer la saisie.
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+const notesExistantes = JSON.parse('{{ notes_existantes_json|escapejs }}');
+const typeNote = '{{ type_note|default:""|escapejs }}';
+const periode = '{{ periode|default:""|escapejs }}';
+const matiereId = {% if matiere_selectionnee %}{{ matiere_selectionnee.id|stringformat:"d" }}{% else %}null{% endif %};
+const anneeScolaire = '{{ classe_selectionnee.annee_scolaire|default:""|escapejs }}';
+
+// Debug: afficher les notes existantes dans la console
+console.log('Notes existantes chargées:', notesExistantes);
+console.log('Nombre de notes:', Object.keys(notesExistantes).length);
+console.log('Type note:', typeNote, 'Période:', periode);
+
+// Fonction d'impression PDF - définie en premier pour être toujours disponible
+function imprimerListePDF() {
+    const classeIdPDF = '{{ classe_selectionnee.id|stringformat:"d"|default:"" }}';
+    const matiereIdPDF = '{{ matiere_selectionnee.id|stringformat:"d"|default:"" }}';
+    const periodePDF = '{{ periode|default:"" }}';
+    const typeNotePDF = '{{ type_note|default:"" }}';
+    
+    console.log('imprimerListePDF appelée avec:', {classeIdPDF, matiereIdPDF, periodePDF, typeNotePDF});
+    
+    if (!classeIdPDF || !matiereIdPDF || !periodePDF) {
+        alert('Veuillez sélectionner une classe, une matière et une période.');
+        return;
+    }
+    
+    // Construire l'URL pour le PDF
+    const url = '/notes/liste-saisie-pdf/?classe_id=' + classeIdPDF + '&matiere_id=' + matiereIdPDF + '&periode=' + periodePDF + '&type_note=' + typeNotePDF;
+    console.log('URL PDF:', url);
+    
+    // Télécharger directement via un lien
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// Gestion dynamique des sélections
+document.addEventListener('DOMContentLoaded', function() {
+    const classeSelect = document.getElementById('classeSelect');
+    const matiereSelect = document.getElementById('matiereSelect');
+    const typeNoteSelect = document.getElementById('typeNoteSelect');
+    const systemTypeSelect = document.getElementById('systemTypeSelect');
+    const periodeSelect = document.getElementById('periodeSelect');
+    
+    // Recharger les matières quand on change de classe
+    if (classeSelect) {
+        classeSelect.addEventListener('change', function() {
+            if (this.value) {
+                const params = new URLSearchParams(new FormData(document.getElementById('selectionForm')));
+                params.set('classe_id', this.value);
+                params.delete('matiere_id');
+                params.delete('periode');
+                window.location.href = `?${params.toString()}`;
+            }
+        });
+    }
+    
+    // Auto-submit quand on change de matière
+    if (matiereSelect) {
+        matiereSelect.addEventListener('change', function() {
+            if (this.value) {
+                document.getElementById('selectionForm').submit();
+            }
+        });
+    }
+    
+    // Auto-submit quand on change de type de note
+    if (typeNoteSelect) {
+        typeNoteSelect.addEventListener('change', function() {
+            if (this.value) {
+                document.getElementById('selectionForm').submit();
+            }
+        });
+    }
+    
+    // Auto-submit quand on change de période
+    if (periodeSelect) {
+        periodeSelect.addEventListener('change', function() {
+            if (this.value) {
+                document.getElementById('selectionForm').submit();
+            }
+        });
+    }
+    
+    // Auto-submit quand on change de système
+    if (systemTypeSelect) {
+        systemTypeSelect.addEventListener('change', function() {
+            document.getElementById('selectionForm').submit();
+        });
+    }
+    
+    // Afficher/masquer le champ Système selon le type de note
+    if (typeNoteSelect && systemTypeSelect) {
+        function toggleSystemType() {
+            const systemTypeDiv = systemTypeSelect.closest('.col-md-2');
+            if (typeNoteSelect.value === 'composition') {
+                systemTypeDiv.style.display = '';
+            } else {
+                systemTypeDiv.style.display = 'none';
+            }
+        }
+        
+        typeNoteSelect.addEventListener('change', toggleSystemType);
+        toggleSystemType(); // Appliquer au chargement
+    }
+});
+
+// Charger les notes existantes
+function applyExistingNotes() {
+    console.log('[applyExistingNotes] Début application des notes');
+    console.log('[applyExistingNotes] notesExistantes:', notesExistantes);
+    console.log('[applyExistingNotes] Clés:', Object.keys(notesExistantes));
+    
+    const rows = document.querySelectorAll('#elevesTableBody tr');
+    console.log('[applyExistingNotes] Nombre de lignes:', rows.length);
+    
+    let notesAppliquees = 0;
+    rows.forEach(row => {
+        row.classList.remove('no-note');
+        const eleveId = row.dataset.eleveId;
+        const noteData = notesExistantes[String(eleveId)] || notesExistantes[parseInt(eleveId)] || notesExistantes[eleveId];
+        
+        if (noteData) {
+            console.log(`[applyExistingNotes] Élève ${eleveId}: note=${noteData.note}, absent=${noteData.absent}`);
+            notesAppliquees++;
+        }
+        if (typeNote === 'appreciation') {
+            const appreciationSelect = row.querySelector('[data-field="appreciation"]');
+            const commentaireInput = row.querySelector('[data-field="commentaire"]');
+            const absentCheckbox = row.querySelector('[data-field="absent"]');
+            if (noteData) {
+                if (noteData.appreciation) appreciationSelect.value = noteData.appreciation;
+                if (noteData.commentaire) commentaireInput.value = noteData.commentaire;
+                if (noteData.absent) absentCheckbox.checked = true;
+            } else {
+                // Pas de données → surligner
+                row.classList.add('no-note');
+            }
+        } else {
+            const noteInput = row.querySelector('[data-field="note"]');
+            const absentCheckbox = row.querySelector('[data-field="absent"]');
+            if (noteData && noteData.note !== null && noteData.note !== undefined) {
+                noteInput.value = noteData.note;
+            } else {
+                // aucun chiffre de note → surligner
+                row.classList.add('no-note');
+            }
+            if (noteData && noteData.absent) {
+                absentCheckbox.checked = true;
+                if (noteInput) noteInput.disabled = true;
+            }
+        }
+    });
+    
+    console.log(`[applyExistingNotes] Terminé: ${notesAppliquees} notes appliquées sur ${rows.length} lignes`);
+}
+
+function reloadNotes() {
+    applyExistingNotes();
+    showToast('Notes rechargées dans les champs.', 'success');
+}
+
+// Recharger les notes depuis le serveur (après importation)
+function reloadNotesFromServer() {
+    // Afficher un message de chargement
+    showToast('Actualisation des notes depuis le serveur...', 'success');
+    
+    // Recharger la page pour récupérer les notes importées
+    setTimeout(() => {
+        window.location.reload();
+    }, 500);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    applyExistingNotes();
+    // Gérer les checkboxes absent
+    document.querySelectorAll('.absent-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const row = this.closest('tr');
+            const noteInput = row.querySelector('[data-field="note"]');
+            if (noteInput) {
+                noteInput.disabled = this.checked;
+                if (this.checked) noteInput.value = '';
+            }
+            // Mise à jour visuelle de "sans note"
+            if (!this.checked && noteInput && noteInput.value) {
+                row.classList.remove('no-note');
+            } else if (!noteInput || !noteInput.value) {
+                row.classList.add('no-note');
+            }
+        });
+    });
+});
+
+// Variables globales pour le suivi des modifications
+let hasUnsavedChanges = false;
+let originalValues = {};
+
+// Toast notification
+function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `custom-toast ${type}`;
+    toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>${message}`;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.remove();
+    }, 4000);
+}
+
+// Marquer une ligne comme modifiée
+function markRowAsModified(row) {
+    row.classList.add('note-modified');
+    row.classList.remove('note-saved');
+    hasUnsavedChanges = true;
+    document.getElementById('unsavedIndicator').style.display = 'inline-block';
+}
+
+// Marquer une ligne comme sauvegardée
+function markRowAsSaved(row) {
+    row.classList.add('note-saved');
+    row.classList.remove('note-modified');
+}
+
+// Sauvegarder les valeurs originales
+function saveOriginalValues() {
+    const rows = document.querySelectorAll('#elevesTableBody tr');
+    rows.forEach(row => {
+        const eleveId = row.dataset.eleveId;
+        if (typeNote === 'appreciation') {
+            const appreciationSelect = row.querySelector('[data-field="appreciation"]');
+            const commentaireInput = row.querySelector('[data-field="commentaire"]');
+            originalValues[eleveId] = {
+                appreciation: appreciationSelect.value,
+                commentaire: commentaireInput.value,
+                absent: row.querySelector('[data-field="absent"]').checked
+            };
+        } else {
+            const noteInput = row.querySelector('[data-field="note"]');
+            originalValues[eleveId] = {
+                note: noteInput.value,
+                absent: row.querySelector('[data-field="absent"]').checked
+            };
+        }
+    });
+}
+
+// Confirmation avant sauvegarde
+function confirmerSauvegarde() {
+    const count = compterNotesSaisies();
+    if (count === 0) {
+        showToast('⚠️ Aucune note à sauvegarder', 'error');
+        return;
+    }
+    
+    if (confirm(`Voulez-vous vraiment sauvegarder ${count} note(s) ?\n\nCette action va enregistrer ou modifier les notes dans la base de données.`)) {
+        sauvegarderToutesLesNotes();
+    }
+}
+
+// Sauvegarder toutes les notes avec vérification et rechargement
+async function sauvegarderToutesLesNotes() {
+    const saveBtn = document.getElementById('saveBtn');
+    const saveBtnText = document.getElementById('saveBtnText');
+    const saveProgress = document.getElementById('saveProgress');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const saveResults = document.getElementById('saveResults');
+    
+    const rows = document.querySelectorAll('#elevesTableBody tr');
+    const notes = [];
+    
+    // Collecter les notes
+    rows.forEach(row => {
+        const eleveId = row.dataset.eleveId;
+        const absentCheckbox = row.querySelector('[data-field="absent"]');
+        const absent = absentCheckbox.checked;
+        
+        if (typeNote === 'appreciation') {
+            const appreciationSelect = row.querySelector('[data-field="appreciation"]');
+            const commentaireInput = row.querySelector('[data-field="commentaire"]');
+            
+            const appreciation = appreciationSelect.value;
+            const commentaire = commentaireInput.value;
+            
+            if (appreciation || absent) {
+                notes.push({
+                    eleve_id: eleveId,
+                    appreciation: appreciation,
+                    commentaire: commentaire,
+                    absent: absent
+                });
+            }
+        } else {
+            const noteInput = row.querySelector('[data-field="note"]');
+            const note = noteInput.value;
+            
+            if (note || absent) {
+                notes.push({
+                    eleve_id: eleveId,
+                    note: parseFloat(note) || 0,
+                    absent: absent
+                });
+            }
+        }
+    });
+    
+    if (notes.length === 0) {
+        showToast('⚠️ Aucune note à sauvegarder', 'error');
+        return;
+    }
+    
+    // Désactiver le bouton et afficher la progression
+    saveBtn.disabled = true;
+    saveBtnText.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Sauvegarde en cours...';
+    saveProgress.style.display = 'block';
+    saveResults.style.display = 'none';
+    
+    // Animation de la barre de progression
+    let progress = 0;
+    const progressInterval = setInterval(() => {
+        progress += 10;
+        if (progress <= 90) {
+            progressBar.style.width = progress + '%';
+            progressText.textContent = progress + '%';
+        }
+    }, 100);
+    
+    try {
+        // Vérifier qu'une évaluation est sélectionnée
+        if (!matiereId || !periode) {
+            showToast('⚠️ Veuillez sélectionner une matière et une période', 'error');
+            clearInterval(progressInterval);
+            saveBtn.disabled = false;
+            saveBtnText.innerHTML = '<i class="fas fa-save me-2"></i>Sauvegarder Toutes les Notes';
+            saveProgress.style.display = 'none';
+            return;
+        }
+        
+        const response = await fetch('{% url "notes:sauvegarder_notes" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                notes: notes,
+                evaluation_id: {{ evaluations.0.id|stringformat:"d"|default:'null' }},
+                matiere_id: matiereId,
+                periode: periode
+            })
+        });
+        
+        clearInterval(progressInterval);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Erreur serveur:', response.status, errorText);
+            showToast(`❌ Erreur serveur (${response.status}). Voir console pour détails.`, 'error');
+            
+            let resultsHTML = '<div class="error-details">';
+            resultsHTML += `<h5><i class="fas fa-exclamation-triangle me-2"></i>Erreur serveur (${response.status})</h5>`;
+            resultsHTML += `<p>Le serveur a retourné une erreur. Essayez de recharger la page et réessayer.</p>`;
+            resultsHTML += `<p class="small text-muted">Si le problème persiste, vérifiez que votre session n'a pas expiré.</p>`;
+            resultsHTML += '</div>';
+            saveResults.innerHTML = resultsHTML;
+            saveResults.style.display = 'block';
+            saveProgress.style.display = 'none';
+            
+            saveBtn.disabled = false;
+            saveBtnText.innerHTML = '<i class="fas fa-save me-2"></i>Réessayer la sauvegarde';
+            return;
+        }
+        
+        const data = await response.json();
+        
+        // Compléter la barre de progression
+        progressBar.style.width = '100%';
+        progressText.textContent = '100%';
+        
+        setTimeout(() => {
+            saveProgress.style.display = 'none';
+            progressBar.style.width = '0%';
+            
+            if (data.success) {
+                // Afficher le message de succès
+                showToast(data.message, 'success');
+                saveBtnText.innerHTML = '<i class="fas fa-check me-2"></i>Notes sauvegardées !';
+                
+                // Afficher les détails de la sauvegarde
+                let resultsHTML = '<div class="success-details">';
+                resultsHTML += `<h5><i class="fas fa-check-circle me-2"></i>Sauvegarde réussie</h5>`;
+                resultsHTML += `<p><strong>${data.total}</strong> note(s) enregistrée(s) :</p>`;
+                resultsHTML += '<ul>';
+                if (data.notes_sauvegardees > 0) {
+                    resultsHTML += `<li>✨ <strong>${data.notes_sauvegardees}</strong> nouvelle(s) note(s) ajoutée(s)</li>`;
+                }
+                if (data.notes_modifiees > 0) {
+                    resultsHTML += `<li>✏️ <strong>${data.notes_modifiees}</strong> note(s) modifiée(s)</li>`;
+                }
+                resultsHTML += '</ul>';
+                
+                // Afficher les erreurs s'il y en a
+                if (data.erreurs && data.erreurs.length > 0) {
+                    resultsHTML += '<div class="mt-2"><strong>⚠️ Erreurs détectées:</strong><ul>';
+                    data.erreurs.forEach(err => {
+                        resultsHTML += `<li class="text-danger">${err}</li>`;
+                    });
+                    resultsHTML += '</ul></div>';
+                }
+                
+                resultsHTML += '<p class="mt-2 mb-0"><i class="fas fa-info-circle me-1"></i>Les notes ont été enregistrées dans la base de données. Vous pouvez continuer à les modifier si nécessaire.</p>';
+                resultsHTML += '</div>';
+                
+                saveResults.innerHTML = resultsHTML;
+                saveResults.style.display = 'block';
+                
+                // Marquer toutes les lignes comme sauvegardées
+                rows.forEach(row => {
+                    const eleveId = row.dataset.eleveId;
+                    const noteDetail = data.notes_details.find(n => n.eleve_id == eleveId);
+                    if (noteDetail) {
+                        markRowAsSaved(row);
+                    }
+                });
+                
+                // Réinitialiser les valeurs originales
+                saveOriginalValues();
+                hasUnsavedChanges = false;
+                document.getElementById('unsavedIndicator').style.display = 'none';
+                
+                // Réactiver le bouton après 2 secondes
+                setTimeout(() => {
+                    saveBtn.disabled = false;
+                    saveBtnText.innerHTML = '<i class="fas fa-save me-2"></i>Sauvegarder Toutes les Notes';
+                    
+                    // Retirer les indicateurs visuels après 5 secondes
+                    setTimeout(() => {
+                        rows.forEach(row => {
+                            row.classList.remove('note-saved');
+                        });
+                    }, 5000);
+                }, 2000);
+            } else {
+                // Afficher l'erreur
+                showToast('❌ Erreur: ' + data.error, 'error');
+                
+                let resultsHTML = '<div class="error-details">';
+                resultsHTML += `<h5><i class="fas fa-exclamation-triangle me-2"></i>Erreur de sauvegarde</h5>`;
+                resultsHTML += `<p>${data.error}</p>`;
+                resultsHTML += '</div>';
+                
+                saveResults.innerHTML = resultsHTML;
+                saveResults.style.display = 'block';
+                
+                saveBtn.disabled = false;
+                saveBtnText.innerHTML = '<i class="fas fa-save me-2"></i>Réessayer la sauvegarde';
+            }
+        }, 500);
+        
+    } catch (error) {
+        clearInterval(progressInterval);
+        saveProgress.style.display = 'none';
+        progressBar.style.width = '0%';
+        
+        showToast('❌ Erreur de connexion au serveur', 'error');
+        console.error('Erreur:', error);
+        
+        let resultsHTML = '<div class="error-details">';
+        resultsHTML += `<h5><i class="fas fa-exclamation-triangle me-2"></i>Erreur de connexion</h5>`;
+        resultsHTML += `<p>Impossible de communiquer avec le serveur. Vérifiez votre connexion et réessayez.</p>`;
+        resultsHTML += `<p class="small text-muted">Détails: ${error.message}</p>`;
+        resultsHTML += '</div>';
+        
+        saveResults.innerHTML = resultsHTML;
+        saveResults.style.display = 'block';
+        
+        saveBtn.disabled = false;
+        saveBtnText.innerHTML = '<i class="fas fa-save me-2"></i>Réessayer la sauvegarde';
+    }
+}
+
+// Recharger les périodes selon le type de note
+const _typeNoteEl = document.getElementById('typeNoteSelect');
+if (_typeNoteEl) {
+    _typeNoteEl.addEventListener('change', function() {
+        document.getElementById('selectionForm').submit();
+    });
+}
+
+// Recharger quand on change le système (semestriel/trimestriel)
+const systemTypeSelect = document.getElementById('systemTypeSelect');
+if (systemTypeSelect) {
+    systemTypeSelect.addEventListener('change', function() {
+        document.getElementById('selectionForm').submit();
+    });
+}
+
+// Validation dynamique
+const noteSur = {{ note_sur|default:20|stringformat:"d" }};
+document.querySelectorAll('.note-input').forEach(input => {
+    input.addEventListener('input', function() {
+        const value = parseFloat(this.value);
+        if (value < 0) this.value = 0;
+        if (value > noteSur) this.value = noteSur;
+    });
+});
+
+// Raccourci clavier Ctrl+S pour sauvegarder
+document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        const saveBtn = document.getElementById('saveBtn');
+        if (saveBtn && !saveBtn.disabled) {
+            confirmerSauvegarde();
+        }
+    }
+});
+
+// Compter les notes saisies en temps réel
+function compterNotesSaisies() {
+    const rows = document.querySelectorAll('#elevesTableBody tr');
+    let count = 0;
+    
+    rows.forEach(row => {
+        const absentCheckbox = row.querySelector('[data-field="absent"]');
+        
+        if (typeNote === 'appreciation') {
+            const appreciationSelect = row.querySelector('[data-field="appreciation"]');
+            if (appreciationSelect && (appreciationSelect.value || absentCheckbox.checked)) {
+                count++;
+            }
+        } else {
+            const noteInput = row.querySelector('[data-field="note"]');
+            if (noteInput && (noteInput.value !== "" || absentCheckbox.checked)) {
+                count++;
+            }
+        }
+    });
+    
+    return count;
+}
+
+// Mettre à jour le compteur du bouton en temps réel et suivre les modifications
+{% if eleves %}
+document.querySelectorAll('.note-input, .absent-checkbox, .appreciation-select, .commentaire-input').forEach(element => {
+    element.addEventListener('change', function() {
+        const row = this.closest('tr');
+        const eleveId = row.dataset.eleveId;
+        
+        // Marquer la ligne comme modifiée
+        markRowAsModified(row);
+        
+        // Mettre à jour le compteur
+        const count = compterNotesSaisies();
+        const saveBtnText = document.getElementById('saveBtnText');
+        if (saveBtnText && count > 0) {
+            saveBtnText.innerHTML = '<i class="fas fa-save me-2"></i>Sauvegarder ' + count + ' note(s)';
+        }
+    });
+    
+    // Pour les inputs, détecter aussi la saisie au clavier
+    if (element.tagName === 'INPUT' && element.type !== 'checkbox') {
+        element.addEventListener('input', function() {
+            const row = this.closest('tr');
+            markRowAsModified(row);
+        });
+    }
+});
+
+// Sauvegarder les valeurs originales au chargement
+saveOriginalValues();
+{% endif %}
+
+// Afficher un message d'aide au chargement
+{% if eleves %}
+console.log('💡 Astuce: Utilisez Ctrl+S pour sauvegarder rapidement les notes');
+{% endif %}
+
+// Fonction de confirmation de suppression
+function confirmerSuppression() {
+    const nombreNotes = {{ nombre_notes_existantes|default:0|stringformat:"d" }};
+    
+    if (nombreNotes === 0) {
+        showToast('⚠️ Aucune note à supprimer', 'error');
+        return;
+    }
+    
+    const message = `⚠️ ATTENTION ⚠️\n\nVous êtes sur le point de supprimer ${nombreNotes} note(s) pour :\n\n` +
+                    `📚 Matière : {{ matiere_selectionnee.nom|default:"" }}\n` +
+                    `📅 Période : {{ periode|title }}\n` +
+                    `🏫 Classe : {{ classe_selectionnee.nom|default:"" }}\n\n` +
+                    `Cette action est IRRÉVERSIBLE !\n\n` +
+                    `Êtes-vous absolument sûr(e) de vouloir continuer ?`;
+    
+    if (confirm(message)) {
+        // Demander une double confirmation
+        if (confirm('⚠️ DERNIÈRE CONFIRMATION\n\nConfirmez-vous vraiment la suppression de ces notes ?\n\nCette action ne peut pas être annulée !')) {
+            supprimerNotes();
+        }
+    }
+}
+
+// Fonction de suppression des notes
+async function supprimerNotes() {
+    const deleteBtn = document.getElementById('deleteBtn');
+    const deleteBtnText = document.getElementById('deleteBtnText');
+    const saveResults = document.getElementById('saveResults');
+    
+    if (!matiereId || !periode) {
+        showToast('⚠️ Paramètres manquants', 'error');
+        return;
+    }
+    
+    // Désactiver le bouton
+    deleteBtn.disabled = true;
+    deleteBtnText.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Suppression en cours...';
+    
+    try {
+        const response = await fetch('{% url "notes:supprimer_notes" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                matiere_id: matiereId,
+                periode: periode
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Afficher le message de succès
+            showToast(data.message, 'success');
+            
+            // Afficher les détails
+            let resultsHTML = '<div class="success-details">';
+            resultsHTML += `<h5><i class="fas fa-check-circle me-2"></i>Suppression réussie</h5>`;
+            resultsHTML += `<p><strong>${data.notes_supprimees}</strong> note(s) supprimée(s) avec succès.</p>`;
+            resultsHTML += '<p class="mt-2 mb-0"><i class="fas fa-info-circle me-1"></i>Les notes ont été définitivement supprimées de la base de données.</p>';
+            resultsHTML += '</div>';
+            
+            saveResults.innerHTML = resultsHTML;
+            saveResults.style.display = 'block';
+            
+            // Vider tous les champs du formulaire
+            const rows = document.querySelectorAll('#elevesTableBody tr');
+            rows.forEach(row => {
+                const noteInput = row.querySelector('[data-field="note"]');
+                const absentCheckbox = row.querySelector('[data-field="absent"]');
+                const appreciationSelect = row.querySelector('[data-field="appreciation"]');
+                const commentaireInput = row.querySelector('[data-field="commentaire"]');
+                
+                if (noteInput) noteInput.value = '';
+                if (absentCheckbox) absentCheckbox.checked = false;
+                if (appreciationSelect) appreciationSelect.value = '';
+                if (commentaireInput) commentaireInput.value = '';
+                
+                // Retirer les classes visuelles
+                row.classList.remove('note-saved', 'note-modified');
+            });
+            
+            // Recharger la page après 2 secondes pour mettre à jour l'affichage
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+            
+        } else {
+            // Afficher l'erreur
+            showToast('❌ Erreur: ' + data.error, 'error');
+            
+            let resultsHTML = '<div class="error-details">';
+            resultsHTML += `<h5><i class="fas fa-exclamation-triangle me-2"></i>Erreur de suppression</h5>`;
+            resultsHTML += `<p>${data.error}</p>`;
+            resultsHTML += '</div>';
+            
+            saveResults.innerHTML = resultsHTML;
+            saveResults.style.display = 'block';
+            
+            deleteBtn.disabled = false;
+            deleteBtnText.innerHTML = '<i class="fas fa-trash-alt me-2"></i>Supprimer les Notes';
+        }
+        
+    } catch (error) {
+        showToast('❌ Erreur de connexion au serveur', 'error');
+        console.error('Erreur:', error);
+        
+        let resultsHTML = '<div class="error-details">';
+        resultsHTML += `<h5><i class="fas fa-exclamation-triangle me-2"></i>Erreur de connexion</h5>`;
+        resultsHTML += `<p>Impossible de communiquer avec le serveur. Vérifiez votre connexion et réessayez.</p>`;
+        resultsHTML += `<p class="small text-muted">Détails: ${error.message}</p>`;
+        resultsHTML += '</div>';
+        
+        saveResults.innerHTML = resultsHTML;
+        saveResults.style.display = 'block';
+        
+        deleteBtn.disabled = false;
+        deleteBtnText.innerHTML = '<i class="fas fa-trash-alt me-2"></i>Supprimer les Notes';
+    }
+}
+</script>
+{% endblock %}

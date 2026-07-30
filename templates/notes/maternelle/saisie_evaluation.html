@@ -1,0 +1,180 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load notes_tags %}
+
+{% block title %}Évaluation Maternelle - Saisie{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-baby me-2"></i>
+                        Évaluation Maternelle
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <!-- Filtres -->
+                    <form method="GET" class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Classe</label>
+                            <select name="classe" class="form-select" onchange="this.form.submit()">
+                                <option value="">-- Sélectionner une classe --</option>
+                                {% for classe in classes %}
+                                <option value="{{ classe.id }}" {% if classe_selectionnee and classe.id == classe_selectionnee.id %}selected{% endif %}>
+                                    {{ classe.nom }} ({{ classe.get_niveau_display }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Trimestre</label>
+                            <select name="trimestre" class="form-select" onchange="this.form.submit()">
+                                {% for value, label in trimestres %}
+                                <option value="{{ value }}" {% if trimestre == value %}selected{% endif %}>
+                                    {{ label }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Année scolaire</label>
+                            <input type="text" class="form-control" value="{{ annee_scolaire }}" readonly>
+                        </div>
+                    </form>
+
+                    {% if classe_selectionnee %}
+                    <!-- Barème des appréciations -->
+                    <div class="alert alert-info mb-4">
+                        <h6 class="alert-heading"><i class="fas fa-info-circle me-2"></i>Barème des appréciations</h6>
+                        <div class="row">
+                            <div class="col-md-3">
+                                <span class="badge bg-success me-1">A+</span> Excellent (10)
+                            </div>
+                            <div class="col-md-3">
+                                <span class="badge bg-success me-1">A</span> Très bien (9,5)
+                            </div>
+                            <div class="col-md-3">
+                                <span class="badge bg-primary me-1">B+</span> Bien (8-9)
+                            </div>
+                            <div class="col-md-3">
+                                <span class="badge bg-primary me-1">B</span> Assez bien (7)
+                            </div>
+                            <div class="col-md-3 mt-2">
+                                <span class="badge bg-warning text-dark me-1">B-</span> Moyen (6)
+                            </div>
+                            <div class="col-md-3 mt-2">
+                                <span class="badge bg-warning text-dark me-1">C</span> Passable (5-5,75)
+                            </div>
+                            <div class="col-md-3 mt-2">
+                                <span class="badge bg-danger me-1">D</span> Difficultés (3-4)
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Liste des élèves -->
+                    <div class="table-responsive">
+                        <table class="table table-hover table-striped">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Matricule</th>
+                                    <th>Nom & Prénom</th>
+                                    <th>Statut</th>
+                                    <th>Moyenne</th>
+                                    <th>Lettre</th>
+                                    <th class="text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for eleve in eleves %}
+                                <tr>
+                                    <td>{{ forloop.counter }}</td>
+                                    <td><code>{{ eleve.matricule }}</code></td>
+                                    <td>
+                                        <strong>{{ eleve.nom }}</strong> {{ eleve.prenom }}
+                                    </td>
+                                    <td>
+                                        {% if eleve.id in evaluations_existantes %}
+                                        <span class="badge bg-success">
+                                            <i class="fas fa-check me-1"></i>Évalué
+                                        </span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">
+                                            <i class="fas fa-clock me-1"></i>En attente
+                                        </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% with eval=evaluations_existantes|default_if_none:"" %}
+                                        {% if eleve.id in evaluations_existantes %}
+                                            {% with e=evaluations_existantes %}
+                                            {{ e|get_item:eleve.id|get_moyenne_generale|default:"-" }}
+                                            {% endwith %}
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                        {% endwith %}
+                                    </td>
+                                    <td>
+                                        {% if eleve.id in evaluations_existantes %}
+                                            {% with e=evaluations_existantes %}
+                                            <span class="badge bg-info">
+                                                {{ e|get_item:eleve.id|get_lettre_generale|default:"-" }}
+                                            </span>
+                                            {% endwith %}
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <a href="{% url 'notes:saisie_eleve_maternelle' eleve.id %}?classe={{ classe_selectionnee.id }}&trimestre={{ trimestre }}" 
+                                           class="btn btn-sm btn-primary">
+                                            <i class="fas fa-edit me-1"></i>
+                                            {% if eleve.id in evaluations_existantes %}Modifier{% else %}Saisir{% endif %}
+                                        </a>
+                                        {% if eleve.id in evaluations_existantes %}
+                                        <a href="{% url 'notes:bulletin_maternelle_pdf' evaluations_existantes|get_item:eleve.id|get_id %}" 
+                                           class="btn btn-sm btn-success" target="_blank">
+                                            <i class="fas fa-file-pdf me-1"></i>Bulletin
+                                        </a>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-4">
+                                        <i class="fas fa-info-circle me-2"></i>
+                                        Aucun élève trouvé dans cette classe
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {% if eleves %}
+                    <!-- Bouton export PDF classe -->
+                    <div class="text-end mt-3">
+                        <a href="{% url 'notes:bulletins_classe_maternelle_pdf' %}?classe={{ classe_selectionnee.id }}&trimestre={{ trimestre }}" 
+                           class="btn btn-warning btn-lg" target="_blank">
+                            <i class="fas fa-file-pdf me-2"></i>
+                            Exporter tous les bulletins (PDF)
+                        </a>
+                    </div>
+                    {% endif %}
+
+                    {% else %}
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Veuillez sélectionner une classe maternelle pour commencer la saisie des évaluations.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,40 @@
+# Normalisation des fins de ligne
+* text=auto
+
+# Code source: forcer LF dans le repo
+*.py  text eol=lf
+*.html text eol=lf
+*.htm text eol=lf
+*.css text eol=lf
+*.js  text eol=lf
+*.ts  text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md  text eol=lf
+*.sh  text eol=lf
+
+# Fichiers Windows: CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files (no EOL conversions)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.ico binary
+*.zip binary
+*.tar binary
+*.gz binary
+
+# Stratégie de merge: garder la version locale
+media/eleves/photos/* merge=ours
+static/images/* merge=ours
+templates/accueil.html merge=ours
+templates/index.html merge=ours

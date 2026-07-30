@@ -1,0 +1,229 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ titre_page|default:"Dashboard Sécurité" }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .security-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        text-align: center;
+    }
+    
+    .security-card h3 {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+    
+    .security-card p {
+        margin: 0;
+        opacity: 0.9;
+    }
+    
+    .alert-card {
+        background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+        color: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .status-card {
+        border-left: 4px solid #28a745;
+        background: #f8f9fa;
+        padding: 15px;
+        margin-bottom: 15px;
+        border-radius: 0 5px 5px 0;
+    }
+    
+    .status-card.locked {
+        border-left-color: #dc3545;
+        background: #fff5f5;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>
+                    <i class="fas fa-shield-alt text-primary"></i>
+                    Dashboard Sécurité
+                </h1>
+                <a href="{% url 'administration:dashboard' %}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Retour à l'administration
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Statut du système -->
+    <div class="row mb-4">
+        <div class="col-12">
+            {% if is_locked %}
+            <div class="alert-card">
+                <h4><i class="fas fa-lock"></i> Système Verrouillé</h4>
+                <p>Le système est actuellement verrouillé pour des raisons de sécurité.</p>
+                {% if secondes_restantes > 0 %}
+                <p><strong>Temps restant :</strong> {{ secondes_restantes }} secondes</p>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="status-card">
+                <h4><i class="fas fa-check-circle text-success"></i> Système Opérationnel</h4>
+                <p>Le système fonctionne normalement. Aucune menace détectée.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <!-- Statistiques de sécurité -->
+    <div class="row">
+        <div class="col-md-4">
+            <div class="security-card">
+                <h3>{{ stats.tentatives_echouees }}</h3>
+                <p><i class="fas fa-exclamation-triangle"></i> Tentatives échouées</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="security-card">
+                <h3>{{ stats.adresses_ip_bloquees }}</h3>
+                <p><i class="fas fa-ban"></i> Adresses IP bloquées</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="security-card">
+                <h3>{{ stats.sessions_actives }}</h3>
+                <p><i class="fas fa-users"></i> Sessions actives</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Actions de sécurité -->
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-tools"></i> Actions de sécurité</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-warning" onclick="alert('Fonctionnalité à implémenter')">
+                            <i class="fas fa-broom"></i> Nettoyer les logs de sécurité
+                        </button>
+                        <button class="btn btn-danger" onclick="alert('Fonctionnalité à implémenter')">
+                            <i class="fas fa-ban"></i> Bloquer une adresse IP
+                        </button>
+                        <button class="btn btn-info" onclick="alert('Fonctionnalité à implémenter')">
+                            <i class="fas fa-unlock"></i> Débloquer une adresse IP
+                        </button>
+                        <button class="btn btn-success" onclick="alert('Fonctionnalité à implémenter')">
+                            <i class="fas fa-sync"></i> Actualiser les statistiques
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Informations système -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-info-circle"></i> Informations système</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-6">
+                            <strong>Statut :</strong>
+                        </div>
+                        <div class="col-6">
+                            {% if is_locked %}
+                                <span class="badge bg-danger">Verrouillé</span>
+                            {% else %}
+                                <span class="badge bg-success">Opérationnel</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="row">
+                        <div class="col-6">
+                            <strong>Dernière vérification :</strong>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted">{{ "now"|date:"d/m/Y H:i:s" }}</small>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="row">
+                        <div class="col-6">
+                            <strong>Niveau de sécurité :</strong>
+                        </div>
+                        <div class="col-6">
+                            {% if stats.tentatives_echouees > 10 %}
+                                <span class="badge bg-danger">Élevé</span>
+                            {% elif stats.tentatives_echouees > 5 %}
+                                <span class="badge bg-warning">Moyen</span>
+                            {% else %}
+                                <span class="badge bg-success">Normal</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recommandations de sécurité -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-lightbulb"></i> Recommandations de sécurité</h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <h6><i class="fas fa-info-circle"></i> Conseils de sécurité :</h6>
+                        <ul class="mb-0">
+                            <li>Changez régulièrement vos mots de passe</li>
+                            <li>Surveillez les tentatives de connexion suspectes</li>
+                            <li>Maintenez le système à jour</li>
+                            <li>Limitez les accès aux comptes administrateurs</li>
+                            <li>Effectuez des sauvegardes régulières</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Auto-refresh des statistiques toutes les 30 secondes
+    setInterval(function() {
+        // Ici on pourrait ajouter un appel AJAX pour actualiser les stats
+        console.log('Actualisation des statistiques de sécurité...');
+    }, 30000);
+    
+    // Animation des cartes au survol
+    $('.security-card').hover(
+        function() {
+            $(this).addClass('shadow-lg');
+        },
+        function() {
+            $(this).removeClass('shadow-lg');
+        }
+    );
+});
+</script>
+{% endblock %}

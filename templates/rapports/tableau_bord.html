@@ -1,0 +1,501 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Module Rapports - Tableau de Bord{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="text-primary mb-1">
+                <i class="fas fa-chart-line me-2"></i>Module Rapports
+            </h2>
+            <p class="text-muted mb-0">Génération automatique de rapports journaliers, hebdomadaires, mensuels et annuels</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-primary" onclick="window.location.reload()">
+                <i class="fas fa-sync-alt me-1"></i>Actualiser
+            </button>
+        </div>
+    </div>
+
+    <!-- Statistiques rapides -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="mb-0">{{ rapports_recents|length }}</h4>
+                            <p class="mb-0">Rapports générés</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-file-pdf fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="mb-0">{{ types_rapports|length }}</h4>
+                            <p class="mb-0">Types de rapports</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-list fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="mb-0">{{ exports_programmes|length }}</h4>
+                            <p class="mb-0">Exports programmés</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-clock fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="mb-0">Actif</h4>
+                            <p class="mb-0">Système de rapports</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-check-circle fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions principales -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-download me-2"></i>Génération de Rapports
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <div class="card h-100 border-primary">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-calendar-day fa-3x text-primary mb-3"></i>
+                                    <h6 class="card-title">Rapport Journalier</h6>
+                                    <p class="card-text text-muted">Génère le rapport d'activité du jour</p>
+                                    <div class="d-flex flex-column gap-2">
+                                        <button class="btn btn-primary btn-sm" onclick="genererRapport('journalier')">
+                                            <i class="fas fa-download me-1"></i>Aujourd'hui
+                                        </button>
+                                        <button class="btn btn-outline-secondary btn-sm" onclick="exporterRapport('journalier')">
+                                            <i class="fas fa-file-excel me-1"></i>Exporter Excel
+                                        </button>
+                                        <button class="btn btn-outline-primary btn-sm" onclick="choisirDateJournalier()">
+                                            <i class="fas fa-calendar me-1"></i>Choisir date
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card h-100 border-success">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-calendar-week fa-3x text-success mb-3"></i>
+                                    <h6 class="card-title">Rapport Hebdomadaire</h6>
+                                    <p class="card-text text-muted">Génère le rapport de la semaine</p>
+                                    <div class="d-flex flex-column gap-2">
+                                        <button class="btn btn-success btn-sm" onclick="genererRapport('hebdomadaire')">
+                                            <i class="fas fa-download me-1"></i>Cette semaine
+                                        </button>
+                                        <button class="btn btn-outline-secondary btn-sm" onclick="exporterRapport('hebdomadaire')">
+                                            <i class="fas fa-file-excel me-1"></i>Exporter Excel
+                                        </button>
+                                        <button class="btn btn-outline-success btn-sm" onclick="choisirSemaineHebdomadaire()">
+                                            <i class="fas fa-calendar me-1"></i>Choisir semaine
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card h-100 border-info">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-calendar-alt fa-3x text-info mb-3"></i>
+                                    <h6 class="card-title">Rapport Mensuel</h6>
+                                    <p class="card-text text-muted">Génère le rapport du mois</p>
+                                    <div class="d-flex flex-column gap-2">
+                                        <button class="btn btn-info btn-sm" onclick="genererRapport('mensuel')">
+                                            <i class="fas fa-download me-1"></i>Ce mois
+                                        </button>
+                                        <button class="btn btn-outline-secondary btn-sm" onclick="exporterRapport('mensuel')">
+                                            <i class="fas fa-file-excel me-1"></i>Exporter Excel
+                                        </button>
+                                        <button class="btn btn-outline-info btn-sm" onclick="choisirMoisMensuel()">
+                                            <i class="fas fa-calendar me-1"></i>Choisir mois
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card h-100 border-warning">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-calendar fa-3x text-warning mb-3"></i>
+                                    <h6 class="card-title">Rapport Annuel</h6>
+                                    <p class="card-text text-muted">Génère le rapport de l'année</p>
+                                    <div class="d-flex flex-column gap-2">
+                                        <button class="btn btn-warning btn-sm" onclick="genererRapport('annuel')">
+                                            <i class="fas fa-download me-1"></i>Cette année
+                                        </button>
+                                        <button class="btn btn-outline-secondary btn-sm" onclick="exporterRapport('annuel')">
+                                            <i class="fas fa-file-excel me-1"></i>Exporter Excel
+                                        </button>
+                                        <button class="btn btn-outline-warning btn-sm" onclick="choisirAnneeAnnuel()">
+                                            <i class="fas fa-calendar me-1"></i>Choisir année
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rapports spécialisés -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-pie me-2"></i>Rapports Spécialisés
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <div class="card h-100 border-danger">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-percentage fa-3x text-danger mb-3"></i>
+                                    <h6 class="card-title">Rapport des Remises</h6>
+                                    <p class="card-text text-muted">Détail des remises accordées aux élèves</p>
+                                    <a href="{% url 'rapports:rapport_remises' %}" class="btn btn-danger btn-sm">
+                                        <i class="fas fa-eye me-1"></i>Consulter
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="card h-100 border-success">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-bus fa-3x text-success mb-3"></i>
+                                    <h6 class="card-title">Rapport Transport</h6>
+                                    <p class="card-text text-muted">Suivi des abonnements transport scolaire</p>
+                                    <a href="{% url 'rapports:rapport_transport' %}" class="btn btn-success btn-sm">
+                                        <i class="fas fa-eye me-1"></i>Consulter
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <div class="card h-100 border-secondary">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-archive fa-3x text-secondary mb-3"></i>
+                                    <h6 class="card-title">Historique des Rapports</h6>
+                                    <p class="card-text text-muted">Tous les rapports générés précédemment</p>
+                                    <a href="{% url 'rapports:liste_rapports' %}" class="btn btn-secondary btn-sm">
+                                        <i class="fas fa-list me-1"></i>Voir tout
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rapports récents -->
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-history me-2"></i>Rapports Récents
+                    </h5>
+                    <a href="{% url 'rapports:liste_rapports' %}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-list me-1"></i>Voir tout
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if rapports_recents %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Titre</th>
+                                        <th>Type</th>
+                                        <th>Date</th>
+                                        <th>Statut</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for rapport in rapports_recents %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ rapport.titre }}</strong>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-secondary">{{ rapport.type_rapport.nom }}</span>
+                                        </td>
+                                        <td>{{ rapport.date_generation|date:"d/m/Y H:i" }}</td>
+                                        <td>
+                                            {% if rapport.statut == 'TERMINE' %}
+                                                <span class="badge bg-success">Terminé</span>
+                                            {% elif rapport.statut == 'EN_COURS' %}
+                                                <span class="badge bg-warning">En cours</span>
+                                            {% else %}
+                                                <span class="badge bg-danger">Erreur</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if rapport.statut == 'TERMINE' %}
+                                                <button class="btn btn-sm btn-primary" onclick="telechargerRapport({{ rapport.id }})">
+                                                    <i class="fas fa-download"></i>
+                                                </button>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-file-alt fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">Aucun rapport généré récemment</p>
+                            <p class="text-muted">Utilisez les boutons ci-dessus pour générer votre premier rapport</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-info-circle me-2"></i>Informations
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <h6><i class="fas fa-lightbulb me-2"></i>Contenu des rapports</h6>
+                        <ul class="mb-0">
+                            <li>Nouveaux élèves inscrits</li>
+                            <li>Total frais d'inscription</li>
+                            <li>Montant total des paiements</li>
+                            <li>Total des dépenses</li>
+                            <li>États de salaire validés</li>
+                            <li>Résumé financier global</li>
+                        </ul>
+                    </div>
+                    <div class="alert alert-success">
+                        <h6><i class="fas fa-clock me-2"></i>Génération automatique</h6>
+                        <p class="mb-0">Les rapports sont générés automatiquement et sauvegardés en PDF pour consultation ultérieure.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modals pour sélection de dates -->
+<div class="modal fade" id="modalDateJournalier" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Choisir une date</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="dateJournalier" class="form-label">Date du rapport</label>
+                    <input type="date" class="form-control" id="dateJournalier" value="{{ today|date:'Y-m-d' }}">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-primary" onclick="genererRapportAvecDate('journalier')">Générer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalMoisMensuel" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Choisir un mois</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="moisMensuel" class="form-label">Mois</label>
+                            <select class="form-select" id="moisMensuel">
+                                <option value="1">Janvier</option>
+                                <option value="2">Février</option>
+                                <option value="3">Mars</option>
+                                <option value="4">Avril</option>
+                                <option value="5">Mai</option>
+                                <option value="6">Juin</option>
+                                <option value="7">Juillet</option>
+                                <option value="8">Août</option>
+                                <option value="9">Septembre</option>
+                                <option value="10">Octobre</option>
+                                <option value="11">Novembre</option>
+                                <option value="12">Décembre</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="anneeMensuel" class="form-label">Année</label>
+                            <select class="form-select" id="anneeMensuel">
+                                <option value="2024">2024</option>
+                                <option value="2025" selected>2025</option>
+                                <option value="2026">2026</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                <button type="button" class="btn btn-info" onclick="genererRapportMensuelAvecDate()">Générer</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function genererRapport(type) {
+    // Afficher un indicateur de chargement
+    const btn = event.target;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Génération...';
+    btn.disabled = true;
+    
+    // Générer le rapport
+    window.open(`{% url 'rapports:tableau_bord' %}${type}/`, '_blank');
+    
+    // Restaurer le bouton après un délai
+    setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }, 2000);
+}
+
+function exporterRapport(type) {
+    const base = `{% url 'rapports:tableau_bord' %}`; // ex: /rapports/
+    if (type === 'journalier') {
+        const today = new Date().toISOString().slice(0,10);
+        window.open(`${base}journalier/export/excel/?date=${today}`, '_blank');
+    } else if (type === 'hebdomadaire') {
+        // Calcule le lundi de la semaine courante
+        const d = new Date();
+        const day = d.getDay();
+        const diff = (day === 0 ? -6 : 1) - day; // ajuste pour lundi
+        const monday = new Date(d);
+        monday.setDate(d.getDate() + diff);
+        const debut = monday.toISOString().slice(0,10);
+        window.open(`${base}hebdomadaire/export/excel/?debut=${debut}`, '_blank');
+    } else if (type === 'mensuel') {
+        const now = new Date();
+        const mois = now.getMonth() + 1;
+        const annee = now.getFullYear();
+        window.open(`${base}mensuel/export/excel/?mois=${mois}&annee=${annee}`, '_blank');
+    } else if (type === 'annuel') {
+        const annee = new Date().getFullYear();
+        window.open(`${base}annuel/export/excel/?annee=${annee}`, '_blank');
+    }
+}
+
+function choisirDateJournalier() {
+    const modal = new bootstrap.Modal(document.getElementById('modalDateJournalier'));
+    modal.show();
+}
+
+function choisirMoisMensuel() {
+    // Définir le mois actuel par défaut
+    const now = new Date();
+    document.getElementById('moisMensuel').value = now.getMonth() + 1;
+    document.getElementById('anneeMensuel').value = now.getFullYear();
+    
+    const modal = new bootstrap.Modal(document.getElementById('modalMoisMensuel'));
+    modal.show();
+}
+
+function choisirSemaineHebdomadaire() {
+    // Pour l'instant, utiliser la semaine actuelle
+    genererRapport('hebdomadaire');
+}
+
+function choisirAnneeAnnuel() {
+    // Pour l'instant, utiliser l'année actuelle
+    genererRapport('annuel');
+}
+
+function genererRapportAvecDate(type) {
+    const date = document.getElementById('dateJournalier').value;
+    window.open(`{% url 'rapports:tableau_bord' %}${type}/?date=${date}`, '_blank');
+    bootstrap.Modal.getInstance(document.getElementById('modalDateJournalier')).hide();
+}
+
+function exporterRapportAvecDate() {
+    const date = document.getElementById('dateJournalier').value;
+    window.open(`{% url 'rapports:tableau_bord' %}journalier/export/excel/?date=${date}`, '_blank');
+    bootstrap.Modal.getInstance(document.getElementById('modalDateJournalier')).hide();
+}
+
+function genererRapportMensuelAvecDate() {
+    const mois = document.getElementById('moisMensuel').value;
+    const annee = document.getElementById('anneeMensuel').value;
+    window.open(`{% url 'rapports:tableau_bord' %}mensuel/?mois=${mois}&annee=${annee}`, '_blank');
+    bootstrap.Modal.getInstance(document.getElementById('modalMoisMensuel')).hide();
+}
+
+function exporterRapportMensuelAvecDate() {
+    const mois = document.getElementById('moisMensuel').value;
+    const annee = document.getElementById('anneeMensuel').value;
+    window.open(`{% url 'rapports:tableau_bord' %}mensuel/export/excel/?mois=${mois}&annee=${annee}`, '_blank');
+    bootstrap.Modal.getInstance(document.getElementById('modalMoisMensuel')).hide();
+}
+
+function telechargerRapport(rapportId) {
+    // Logique pour télécharger un rapport existant
+    alert('Fonctionnalité de téléchargement à implémenter');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+{% load static salaire_tags %}
+
+{% block title %}Rapport de Présences - Salaires{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2><i class="fas fa-chart-bar"></i> Rapport de Présences</h2>
+                <div>
+                    <a href="{% url 'salaires:liste_presences' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Retour
+                    </a>
+                    <a href="{% url 'salaires:pointer_presence' %}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Pointer
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-filter"></i> Période et Filtres</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Date début</label>
+                    <input type="date" name="date_debut" class="form-control" value="{{ date_debut }}" required>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Date fin</label>
+                    <input type="date" name="date_fin" class="form-control" value="{{ date_fin }}" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Enseignant</label>
+                    <select name="enseignant" class="form-select">
+                        <option value="">Tous les enseignants</option>
+                        {% for ens in enseignants %}
+                        <option value="{{ ens.id }}" {% if enseignant_id|stringformat:"s" == ens.id|stringformat:"s" %}selected{% endif %}>
+                            {{ ens.nom }} {{ ens.prenoms }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label">&nbsp;</label>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Rapport -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-table"></i> Rapport du {{ date_debut|date:"d/m/Y" }} au {{ date_fin|date:"d/m/Y" }}
+            </h5>
+        </div>
+        <div class="card-body">
+            {% if rapport %}
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Enseignant</th>
+                            <th>Type</th>
+                            <th class="text-center bg-success text-white">Présents</th>
+                            <th class="text-center bg-danger text-white">Absents</th>
+                            <th class="text-center bg-warning">Retards</th>
+                            <th class="text-center bg-info text-white">Congés</th>
+                            <th class="text-center">Maladies</th>
+                            <th class="text-center">Permissions</th>
+                            <th class="text-center bg-light">Total Heures</th>
+                            <th class="text-center text-danger">Abs. Injust.</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in rapport %}
+                        <tr>
+                            <td><strong>{{ item.enseignant.nom_complet }}</strong></td>
+                            <td>
+                                <span class="badge bg-secondary">{{ item.enseignant.get_type_enseignant_display }}</span>
+                            </td>
+                            <td class="text-center">{{ item.presents }}</td>
+                            <td class="text-center">{{ item.absents }}</td>
+                            <td class="text-center">{{ item.retards }}</td>
+                            <td class="text-center">{{ item.conges }}</td>
+                            <td class="text-center">{{ item.maladies }}</td>
+                            <td class="text-center">{{ item.permissions }}</td>
+                            <td class="text-center"><strong>{{ item.total_heures|floatformat:2 }}h</strong></td>
+                            <td class="text-center">
+                                {% if item.absences_injustifiees > 0 %}
+                                <span class="badge bg-danger">{{ item.absences_injustifiees }}</span>
+                                {% else %}
+                                <span class="text-muted">0</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="table-secondary">
+                        <tr>
+                            <td colspan="2"><strong>TOTAUX</strong></td>
+                            <td class="text-center"><strong>{{ rapport|sum_attr:'presents' }}</strong></td>
+                            <td class="text-center"><strong>{{ rapport|sum_attr:'absents' }}</strong></td>
+                            <td class="text-center"><strong>{{ rapport|sum_attr:'retards' }}</strong></td>
+                            <td class="text-center"><strong>{{ rapport|sum_attr:'conges' }}</strong></td>
+                            <td class="text-center"><strong>{{ rapport|sum_attr:'maladies' }}</strong></td>
+                            <td class="text-center"><strong>{{ rapport|sum_attr:'permissions' }}</strong></td>
+                            <td class="text-center"><strong>{{ rapport|sum_attr:'total_heures'|floatformat:2 }}h</strong></td>
+                            <td class="text-center"><strong>{{ rapport|sum_attr:'absences_injustifiees' }}</strong></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> Aucune donnée de présence pour cette période.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% endblock %}

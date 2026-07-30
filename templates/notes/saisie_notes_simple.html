@@ -1,0 +1,669 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load notes_extras %}
+
+{% block title %}Saisie des Notes{% endblock %}
+
+{% block extra_css %}
+<style>
+    .saisie-container {
+        background: linear-gradient(to bottom right, #eff6ff, #f0fdf4);
+        min-height: 100vh;
+        padding: 2rem;
+    }
+    
+    .main-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+    
+    .search-section {
+        background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    
+    .matiere-card {
+        background: #f9fafb;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        transition: all 0.3s ease;
+    }
+    
+    .matiere-card:hover {
+        border-color: #16a34a;
+        box-shadow: 0 4px 12px rgba(22, 163, 74, 0.1);
+    }
+    
+    .periode-section {
+        border-radius: 10px;
+        padding: 1rem;
+    }
+    
+    .periode-1 {
+        background: #dbeafe;
+    }
+    
+    .periode-2 {
+        background: #dcfce7;
+    }
+    
+    .note-input {
+        width: 100%;
+        padding: 0.5rem;
+        border: 2px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        transition: border-color 0.2s;
+    }
+    
+    .note-input:focus {
+        outline: none;
+        border-color: #16a34a;
+        box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
+    }
+    
+    .note-input.composition {
+        background: #fef3c7;
+        border-color: #fbbf24;
+        font-weight: 600;
+    }
+    
+    .note-input.has-value {
+        background: #dcfce7;
+        border-color: #16a34a;
+        font-weight: 600;
+    }
+    
+    .note-label-badge {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 0.7rem;
+        margin-left: 5px;
+    }
+    
+    .note-label-badge.imported {
+        background: #16a34a;
+        color: white;
+    }
+    
+    .save-btn {
+        background: #16a34a;
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        border: none;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .save-btn:hover {
+        background: #15803d;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
+    }
+    
+    .toast {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        color: white;
+        font-weight: 600;
+        z-index: 9999;
+        animation: slideIn 0.3s ease;
+    }
+    
+    .toast.success {
+        background: #16a34a;
+    }
+    
+    .toast.error {
+        background: #dc2626;
+    }
+    
+    @keyframes slideIn {
+        from {
+            transform: translateX(400px);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+    
+    .select2-container {
+        width: 100% !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="saisie-container">
+    <div class="main-card">
+        <!-- En-tête -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h2 mb-0">
+                <i class="fas fa-edit text-success me-2"></i>
+                Saisie des Notes - Système Guinéen
+            </h1>
+            <div class="d-flex gap-2">
+                <a href="{% url 'notes:tableau_bord' %}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>Retour
+                </a>
+            </div>
+        </div>
+        
+        <!-- Section de recherche -->
+        <div class="search-section">
+            <h3 class="h5 mb-3">
+                <i class="fas fa-search me-2"></i>Rechercher un Élève
+            </h3>
+            <form method="GET" id="searchForm">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Classe</label>
+                        <select name="classe_id" id="classeSelect" class="form-select" required>
+                            <option value="">-- Sélectionner --</option>
+                            {% for classe in classes %}
+                            <option value="{{ classe.id }}" {% if classe_selectionnee and classe.id == classe_selectionnee.id %}selected{% endif %}>
+                                {{ classe.nom }} ({{ classe.annee_scolaire }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Élève</label>
+                        <select name="eleve_id" id="eleveSelect" class="form-select" required>
+                            <option value="">-- Sélectionner une classe d'abord --</option>
+                            {% if eleves %}
+                                {% for eleve in eleves %}
+                                <option value="{{ eleve.id }}" {% if eleve_selectionne and eleve.id == eleve_selectionne.id %}selected{% endif %}>
+                                    {{ eleve.prenom }} {{ eleve.nom }} ({{ eleve.matricule }})
+                                </option>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Matière</label>
+                        <select name="matiere_id" id="matiereSelect" class="form-select" required>
+                            <option value="">-- Sélectionner --</option>
+                            {% for matiere in matieres %}
+                            <option value="{{ matiere.id }}" {% if matiere_selectionnee and matiere.id == matiere_selectionnee.id %}selected{% endif %}>
+                                {{ matiere.nom }} (Coef: {{ matiere.coefficient }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">&nbsp;</label>
+                        <button type="submit" class="btn btn-light w-100">
+                            <i class="fas fa-search me-2"></i>Charger
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+        
+        {% if eleve_selectionne and matiere_selectionnee %}
+        <!-- Informations -->
+        <div class="alert alert-info mb-4">
+            <div class="row">
+                <div class="col-md-3">
+                    <strong>Élève:</strong> {{ eleve_selectionne.prenom }} {{ eleve_selectionne.nom }}
+                </div>
+                <div class="col-md-3">
+                    <strong>Classe:</strong> {{ classe_selectionnee.nom }}
+                </div>
+                <div class="col-md-3">
+                    <strong>Matière:</strong> {{ matiere_selectionnee.nom }}
+                </div>
+                <div class="col-md-3">
+                    <strong>Niveau:</strong> {{ niveau_enseignement }}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Indicateur de notes existantes -->
+        {% if notes_mensuelles %}
+        <div class="alert alert-success mb-4">
+            <i class="fas fa-check-circle me-2"></i>
+            <strong>Notes existantes détectées!</strong> Les notes importées sont pré-remplies ci-dessous.
+            <span class="badge bg-success ms-2">{{ notes_mensuelles|length }} note(s) trouvée(s)</span>
+        </div>
+        {% endif %}
+        
+        <!-- Sélection du type de note -->
+        <div class="mb-4">
+            <label class="form-label fw-bold">Type de Note à Saisir:</label>
+            <div class="btn-group" role="group">
+                <button type="button" class="btn btn-outline-primary" onclick="showSection('mensuelle')">
+                    <i class="fas fa-calendar-alt me-2"></i>Notes Mensuelles
+                </button>
+                {% if niveau_enseignement == 'SECONDAIRE' %}
+                <button type="button" class="btn btn-outline-warning" onclick="showSection('composition')">
+                    <i class="fas fa-file-alt me-2"></i>Compositions
+                </button>
+                {% endif %}
+                {% if niveau_enseignement == 'MATERNELLE' %}
+                <button type="button" class="btn btn-outline-success" onclick="showSection('appreciation')">
+                    <i class="fas fa-star me-2"></i>Appréciations
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Section Notes Mensuelles -->
+        <div id="section-mensuelle" class="note-section" style="display: none;">
+            <div class="matiere-card">
+                <h4 class="mb-3">
+                    <i class="fas fa-calendar-check text-primary me-2"></i>
+                    Notes Mensuelles
+                </h4>
+                
+                <div class="row g-3">
+                    {% for mois_code, mois_label in mois_list %}
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">
+                            {{ mois_label }}
+                            {% with note_val=notes_mensuelles|get_item:mois_code %}
+                            {% if note_val %}
+                            <span class="note-label-badge imported" title="Note importée">✓</span>
+                            {% endif %}
+                            {% endwith %}
+                        </label>
+                        <input type="number" 
+                               class="note-input {% if notes_mensuelles|get_item:mois_code %}has-value{% endif %}" 
+                               id="note_{{ mois_code }}"
+                               step="0.01" 
+                               min="0" 
+                               max="20"
+                               value="{% if notes_mensuelles|get_item:mois_code %}{{ notes_mensuelles|get_item:mois_code }}{% endif %}"
+                               placeholder="/20">
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <div class="text-end mt-3">
+                    <button onclick="sauvegarderNotesMensuelles()" class="save-btn">
+                        <i class="fas fa-save me-2"></i>Sauvegarder les Notes Mensuelles
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Section Compositions -->
+        {% if niveau_enseignement == 'SECONDAIRE' %}
+        <div id="section-composition" class="note-section" style="display: none;">
+            <div class="matiere-card">
+                <h4 class="mb-3">
+                    <i class="fas fa-file-alt text-warning me-2"></i>
+                    Notes de Composition
+                </h4>
+                
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Composition 1er {% if system_type == 'semestre' %}Semestre{% else %}Trimestre{% endif %}</label>
+                        <input type="number" 
+                               class="note-input composition" 
+                               id="composition1"
+                               step="0.01" 
+                               min="0" 
+                               max="20"
+                               value="{% if composition1 %}{{ composition1 }}{% endif %}"
+                               placeholder="/20">
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Composition 2ème {% if system_type == 'semestre' %}Semestre{% else %}Trimestre{% endif %}</label>
+                        <input type="number" 
+                               class="note-input composition" 
+                               id="composition2"
+                               step="0.01" 
+                               min="0" 
+                               max="20"
+                               value="{% if composition2 %}{{ composition2 }}{% endif %}"
+                               placeholder="/20">
+                    </div>
+                    
+                    {% if system_type == 'trimestre' %}
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Composition 3ème Trimestre</label>
+                        <input type="number" 
+                               class="note-input composition" 
+                               id="composition3"
+                               step="0.01" 
+                               min="0" 
+                               max="20"
+                               value="{% if composition3 %}{{ composition3 }}{% endif %}"
+                               placeholder="/20">
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="text-end mt-3">
+                    <button onclick="sauvegarderCompositions()" class="save-btn">
+                        <i class="fas fa-save me-2"></i>Sauvegarder les Compositions
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Section Appréciations Maternelle -->
+        {% if niveau_enseignement == 'MATERNELLE' %}
+        <div id="section-appreciation" class="note-section" style="display: none;">
+            <div class="matiere-card">
+                <h4 class="mb-3">
+                    <i class="fas fa-star text-success me-2"></i>
+                    Appréciations Maternelle
+                </h4>
+                
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Trimestre 1</label>
+                        <select class="form-select" id="appreciation1">
+                            <option value="">-- Sélectionner --</option>
+                            <option value="A+" {% if appreciation1 == 'A+' %}selected{% endif %}>A+ - Excellent (10)</option>
+                            <option value="A" {% if appreciation1 == 'A' %}selected{% endif %}>A - Très bien (9,5)</option>
+                            <option value="B+" {% if appreciation1 == 'B+' %}selected{% endif %}>B+ - Bien (8-9)</option>
+                            <option value="B" {% if appreciation1 == 'B' %}selected{% endif %}>B - Assez bien (7)</option>
+                            <option value="B-" {% if appreciation1 == 'B-' %}selected{% endif %}>B- - Moyen (6)</option>
+                            <option value="C" {% if appreciation1 == 'C' %}selected{% endif %}>C - Passable (5-5,75)</option>
+                            <option value="D" {% if appreciation1 == 'D' %}selected{% endif %}>D - Éprouve des difficultés (3-4)</option>
+                        </select>
+                        <textarea class="form-control mt-2" id="commentaire1" rows="2" placeholder="Commentaire...">{% if commentaire1 %}{{ commentaire1 }}{% endif %}</textarea>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Trimestre 2</label>
+                        <select class="form-select" id="appreciation2">
+                            <option value="">-- Sélectionner --</option>
+                            <option value="A+" {% if appreciation2 == 'A+' %}selected{% endif %}>A+ - Excellent (10)</option>
+                            <option value="A" {% if appreciation2 == 'A' %}selected{% endif %}>A - Très bien (9,5)</option>
+                            <option value="B+" {% if appreciation2 == 'B+' %}selected{% endif %}>B+ - Bien (8-9)</option>
+                            <option value="B" {% if appreciation2 == 'B' %}selected{% endif %}>B - Assez bien (7)</option>
+                            <option value="B-" {% if appreciation2 == 'B-' %}selected{% endif %}>B- - Moyen (6)</option>
+                            <option value="C" {% if appreciation2 == 'C' %}selected{% endif %}>C - Passable (5-5,75)</option>
+                            <option value="D" {% if appreciation2 == 'D' %}selected{% endif %}>D - Éprouve des difficultés (3-4)</option>
+                        </select>
+                        <textarea class="form-control mt-2" id="commentaire2" rows="2" placeholder="Commentaire...">{% if commentaire2 %}{{ commentaire2 }}{% endif %}</textarea>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <label class="form-label fw-bold">Trimestre 3</label>
+                        <select class="form-select" id="appreciation3">
+                            <option value="">-- Sélectionner --</option>
+                            <option value="A+" {% if appreciation3 == 'A+' %}selected{% endif %}>A+ - Excellent (10)</option>
+                            <option value="A" {% if appreciation3 == 'A' %}selected{% endif %}>A - Très bien (9,5)</option>
+                            <option value="B+" {% if appreciation3 == 'B+' %}selected{% endif %}>B+ - Bien (8-9)</option>
+                            <option value="B" {% if appreciation3 == 'B' %}selected{% endif %}>B - Assez bien (7)</option>
+                            <option value="B-" {% if appreciation3 == 'B-' %}selected{% endif %}>B- - Moyen (6)</option>
+                            <option value="C" {% if appreciation3 == 'C' %}selected{% endif %}>C - Passable (5-5,75)</option>
+                            <option value="D" {% if appreciation3 == 'D' %}selected{% endif %}>D - Éprouve des difficultés (3-4)</option>
+                        </select>
+                        <textarea class="form-control mt-2" id="commentaire3" rows="2" placeholder="Commentaire...">{% if commentaire3 %}{{ commentaire3 }}{% endif %}</textarea>
+                    </div>
+                </div>
+                
+                <div class="text-end mt-3">
+                    <button onclick="sauvegarderAppreciations()" class="save-btn">
+                        <i class="fas fa-save me-2"></i>Sauvegarder les Appréciations
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        {% else %}
+        <div class="alert alert-warning text-center">
+            <i class="fas fa-info-circle me-2"></i>
+            Veuillez sélectionner une classe, un élève et une matière pour commencer la saisie.
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+const eleveId = {{ eleve_selectionne.id|stringformat:"d"|default:'null' }};
+const matiereId = {{ matiere_selectionnee.id|stringformat:"d"|default:'null' }};
+const anneeScolaire = '{{ classe_selectionnee.annee_scolaire|default:'' }}';
+const systemType = '{{ system_type }}';
+const niveauEnseignement = '{{ niveau_enseignement }}';
+
+// Afficher la section appropriée
+function showSection(type) {
+    document.querySelectorAll('.note-section').forEach(section => {
+        section.style.display = 'none';
+    });
+    document.getElementById('section-' + type).style.display = 'block';
+}
+
+// Toast notification
+function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>${message}`;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
+
+// Sauvegarder notes mensuelles
+async function sauvegarderNotesMensuelles() {
+    if (!eleveId || !matiereId) {
+        showToast('Veuillez sélectionner un élève et une matière', 'error');
+        return;
+    }
+    
+    const notesMois = {};
+    const moisList = ['OCTOBRE', 'NOVEMBRE', 'DECEMBRE', 'JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN'];
+    
+    moisList.forEach(mois => {
+        const input = document.getElementById('note_' + mois);
+        if (input && input.value) {
+            notesMois[mois.toUpperCase()] = {
+                note: parseFloat(input.value),
+                absent: false
+            };
+        }
+    });
+    
+    try {
+        const response = await fetch('{% url "notes:sauvegarder_notes_guineen" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                eleve_id: eleveId,
+                matiere_id: matiereId,
+                annee_scolaire: anneeScolaire,
+                notes_mois: notesMois,
+                compositions: {},
+                system_type: systemType
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Notes mensuelles sauvegardées avec succès!', 'success');
+        } else {
+            showToast('Erreur: ' + data.error, 'error');
+        }
+    } catch (error) {
+        showToast('Erreur de connexion', 'error');
+        console.error(error);
+    }
+}
+
+// Sauvegarder compositions
+async function sauvegarderCompositions() {
+    if (!eleveId || !matiereId) {
+        showToast('Veuillez sélectionner un élève et une matière', 'error');
+        return;
+    }
+    
+    const compositions = {};
+    
+    const comp1 = document.getElementById('composition1').value;
+    if (comp1) {
+        compositions.composition1 = {
+            note: parseFloat(comp1),
+            absent: false
+        };
+    }
+    
+    const comp2 = document.getElementById('composition2').value;
+    if (comp2) {
+        compositions.composition2 = {
+            note: parseFloat(comp2),
+            absent: false
+        };
+    }
+    
+    if (systemType === 'trimestre') {
+        const comp3 = document.getElementById('composition3').value;
+        if (comp3) {
+            compositions.composition3 = {
+                note: parseFloat(comp3),
+                absent: false
+            };
+        }
+    }
+    
+    try {
+        const response = await fetch('{% url "notes:sauvegarder_notes_guineen" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                eleve_id: eleveId,
+                matiere_id: matiereId,
+                annee_scolaire: anneeScolaire,
+                notes_mois: {},
+                compositions: compositions,
+                system_type: systemType
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Compositions sauvegardées avec succès!', 'success');
+        } else {
+            showToast('Erreur: ' + data.error, 'error');
+        }
+    } catch (error) {
+        showToast('Erreur de connexion', 'error');
+        console.error(error);
+    }
+}
+
+// Sauvegarder appréciations
+async function sauvegarderAppreciations() {
+    if (!eleveId || !matiereId) {
+        showToast('Veuillez sélectionner un élève et une matière', 'error');
+        return;
+    }
+    
+    const appreciations = {};
+    
+    const app1 = document.getElementById('appreciation1').value;
+    const comm1 = document.getElementById('commentaire1').value;
+    if (app1) {
+        appreciations.trimestre1 = {
+            appreciation: app1,
+            commentaire: comm1,
+            absent: false
+        };
+    }
+    
+    const app2 = document.getElementById('appreciation2').value;
+    const comm2 = document.getElementById('commentaire2').value;
+    if (app2) {
+        appreciations.trimestre2 = {
+            appreciation: app2,
+            commentaire: comm2,
+            absent: false
+        };
+    }
+    
+    const app3 = document.getElementById('appreciation3').value;
+    const comm3 = document.getElementById('commentaire3').value;
+    if (app3) {
+        appreciations.trimestre3 = {
+            appreciation: app3,
+            commentaire: comm3,
+            absent: false
+        };
+    }
+    
+    try {
+        const response = await fetch('{% url "notes:sauvegarder_appreciations_maternelle" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                eleve_id: eleveId,
+                matiere_id: matiereId,
+                annee_scolaire: anneeScolaire,
+                appreciations: appreciations
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Appréciations sauvegardées avec succès!', 'success');
+        } else {
+            showToast('Erreur: ' + data.error, 'error');
+        }
+    } catch (error) {
+        showToast('Erreur de connexion', 'error');
+        console.error(error);
+    }
+}
+
+// Charger les élèves quand on change de classe
+document.getElementById('classeSelect').addEventListener('change', function() {
+    const classeId = this.value;
+    if (classeId) {
+        window.location.href = `?classe_id=${classeId}`;
+    }
+});
+
+// Afficher la première section par défaut
+{% if eleve_selectionne and matiere_selectionnee %}
+    {% if niveau_enseignement == 'MATERNELLE' %}
+        showSection('appreciation');
+    {% else %}
+        showSection('mensuelle');
+    {% endif %}
+{% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,416 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Détail Enseignant - {{ enseignant.nom }} {{ enseignant.prenom }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .teacher-header {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        border-radius: 15px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 8px 32px rgba(0, 123, 255, 0.3);
+    }
+    
+    .teacher-info-card {
+        background: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        transition: transform 0.2s ease;
+    }
+    
+    .teacher-info-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+    
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    
+    .info-row:last-child {
+        border-bottom: none;
+    }
+    
+    .info-label {
+        font-weight: 600;
+        color: #555;
+        flex: 0 0 40%;
+    }
+    
+    .info-value {
+        color: #333;
+        flex: 1;
+        text-align: right;
+    }
+    
+    .status-badge {
+        padding: 0.4rem 0.8rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    
+    .status-actif { background: #d4edda; color: #155724; }
+    .status-conge { background: #fff3cd; color: #856404; }
+    .status-suspendu { background: #f8d7da; color: #721c24; }
+    .status-demissionnaire { background: #f1f3f4; color: #5f6368; }
+    
+    .type-badge {
+        padding: 0.3rem 0.6rem;
+        border-radius: 15px;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+    
+    .type-garderie { background: #e8f5e8; color: #2e7d32; }
+    .type-maternelle { background: #fff3e0; color: #f57c00; }
+    .type-primaire { background: #e3f2fd; color: #1976d2; }
+    .type-secondaire { background: #f3e5f5; color: #7b1fa2; }
+    .type-administrateur { background: #fce4ec; color: #c2185b; }
+    
+    .assignment-card {
+        background: #f8f9fa;
+        border-left: 4px solid #007bff;
+        padding: 1rem;
+        margin-bottom: 0.5rem;
+        border-radius: 0 8px 8px 0;
+    }
+    
+    .salary-history {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    
+    .salary-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem;
+        border-bottom: 1px solid #eee;
+        transition: background-color 0.2s ease;
+    }
+    
+    .salary-item:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .salary-amount {
+        font-weight: 600;
+        color: #28a745;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .btn-action {
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        transition: all 0.2s ease;
+    }
+    
+    .btn-action:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête Enseignant -->
+    <div class="teacher-header">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h1 class="mb-2">
+                    <i class="fas fa-user-tie me-3"></i>
+                    {{ enseignant.nom }} {{ enseignant.prenom }}
+                </h1>
+                <p class="mb-0 opacity-75">
+                    <i class="fas fa-school me-2"></i>{{ enseignant.ecole.nom }}
+                </p>
+            </div>
+            <div class="col-md-4 text-end">
+                <span class="status-badge status-{{ enseignant.statut|lower }}">
+                    {{ enseignant.get_statut_display }}
+                </span>
+                <br><br>
+                <span class="type-badge type-{{ enseignant.type_enseignant|lower }}">
+                    {{ enseignant.get_type_enseignant_display }}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Informations Personnelles -->
+        <div class="col-md-6">
+            <div class="teacher-info-card">
+                <h5 class="card-title mb-3">
+                    <i class="fas fa-user me-2 text-primary"></i>
+                    Informations Personnelles
+                </h5>
+                
+                <div class="info-row">
+                    <span class="info-label">Nom complet :</span>
+                    <span class="info-value">{{ enseignant.nom }} {{ enseignant.prenom }}</span>
+                </div>
+                
+                <div class="info-row">
+                    <span class="info-label">Téléphone :</span>
+                    <span class="info-value">{{ enseignant.telephone|default:"Non renseigné" }}</span>
+                </div>
+                
+                <div class="info-row">
+                    <span class="info-label">Email :</span>
+                    <span class="info-value">{{ enseignant.email|default:"Non renseigné" }}</span>
+                </div>
+                
+                <div class="info-row">
+                    <span class="info-label">Adresse :</span>
+                    <span class="info-value">{{ enseignant.adresse|default:"Non renseignée" }}</span>
+                </div>
+                
+                <div class="info-row">
+                    <span class="info-label">Date d'embauche :</span>
+                    <span class="info-value">{{ enseignant.date_embauche|date:"d/m/Y" }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Informations Professionnelles -->
+        <div class="col-md-6">
+            <div class="teacher-info-card">
+                <h5 class="card-title mb-3">
+                    <i class="fas fa-briefcase me-2 text-success"></i>
+                    Informations Professionnelles
+                </h5>
+                
+                <div class="info-row">
+                    <span class="info-label">École :</span>
+                    <span class="info-value">{{ enseignant.ecole.nom }}</span>
+                </div>
+                
+                <div class="info-row">
+                    <span class="info-label">Type :</span>
+                    <span class="info-value">{{ enseignant.get_type_enseignant_display }}</span>
+                </div>
+                
+                <div class="info-row">
+                    <span class="info-label">Statut :</span>
+                    <span class="info-value">{{ enseignant.get_statut_display }}</span>
+                </div>
+                
+                <div class="info-row">
+                    <span class="info-label">Rémunération :</span>
+                    <span class="info-value">
+                        {% if enseignant.salaire_fixe %}
+                            {{ enseignant.salaire_fixe|floatformat:0|intcomma }} GNF/mois
+                        {% elif enseignant.taux_horaire %}
+                            {{ enseignant.taux_horaire|floatformat:0|intcomma }} GNF/heure
+                        {% else %}
+                            Non définie
+                        {% endif %}
+                    </span>
+                </div>
+                
+                <div class="info-row">
+                    <span class="info-label">Ancienneté :</span>
+                    <span class="info-value">
+                        {% now "Y-m-d" as today %}
+                        {% if enseignant.date_embauche %}
+                            {{ enseignant.date_embauche|timesince }} 
+                        {% else %}
+                            Non calculée
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Affectations de Classes -->
+    {% if affectations %}
+    <div class="row">
+        <div class="col-12">
+            <div class="teacher-info-card">
+                <h5 class="card-title mb-3">
+                    <i class="fas fa-chalkboard-teacher me-2 text-warning"></i>
+                    Affectations de Classes ({{ affectations.count }})
+                </h5>
+                <div class="mb-3">
+                    <a class="btn btn-primary" href="{% url 'salaires:ajouter_affectation' enseignant.id %}">
+                        <i class="fas fa-plus me-1"></i> Affecter une classe
+                    </a>
+                </div>
+                
+                {% for affectation in affectations %}
+                <div class="assignment-card">
+                    <div class="row align-items-center">
+                        <div class="col-md-6">
+                            <strong>{{ affectation.classe.nom }}</strong>
+                            <small class="text-muted d-block">{{ affectation.classe.niveau }}</small>
+                        </div>
+                        <div class="col-md-3">
+                            <span class="badge bg-info">{{ affectation.heures_par_semaine }}h/semaine</span>
+                        </div>
+                        <div class="col-md-3 text-end">
+                            <div class="mb-1">
+                                <small class="text-muted">
+                                    {% if affectation.date_fin %}
+                                        Du {{ affectation.date_debut|date:"d/m/Y" }} au {{ affectation.date_fin|date:"d/m/Y" }}
+                                    {% else %}
+                                        Depuis {{ affectation.date_debut|date:"d/m/Y" }}
+                                    {% endif %}
+                                </small>
+                            </div>
+                            <div class="d-flex gap-1 justify-content-end">
+                                {% if affectation.actif and not affectation.date_fin %}
+                                <form method="post" action="{% url 'salaires:clore_affectation' affectation.id %}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" title="Clore l'affectation">
+                                        <i class="fas fa-ban"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                                <form method="post" action="{% url 'salaires:supprimer_affectation' affectation.id %}" onsubmit="return confirm('Supprimer cette affectation ?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Supprimer l'affectation">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Historique des Salaires -->
+    <div class="row">
+        <div class="col-12">
+            <div class="teacher-info-card">
+                <h5 class="card-title mb-3">
+                    <i class="fas fa-history me-2 text-info"></i>
+                    Historique des Salaires ({{ etats_salaire.count }})
+                </h5>
+                
+                {% if etats_salaire %}
+                <div class="salary-history">
+                    {% for etat in etats_salaire %}
+                    <div class="salary-item">
+                        <div>
+                            <strong>{{ etat.periode.mois|stringformat:"02d" }}/{{ etat.periode.annee }}</strong>
+                            <small class="text-muted d-block">{{ etat.periode.ecole.nom }}</small>
+                        </div>
+                        <div class="text-center">
+                            {% if etat.valide %}
+                                <span class="badge bg-success">Validé</span>
+                            {% else %}
+                                <span class="badge bg-warning">En attente</span>
+                            {% endif %}
+                            {% if etat.paye %}
+                                <span class="badge bg-info ms-1">Payé</span>
+                            {% endif %}
+                        </div>
+                        <div class="text-end">
+                            <div class="salary-amount">{{ etat.salaire_net|floatformat:0|intcomma }} GNF</div>
+                            <small class="text-muted">{{ etat.date_creation|date:"d/m/Y" }}</small>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="fas fa-inbox fa-3x mb-3"></i>
+                    <p>Aucun état de salaire trouvé</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="row">
+        <div class="col-12">
+            <div class="teacher-info-card">
+                <h5 class="card-title mb-3">
+                    <i class="fas fa-cogs me-2 text-secondary"></i>
+                    Actions
+                </h5>
+                
+                <div class="action-buttons">
+                    <a href="{% url 'salaires:liste_enseignants' %}" class="btn btn-secondary btn-action">
+                        <i class="fas fa-arrow-left me-2"></i>Retour à la liste
+                    </a>
+                    
+                    <a href="{% url 'salaires:etats_salaire' %}?enseignant={{ enseignant.id }}" class="btn btn-info btn-action">
+                        <i class="fas fa-money-bill-wave me-2"></i>Voir tous les salaires
+                    </a>
+                    
+                    <a href="{% url 'salaires:modifier_enseignant' enseignant.id %}" class="btn btn-warning btn-action">
+                        <i class="fas fa-edit me-2"></i>Modifier
+                    </a>
+                    
+                    <a href="{% url 'salaires:ajouter_affectation' enseignant.id %}" class="btn btn-primary btn-action">
+                        <i class="fas fa-plus me-2"></i>Affecter une classe
+                    </a>
+                    
+                    {% if enseignant.statut == 'ACTIF' %}
+                    <button class="btn btn-outline-warning btn-action" onclick="changerStatut('CONGE')">
+                        <i class="fas fa-pause me-2"></i>Mettre en congé
+                    </button>
+                    {% elif enseignant.statut == 'CONGE' %}
+                    <button class="btn btn-outline-success btn-action" onclick="changerStatut('ACTIF')">
+                        <i class="fas fa-play me-2"></i>Réactiver
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function changerStatut(nouveauStatut) {
+    if (confirm(`Êtes-vous sûr de vouloir changer le statut de cet enseignant ?`)) {
+        // TODO: Implémenter la logique de changement de statut
+        alert('Fonctionnalité en développement');
+    }
+}
+
+// Animation d'apparition des cartes
+document.addEventListener('DOMContentLoaded', function() {
+    const cards = document.querySelectorAll('.teacher-info-card');
+    cards.forEach((card, index) => {
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(20px)';
+        
+        setTimeout(() => {
+            card.style.transition = 'all 0.5s ease';
+            card.style.opacity = '1';
+            card.style.transform = 'translateY(0)';
+        }, index * 100);
+    });
+});
+</script>
+{% endblock %}

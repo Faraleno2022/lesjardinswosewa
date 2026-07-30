@@ -1,0 +1,10 @@
+installer.bat
+desinstaller.bat
+update.bat
+exclude_copy.txt
+.git
+__pycache__
+*.pyc
+*.pyo
+build
+.claude

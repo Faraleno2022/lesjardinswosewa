@@ -1,0 +1,180 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Pointage des Présences - Salaires{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2><i class="fas fa-user-check"></i> Pointage des Présences</h2>
+                <div>
+                    <a href="{% url 'salaires:pointer_presence' %}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Pointer Présence
+                    </a>
+                    <a href="{% url 'salaires:rapport_presences' %}" class="btn btn-info">
+                        <i class="fas fa-chart-bar"></i> Rapport
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistiques -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-light">
+                <div class="card-body">
+                    <h6 class="card-title text-muted">Total Pointages</h6>
+                    <h3 class="mb-0">{{ stats.total|default:0 }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h6 class="card-title">Présents</h6>
+                    <h3 class="mb-0">{{ stats.presents|default:0 }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <h6 class="card-title">Absents</h6>
+                    <h3 class="mb-0">{{ stats.absents|default:0 }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <h6 class="card-title">Retards</h6>
+                    <h3 class="mb-0">{{ stats.retards|default:0 }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-filter"></i> Filtres</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Date début</label>
+                    <input type="date" name="date_debut" class="form-control" value="{{ date_debut }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Date fin</label>
+                    <input type="date" name="date_fin" class="form-control" value="{{ date_fin }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Enseignant</label>
+                    <select name="enseignant" class="form-select">
+                        <option value="">Tous les enseignants</option>
+                        {% for ens in enseignants %}
+                        <option value="{{ ens.id }}" {% if enseignant_id|stringformat:"s" == ens.id|stringformat:"s" %}selected{% endif %}>
+                            {{ ens.nom }} {{ ens.prenoms }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Statut</label>
+                    <select name="statut" class="form-select">
+                        <option value="">Tous</option>
+                        {% for code, libelle in statuts %}
+                        <option value="{{ code }}" {% if statut == code %}selected{% endif %}>{{ libelle }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label">&nbsp;</label>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Liste des présences -->
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="fas fa-list"></i> Liste des Présences</h5>
+            <a href="{% url 'salaires:export_presences_csv' %}?{{ request.GET.urlencode }}" class="btn btn-sm btn-success">
+                <i class="fas fa-file-csv"></i> Exporter CSV
+            </a>
+        </div>
+        <div class="card-body">
+            {% if presences %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Enseignant</th>
+                            <th>Statut</th>
+                            <th>Arrivée</th>
+                            <th>Départ</th>
+                            <th>Heures</th>
+                            <th>Justifié</th>
+                            <th>Observations</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for presence in presences %}
+                        <tr>
+                            <td>{{ presence.date|date:"d/m/Y" }}</td>
+                            <td>{{ presence.enseignant.nom_complet }}</td>
+                            <td>
+                                {% if presence.statut == 'PRESENT' %}
+                                <span class="badge bg-success">{{ presence.get_statut_display }}</span>
+                                {% elif presence.statut == 'ABSENT' %}
+                                <span class="badge bg-danger">{{ presence.get_statut_display }}</span>
+                                {% elif presence.statut == 'RETARD' %}
+                                <span class="badge bg-warning">{{ presence.get_statut_display }}</span>
+                                {% elif presence.statut == 'CONGE' %}
+                                <span class="badge bg-info">{{ presence.get_statut_display }}</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ presence.get_statut_display }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ presence.heure_arrivee|time:"H:i"|default:"-" }}</td>
+                            <td>{{ presence.heure_depart|time:"H:i"|default:"-" }}</td>
+                            <td>{% if presence.heures_travaillees %}{{ presence.heures_travaillees|floatformat:2 }}h{% else %}-{% endif %}</td>
+                            <td>
+                                {% if presence.justifie %}
+                                <i class="fas fa-check-circle text-success"></i>
+                                {% else %}
+                                <i class="fas fa-times-circle text-danger"></i>
+                                {% endif %}
+                            </td>
+                            <td>{{ presence.observations|truncatewords:10 }}</td>
+                            <td>
+                                <a href="{% url 'salaires:modifier_presence' presence.id %}" class="btn btn-sm btn-warning">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <a href="{% url 'salaires:supprimer_presence' presence.id %}" class="btn btn-sm btn-danger">
+                                    <i class="fas fa-trash"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> Aucune présence enregistrée pour cette période.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

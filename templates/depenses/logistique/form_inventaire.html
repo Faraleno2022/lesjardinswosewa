@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-clipboard-list text-success"></i> {{ titre_page }}</h2>
+                <a href="{% url 'depenses:liste_inventaires' %}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Retour
+                </a>
+            </div>
+
+            <div class="card">
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        Au démarrage, une ligne sera créée pour chaque article actif avec son stock théorique.
+                        Vous saisirez ensuite le stock physique constaté.
+                    </div>
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label class="form-label">Date de l'inventaire *</label>
+                            {{ form.date_inventaire }}
+                            {% if form.date_inventaire.errors %}<div class="text-danger">{{ form.date_inventaire.errors }}</div>{% endif %}
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description *</label>
+                            {{ form.description }}
+                            {% if form.description.errors %}<div class="text-danger">{{ form.description.errors }}</div>{% endif %}
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Observations</label>
+                            {{ form.observations }}
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'depenses:liste_inventaires' %}" class="btn btn-secondary">Annuler</a>
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="fas fa-play"></i> Démarrer l'inventaire
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

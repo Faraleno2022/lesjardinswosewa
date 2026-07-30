@@ -1,0 +1,481 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Importer des Élèves{% endblock %}
+
+{% block extra_css %}
+<style>
+    .import-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 2rem;
+    }
+    
+    .import-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2.5rem;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        margin-bottom: 2rem;
+    }
+    
+    .import-header {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+        text-align: center;
+    }
+    
+    .step-indicator {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 3rem;
+        position: relative;
+    }
+    
+    .step {
+        flex: 1;
+        text-align: center;
+        position: relative;
+    }
+    
+    .step-number {
+        width: 50px;
+        height: 50px;
+        background: #e9ecef;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1rem;
+        font-weight: bold;
+        font-size: 1.2rem;
+        color: #6c757d;
+        position: relative;
+        z-index: 2;
+    }
+    
+    .step.active .step-number {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+    
+    .step-title {
+        font-weight: 600;
+        color: #6c757d;
+    }
+    
+    .step.active .step-title {
+        color: #667eea;
+    }
+    
+    .step:not(:last-child):after {
+        content: '';
+        position: absolute;
+        top: 25px;
+        left: 50%;
+        width: 100%;
+        height: 2px;
+        background: #e9ecef;
+        z-index: 1;
+    }
+    
+    .feature-box {
+        border: 2px solid #007bff;
+        border-radius: 10px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        background: #f8f9fa;
+    }
+    
+    .feature-box h5 {
+        color: #007bff;
+        margin-bottom: 0.5rem;
+    }
+    
+    .info-alert {
+        background: linear-gradient(135deg, #007bff15 0%, #0056b315 100%);
+        border-left: 4px solid #007bff;
+        padding: 1rem;
+        border-radius: 5px;
+        margin-bottom: 1.5rem;
+    }
+    
+    .upload-area {
+        border: 3px dashed #007bff;
+        border-radius: 15px;
+        padding: 3rem;
+        text-align: center;
+        background: #f8f9fa;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    
+    .upload-area:hover {
+        background: #007bff10;
+        border-color: #0056b3;
+    }
+    
+    .upload-area.dragover {
+        background: #007bff20;
+        border-color: #0056b3;
+        transform: scale(1.02);
+    }
+    
+    .upload-icon {
+        font-size: 4rem;
+        color: #007bff;
+        margin-bottom: 1rem;
+    }
+    
+    .btn-gradient {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        border: none;
+        padding: 0.75rem 2rem;
+        border-radius: 50px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-gradient:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        color: white;
+    }
+    
+    .format-example {
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 10px;
+        padding: 1rem;
+        margin-top: 1rem;
+        overflow-x: auto;
+    }
+    
+    .format-example table {
+        font-size: 0.9rem;
+    }
+    
+    .checkbox-custom {
+        width: 1.2rem;
+        height: 1.2rem;
+        cursor: pointer;
+    }
+    
+    .checkbox-label {
+        cursor: pointer;
+        user-select: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="import-container">
+    <!-- En-tête -->
+    <div class="import-header">
+        <h1><i class="fas fa-user-plus me-3"></i>Importation d'Élèves</h1>
+        <p class="mb-0">Importez rapidement une liste d'élèves depuis un fichier Excel</p>
+    </div>
+
+    <!-- Indicateur d'étapes -->
+    <div class="import-card">
+        <div class="step-indicator">
+            <div class="step active">
+                <div class="step-number">1</div>
+                <div class="step-title">Sélectionner la classe</div>
+            </div>
+            <div class="step">
+                <div class="step-number">2</div>
+                <div class="step-title">Télécharger le template</div>
+            </div>
+            <div class="step">
+                <div class="step-number">3</div>
+                <div class="step-title">Importer le fichier</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Formulaire d'importation -->
+    <form method="post" enctype="multipart/form-data" id="importForm">
+        {% csrf_token %}
+        
+        <div class="import-card">
+            <h4 class="mb-4"><i class="fas fa-cog me-2"></i>Configuration de l'importation</h4>
+            
+            <!-- Sélection de la classe -->
+            <div class="mb-4">
+                <label for="classe_id" class="form-label fw-bold">
+                    <i class="fas fa-school me-2"></i>Classe de destination *
+                </label>
+                <select name="classe_id" id="classe_id" class="form-select form-select-lg" required>
+                    <option value="">-- Sélectionner une classe --</option>
+                    {% for classe in classes %}
+                        <option value="{{ classe.id }}" data-nom="{{ classe.nom }}">
+                            {{ classe.nom }} - {{ classe.get_niveau_display|default:classe.niveau }}
+                            ({{ classe.annee_scolaire }})
+                        </option>
+                    {% endfor %}
+                </select>
+                <small class="text-muted">Les élèves seront ajoutés à cette classe</small>
+            </div>
+
+            <!-- Options d'importation -->
+            <div class="feature-box">
+                <h5><i class="fas fa-magic me-2"></i>Génération automatique des matricules</h5>
+                <div class="form-check">
+                    <input class="form-check-input checkbox-custom" type="checkbox" 
+                           name="generer_matricules" id="generer_matricules" checked>
+                    <label class="form-check-label checkbox-label" for="generer_matricules">
+                        Générer automatiquement les matricules manquants
+                    </label>
+                </div>
+                <small class="text-muted">
+                    Format: [CODE_CLASSE]-[ANNÉE]-[NUMÉRO] (ex: 6A-2024-001)
+                </small>
+            </div>
+
+            <!-- Téléchargement du template -->
+            <div class="info-alert">
+                <h5><i class="fas fa-download me-2"></i>Étape 1: Télécharger le template Excel</h5>
+                <p class="mb-2">
+                    Téléchargez le fichier modèle pré-formaté pour remplir les informations des élèves.
+                </p>
+                <button type="button" class="btn btn-gradient" id="btnTemplate" disabled>
+                    <i class="fas fa-file-excel me-2"></i>Télécharger le Template Excel
+                </button>
+            </div>
+
+            <!-- Zone d'upload -->
+            <div class="info-alert">
+                <h5><i class="fas fa-upload me-2"></i>Étape 2: Importer le fichier complété</h5>
+                <p class="mb-3">
+                    Une fois le template rempli, importez-le ici.
+                </p>
+                
+                <div class="upload-area" id="uploadArea">
+                    <i class="fas fa-cloud-upload-alt upload-icon"></i>
+                    <h5>Glissez votre fichier ici</h5>
+                    <p class="text-muted mb-3">ou</p>
+                    <label for="fichier" class="btn btn-gradient">
+                        <i class="fas fa-folder-open me-2"></i>Parcourir
+                    </label>
+                    <input type="file" name="fichier" id="fichier" 
+                           accept=".xlsx,.xls,.csv" style="display: none;">
+                    <p class="text-muted mt-3 mb-0">
+                        <small>Formats acceptés: Excel (.xlsx, .xls) ou CSV</small>
+                    </p>
+                    <div id="fileInfo" class="mt-3" style="display: none;">
+                        <div class="alert alert-success">
+                            <i class="fas fa-file-excel me-2"></i>
+                            <span id="fileName"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Boutons d'action -->
+            <div class="d-flex justify-content-between align-items-center mt-4">
+                <a href="{% url 'eleves:liste_eleves' %}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>Retour
+                </a>
+                <button type="submit" class="btn btn-gradient btn-lg" id="btnImport" disabled>
+                    <i class="fas fa-user-plus me-2"></i>Importer les Élèves
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <!-- Format attendu -->
+    <div class="import-card">
+        <h4 class="mb-3"><i class="fas fa-info-circle me-2"></i>Format du fichier Excel</h4>
+        
+        <div class="format-example">
+            <table class="table table-sm table-bordered mb-0">
+                <thead class="table-primary">
+                    <tr>
+                        <th>Matricule</th>
+                        <th>Prénom*</th>
+                        <th>Nom*</th>
+                        <th>Sexe*</th>
+                        <th>Date de Naissance*</th>
+                        <th>Lieu de Naissance*</th>
+                        <th>Nom du Père/Tuteur*</th>
+                        <th>Prénom du Père/Tuteur*</th>
+                        <th>Téléphone Principal*</th>
+                        <th>Adresse*</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><small class="text-muted">Auto</small></td>
+                        <td>Mamadou</td>
+                        <td>DIALLO</td>
+                        <td>M</td>
+                        <td>15/01/2010</td>
+                        <td>Conakry</td>
+                        <td>DIALLO</td>
+                        <td>Amadou</td>
+                        <td>622000001</td>
+                        <td>Ratoma</td>
+                    </tr>
+                    <tr>
+                        <td><small class="text-muted">Auto</small></td>
+                        <td>Fatoumata</td>
+                        <td>BAH</td>
+                        <td>F</td>
+                        <td>23/05/2010</td>
+                        <td>Kindia</td>
+                        <td>BAH</td>
+                        <td>Ousmane</td>
+                        <td>622000002</td>
+                        <td>Matoto</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="mt-3">
+            <p class="mb-2"><strong>Colonnes obligatoires (*)</strong></p>
+            <ul class="small">
+                <li><strong>Matricule:</strong> Laisser vide pour génération automatique</li>
+                <li><strong>Sexe:</strong> M (Masculin) ou F (Féminin)</li>
+                <li><strong>Date de Naissance:</strong> Format JJ/MM/AAAA</li>
+                <li><strong>Téléphone:</strong> Minimum 8 chiffres</li>
+            </ul>
+        </div>
+
+        <div class="alert alert-info mt-3">
+            <i class="fas fa-lightbulb me-2"></i>
+            <strong>Astuce:</strong> Le template Excel contient des exemples et toutes les colonnes nécessaires.
+        </div>
+    </div>
+
+    <!-- Messages -->
+    {% if messages %}
+        <div class="import-card">
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const classeSelect = document.getElementById('classe_id');
+    const btnTemplate = document.getElementById('btnTemplate');
+    const btnImport = document.getElementById('btnImport');
+    const fileInput = document.getElementById('fichier');
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileName = document.getElementById('fileName');
+    const steps = document.querySelectorAll('.step');
+
+    // Activer le bouton template quand une classe est sélectionnée
+    classeSelect.addEventListener('change', function() {
+        if (this.value) {
+            btnTemplate.disabled = false;
+            steps[0].classList.add('active');
+            steps[1].classList.add('active');
+        } else {
+            btnTemplate.disabled = true;
+            btnImport.disabled = true;
+            steps[1].classList.remove('active');
+            steps[2].classList.remove('active');
+        }
+    });
+
+    // Télécharger le template
+    btnTemplate.addEventListener('click', function() {
+        const classeId = classeSelect.value;
+        if (classeId) {
+            window.location.href = "{% url 'eleves:telecharger_template_eleves' %}?classe_id=" + classeId;
+        }
+    });
+
+    // Gestion du fichier sélectionné
+    fileInput.addEventListener('change', function() {
+        if (this.files && this.files[0]) {
+            showFileInfo(this.files[0]);
+            if (classeSelect.value) {
+                btnImport.disabled = false;
+                steps[2].classList.add('active');
+            }
+        }
+    });
+
+    // Drag and drop
+    uploadArea.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        this.classList.add('dragover');
+    });
+
+    uploadArea.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        this.classList.remove('dragover');
+    });
+
+    uploadArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        this.classList.remove('dragover');
+        
+        const files = e.dataTransfer.files;
+        if (files && files[0]) {
+            const file = files[0];
+            if (file.name.match(/\.(xlsx|xls|csv)$/i)) {
+                fileInput.files = files;
+                showFileInfo(file);
+                if (classeSelect.value) {
+                    btnImport.disabled = false;
+                    steps[2].classList.add('active');
+                }
+            } else {
+                alert('Veuillez sélectionner un fichier Excel (.xlsx, .xls) ou CSV');
+            }
+        }
+    });
+
+    // Afficher les informations du fichier
+    function showFileInfo(file) {
+        fileName.textContent = file.name + ' (' + formatFileSize(file.size) + ')';
+        fileInfo.style.display = 'block';
+    }
+
+    // Formater la taille du fichier
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+
+    // Validation avant soumission
+    document.getElementById('importForm').addEventListener('submit', function(e) {
+        if (!classeSelect.value) {
+            e.preventDefault();
+            alert('Veuillez sélectionner une classe');
+            return false;
+        }
+        
+        if (!fileInput.files || !fileInput.files[0]) {
+            e.preventDefault();
+            alert('Veuillez sélectionner un fichier à importer');
+            return false;
+        }
+
+        // Afficher un message de chargement
+        btnImport.disabled = true;
+        btnImport.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Importation en cours...';
+    });
+});
+</script>
+{% endblock %}

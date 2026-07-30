@@ -1,0 +1,453 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Gérer les Matières{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stats-card {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        border-radius: 15px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 15px rgba(0, 123, 255, 0.2);
+    }
+    
+    .stats-card h3 {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin: 0;
+    }
+    
+    .stats-card p {
+        margin: 0;
+        opacity: 0.9;
+    }
+    
+    .form-card, .table-card, .selection-card {
+        background: white;
+        border-radius: 15px;
+        padding: 2rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        margin-bottom: 2rem;
+    }
+    
+    .badge-actif {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+        padding: 0.4rem 0.8rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+    }
+    
+    .badge-inactif {
+        background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+        color: white;
+        padding: 0.4rem 0.8rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        box-shadow: 0 2px 8px rgba(108, 117, 125, 0.3);
+    }
+    
+    .table thead {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        color: white;
+    }
+    
+    .table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .btn-primary {
+        background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+        border: none;
+        box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+    }
+    
+    .btn-primary:hover {
+        background: linear-gradient(135deg, #0056b3 0%, #003d82 100%);
+        box-shadow: 0 6px 16px rgba(0, 123, 255, 0.4);
+        transform: translateY(-2px);
+        transition: all 0.3s ease;
+    }
+    
+    .btn-warning {
+        background: linear-gradient(135deg, #0d6efd 0%, #0056b3 100%);
+        border: none;
+        color: white;
+    }
+    
+    .btn-warning:hover {
+        background: linear-gradient(135deg, #0056b3 0%, #003d82 100%);
+        color: white;
+    }
+    
+    .btn-danger {
+        background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+        border: none;
+    }
+    
+    .btn-danger:hover {
+        background: linear-gradient(135deg, #495057 0%, #343a40 100%);
+    }
+    
+    .classe-selector {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-radius: 10px;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .no-selection {
+        text-align: center;
+        padding: 3rem;
+        color: #6c757d;
+    }
+    
+    .no-selection i {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        opacity: 0.3;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3"><i class="fas fa-book-open me-2"></i>Gérer les Matières</h1>
+        <a href="{% url 'notes:tableau_bord' %}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left me-2"></i>Retour
+        </a>
+    </div>
+
+    <!-- Sélection de classe -->
+    <div class="selection-card">
+        <h4 class="mb-3"><i class="fas fa-filter me-2"></i>Sélectionner une classe</h4>
+        <div class="classe-selector">
+            {% if classes %}
+                <div class="row">
+                    {% for classe in classes %}
+                        <div class="col-md-3 col-sm-6 mb-2">
+                            <a href="?classe_id={{ classe.id }}" 
+                               class="btn {% if classe_selectionnee and classe.id == classe_selectionnee.id %}btn-primary{% else %}btn-outline-primary{% endif %} w-100">
+                                <i class="fas fa-school me-2"></i>{{ classe.nom }}
+                                <br><small>{{ classe.get_niveau_display }}</small>
+                            </a>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="alert alert-warning mb-0">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Aucune classe disponible. Veuillez d'abord créer des classes dans la section "Gérer les Classes".
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if classe_selectionnee %}
+        <!-- Statistiques -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="stats-card">
+                    <h3>{{ total_matieres }}</h3>
+                    <p><i class="fas fa-book me-2"></i>Total des matières</p>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="stats-card" style="background: linear-gradient(135deg, #0d6efd 0%, #003d82 100%);">
+                    <h3>{{ matieres_actives }}</h3>
+                    <p><i class="fas fa-check-circle me-2"></i>Matières actives</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Formulaire d'ajout -->
+        <div class="form-card">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="mb-0"><i class="fas fa-plus-circle me-2"></i>Ajouter une matière à {{ classe_selectionnee.nom }}</h4>
+                <a href="{% url 'notes:charger_matieres_defaut' classe_selectionnee.id %}" 
+                   class="btn btn-success"
+                   onclick="return confirm('Voulez-vous charger les matières par défaut pour {{ classe_selectionnee.nom }} ({{ classe_selectionnee.get_niveau_display }}) ?')">
+                    <i class="fas fa-magic me-2"></i>Charger matières par défaut
+                </a>
+            </div>
+            <form method="post">
+                {% csrf_token %}
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="{{ form.nom.id_for_label }}" class="form-label">
+                            <i class="fas fa-book me-1"></i>Nom de la matière *
+                        </label>
+                        {{ form.nom }}
+                        {% if form.nom.errors %}
+                            <div class="text-danger small mt-1">{{ form.nom.errors }}</div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="col-md-{% if classe_selectionnee.niveau_enseignement == 'MATERNELLE' or classe_selectionnee.niveau_enseignement == 'PRIMAIRE' or 'PRIMAIRE' in classe_selectionnee.niveau %}5{% else %}3{% endif %} mb-3">
+                        <label for="{{ form.code.id_for_label }}" class="form-label">
+                            <i class="fas fa-tag me-1"></i>Code *
+                        </label>
+                        {{ form.code }}
+                        {% if form.code.errors %}
+                            <div class="text-danger small mt-1">{{ form.code.errors }}</div>
+                        {% endif %}
+                    </div>
+                    
+                    {% if niveau_classe == 'COLLEGE' or niveau_classe == 'LYCEE' %}
+                    <div class="col-md-2 mb-3">
+                        <label for="{{ form.coefficient.id_for_label }}" class="form-label">
+                            <i class="fas fa-calculator me-1"></i>Coefficient *
+                        </label>
+                        {{ form.coefficient }}
+                        {% if form.coefficient.errors %}
+                            <div class="text-danger small mt-1">{{ form.coefficient.errors }}</div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    <!-- Pas de champ coefficient pour PRIMAIRE et MATERNELLE -->
+                    
+                    <div class="col-md-3 mb-3">
+                        <label class="form-label d-block">
+                            <i class="fas fa-toggle-on me-1"></i>Statut
+                        </label>
+                        <div class="form-check form-switch mt-2">
+                            {{ form.actif }}
+                            <label class="form-check-label" for="{{ form.actif.id_for_label }}">
+                                Matière active
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="col-12 mb-3">
+                        <label for="{{ form.description.id_for_label }}" class="form-label">
+                            <i class="fas fa-align-left me-1"></i>Description
+                        </label>
+                        {{ form.description }}
+                        {% if form.description.errors %}
+                            <div class="text-danger small mt-1">{{ form.description.errors }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="text-end">
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        <i class="fas fa-save me-2"></i>Enregistrer la matière
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Liste des matières -->
+        <div class="table-card">
+            <h4 class="mb-4"><i class="fas fa-list me-2"></i>Liste des matières de {{ classe_selectionnee.nom }}</h4>
+            
+            {% if matieres %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Nom</th>
+                            <th>Code</th>
+                            {% if niveau_classe != 'MATERNELLE' and niveau_classe != 'PRIMAIRE' %}
+                            <th>Coefficient</th>
+                            {% endif %}
+                            <th>Statut</th>
+                            <th>Créée le</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for matiere in matieres %}
+                        <tr>
+                            <td><strong>{{ matiere.nom }}</strong></td>
+                            <td>
+                                <span class="badge bg-secondary">{{ matiere.code }}</span>
+                            </td>
+                            {% if niveau_classe != 'MATERNELLE' and niveau_classe != 'PRIMAIRE' %}
+                            <td>
+                                <span class="badge bg-info">
+                                    <i class="fas fa-calculator me-1"></i>{{ matiere.coefficient }}
+                                </span>
+                            </td>
+                            {% endif %}
+                            <td>
+                                {% if matiere.actif %}
+                                    <span class="badge-actif">
+                                        <i class="fas fa-check-circle me-1"></i>Active
+                                    </span>
+                                {% else %}
+                                    <span class="badge-inactif">
+                                        <i class="fas fa-times-circle me-1"></i>Inactive
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>{{ matiere.date_creation|date:"d/m/Y" }}</td>
+                            <td>
+                                <a href="{% url 'notes:modifier_matiere' matiere.id %}" 
+                                   class="btn btn-sm btn-warning" 
+                                   title="Modifier">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <button class="btn btn-sm btn-danger" 
+                                        onclick="confirmerSuppressionMatiere({{ matiere.id }}, '{{ matiere.nom|escapejs }}')" 
+                                        title="Supprimer">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                Aucune matière enregistrée pour cette classe. Utilisez le formulaire ci-dessus pour ajouter des matières.
+            </div>
+            {% endif %}
+        </div>
+    {% else %}
+        <!-- Message si aucune classe sélectionnée -->
+        <div class="no-selection">
+            <i class="fas fa-hand-pointer"></i>
+            <h4>Sélectionnez une classe</h4>
+            <p>Choisissez une classe ci-dessus pour gérer ses matières</p>
+        </div>
+    {% endif %}
+</div>
+
+<!-- Modal de confirmation de suppression -->
+<div class="modal fade" id="confirmDeleteMatiereModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    Confirmation de suppression
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3">
+                    <i class="fas fa-info-circle text-warning me-2"></i>
+                    Êtes-vous sûr de vouloir supprimer la matière <strong id="matiereNom"></strong> ?
+                </p>
+                <div class="alert alert-warning mb-0">
+                    <small>
+                        <i class="fas fa-shield-alt me-1"></i>
+                        <strong>Protection automatique:</strong> Si la matière contient des notes, elle sera désactivée au lieu d'être supprimée.
+                    </small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>Annuler
+                </button>
+                <button type="button" class="btn btn-danger" id="confirmDeleteMatiereBtn" onclick="supprimerMatiere()">
+                    <i class="fas fa-trash me-2"></i>Supprimer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let matiereIdToDelete = null;
+
+function confirmerSuppressionMatiere(matiereId, matiereNom) {
+    matiereIdToDelete = matiereId;
+    document.getElementById('matiereNom').textContent = matiereNom;
+    const modal = new bootstrap.Modal(document.getElementById('confirmDeleteMatiereModal'));
+    modal.show();
+}
+
+async function supprimerMatiere() {
+    if (!matiereIdToDelete) return;
+    
+    const confirmBtn = document.getElementById('confirmDeleteMatiereBtn');
+    const originalText = confirmBtn.innerHTML;
+    
+    // Désactiver le bouton et afficher le chargement
+    confirmBtn.disabled = true;
+    confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Suppression...';
+    
+    try {
+        const response = await fetch(`/notes/matieres/supprimer/${matiereIdToDelete}/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Fermer le modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('confirmDeleteMatiereModal'));
+            modal.hide();
+            
+            // Afficher le message de succès
+            showToast(data.message, 'success');
+            
+            // Recharger la page après 1 seconde
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        } else {
+            showToast('Erreur: ' + data.error, 'error');
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = originalText;
+        }
+    } catch (error) {
+        showToast('Erreur de connexion', 'error');
+        console.error(error);
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = originalText;
+    }
+}
+
+function showToast(message, type = 'success') {
+    const toast = document.createElement('div');
+    toast.className = `toast-notification ${type}`;
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        color: white;
+        font-weight: 600;
+        z-index: 9999;
+        animation: slideIn 0.3s ease;
+        background: ${type === 'success' ? '#16a34a' : '#dc2626'};
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    `;
+    toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>${message}`;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
+</script>
+
+<style>
+@keyframes slideIn {
+    from {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+</style>
+{% endblock %}

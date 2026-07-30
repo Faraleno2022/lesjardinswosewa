@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Vérification Administrateur{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 560px;">
+  <div class="card shadow-sm">
+    <div class="card-body p-4">
+      <h1 class="h5 mb-3 text-center"><i class="fas fa-user-shield me-2"></i>Vérification Administrateur</h1>
+      <p class="text-muted small text-center mb-4">
+        Pour accéder au formulaire de connexion, saisissez le code de vérification administrateur.
+      </p>
+
+      <form method="post" action="{% url 'utilisateurs:admin_verify' %}" class="needs-validation" novalidate>
+        {% csrf_token %}
+        {% if ip %}
+          <input type="hidden" name="ip" value="{{ ip }}">
+        {% endif %}
+        {% if username %}
+          <input type="hidden" name="username" value="{{ username }}">
+        {% endif %}
+        <div class="mb-3">
+          <label for="id_code" class="form-label">Code de vérification</label>
+          <input type="password" name="code" id="id_code" class="form-control" placeholder="Entrer le code" autocomplete="one-time-code" required>
+          <div class="form-text">Ce code est réservé à l'administrateur FARA LENO AU +224622613559.</div>
+        </div>
+        <div class="d-flex justify-content-between">
+          <a href="{% url 'utilisateurs:login' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Retour
+          </a>
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-check me-1"></i> Vérifier
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

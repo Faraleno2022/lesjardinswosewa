@@ -1,0 +1,557 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}États de Salaire{% endblock %}
+
+{% block extra_css %}
+<style>
+    .filter-card {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    .stats-row {
+        background: linear-gradient(135deg, #0d6efd 0%, #1e59d9 100%);
+        color: white;
+        border-radius: 10px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    .stat-item {
+        text-align: center;
+        padding: 1rem;
+    }
+    .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+    }
+    .stat-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+    .salary-card {
+        background: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+        border-left: 4px solid #007bff;
+    }
+    .salary-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .salary-card.validated {
+        border-left-color: #28a745;
+    }
+    .salary-card.paid {
+        border-left-color: #17a2b8;
+        background: #f8f9fa;
+    }
+    .teacher-info {
+        display: flex;
+        justify-content: between;
+        align-items: start;
+        margin-bottom: 1rem;
+    }
+    .teacher-details h6 {
+        margin-bottom: 0.25rem;
+        color: #2c3e50;
+    }
+    .teacher-meta {
+        font-size: 0.9rem;
+        color: #6c757d;
+        margin-bottom: 0.5rem;
+    }
+    .salary-amount {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #2c3e50;
+    }
+    .salary-breakdown {
+        background: #f8f9fa;
+        border-radius: 6px;
+        padding: 1rem;
+        margin-top: 1rem;
+    }
+    .breakdown-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    .breakdown-item:last-child {
+        border-bottom: none;
+        font-weight: bold;
+    }
+    .calculation-detail {
+        background: #f8f9fa;
+        padding: 0.75rem;
+        margin: 0.25rem 0;
+        border-radius: 4px;
+        border-left: 3px solid #007bff;
+    }
+    .calculation-formula {
+        background: #e3f2fd;
+        padding: 0.75rem;
+        margin: 0.5rem 0;
+        border-radius: 4px;
+        border-left: 3px solid #2196f3;
+        font-family: 'Courier New', monospace;
+    }
+    .total-line {
+        background: #e8f5e8;
+        padding: 0.75rem;
+        margin: 0.5rem 0;
+        border-radius: 4px;
+        border-left: 3px solid #28a745;
+        font-size: 1.1em;
+    }
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1rem;
+    }
+    .btn-action {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
+        border-radius: 6px;
+    }
+    .period-badge {
+        background: #e9ecef;
+        color: #495057;
+        padding: 0.25rem 0.75rem;
+        border-radius: 15px;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+    .status-badge {
+        padding: 0.4rem 0.8rem;
+        border-radius: 15px;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+    .status-pending {
+        background: #fff3cd;
+        color: #856404;
+    }
+    .status-validated {
+        background: #d4edda;
+        color: #155724;
+    }
+    .status-paid {
+        background: #cce7ff;
+        color: #004085;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #6c757d;
+    }
+    .empty-state i {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">
+                <i class="fas fa-file-invoice-dollar text-primary"></i>
+                États de Salaire
+            </h1>
+            <p class="text-muted mb-0">Gestion et suivi des salaires des enseignants</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <a href="{% url 'salaires:gestion_periodes' %}" class="btn btn-outline-secondary me-2">
+                <i class="fas fa-calendar-alt"></i> Périodes
+            </a>
+            <a href="{% url 'salaires:tableau_bord' %}" class="btn btn-primary me-2">
+                <i class="fas fa-tachometer-alt"></i> Tableau de Bord
+            </a>
+            {% with qs=request.GET.urlencode %}
+            <a href="{% url 'salaires:export_etats_salaire_csv' %}{% if qs %}?{{ qs }}{% endif %}" class="btn btn-outline-success">
+                <i class="fas fa-file-csv me-1"></i> Exporter CSV
+            </a>
+            <a href="{% url 'salaires:export_etats_salaire_pdf' %}{% if qs %}?{{ qs }}{% endif %}" class="btn btn-outline-danger">
+                <i class="fas fa-file-pdf me-1"></i> Exporter PDF
+            </a>
+            {% endwith %}
+        </div>
+    </div>
+
+    <!-- Statistiques -->
+    <div class="stats-row">
+        <div class="row">
+            <div class="col-md-3">
+                <div class="stat-item">
+                    <div class="stat-number">{{ totaux.total_etats }}</div>
+                    <div class="stat-label">Total États</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-item">
+                    <div class="stat-number">{{ totaux.montant_total|intcomma }}</div>
+                    <div class="stat-label">Montant Total (GNF)</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-item">
+                    <div class="stat-number">{{ totaux.en_attente }}</div>
+                    <div class="stat-label">En Attente</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-item">
+                    <div class="stat-number">{{ totaux.payes }}</div>
+                    <div class="stat-label">Payés</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtres -->
+    <div class="filter-card">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">École</label>
+                <select name="ecole" class="form-select">
+                    <option value="">Toutes les écoles</option>
+                    {% for ecole in ecoles %}
+                    <option value="{{ ecole.id }}" {% if request.GET.ecole == ecole.id|stringformat:"s" %}selected{% endif %}>
+                        {{ ecole.nom }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Période</label>
+                <select name="periode" class="form-select">
+                    <option value="">Toutes les périodes</option>
+                    {% for periode in periodes %}
+                    <option value="{{ periode.id }}" {% if request.GET.periode == periode.id|stringformat:"s" %}selected{% endif %}>
+                        {{ periode }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Statut</label>
+                <select name="statut" class="form-select">
+                    <option value="">Tous les statuts</option>
+                    <option value="en_attente" {% if request.GET.statut == "en_attente" %}selected{% endif %}>En attente</option>
+                    <option value="valide" {% if request.GET.statut == "valide" %}selected{% endif %}>Validé</option>
+                    <option value="paye" {% if request.GET.statut == "paye" %}selected{% endif %}>Payé</option>
+                    <option value="non_paye" {% if request.GET.statut == "non_paye" %}selected{% endif %}>Non payé</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">&nbsp;</label>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-filter"></i> Filtrer
+                    </button>
+                    <a href="{% url 'salaires:etats_salaire' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-times"></i> Reset
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Liste des états de salaire -->
+    {% if page_obj %}
+    <div class="row">
+        {% for etat in page_obj %}
+        <div class="col-lg-6">
+            <div class="salary-card {% if etat.paye %}paid{% elif etat.valide %}validated{% endif %}">
+                <div class="teacher-info">
+                    <div class="teacher-details flex-grow-1">
+                        <h6>{{ etat.enseignant.nom_complet }}</h6>
+                        <div class="teacher-meta">
+                            <i class="fas fa-school me-1"></i>{{ etat.enseignant.ecole.nom }}
+                        </div>
+                        <div class="teacher-meta">
+                            <i class="fas fa-user-tag me-1"></i>{{ etat.enseignant.get_type_enseignant_display }}
+                            {% if etat.enseignant.type_enseignant == 'SECONDAIRE' and etat.total_heures %}
+                            <span class="ms-2">
+                                <i class="fas fa-clock me-1"></i>{{ etat.total_heures }}h
+                            </span>
+                            {% endif %}
+                        </div>
+                        <div class="mt-2">
+                            <span class="period-badge">{{ etat.periode }}</span>
+                            <span class="status-badge {% if etat.paye %}status-paid{% elif etat.valide %}status-validated{% else %}status-pending{% endif %} ms-2">
+                                {% if etat.paye %}
+                                <i class="fas fa-check-circle me-1"></i>Payé
+                                {% elif etat.valide %}
+                                <i class="fas fa-check me-1"></i>Validé
+                                {% else %}
+                                <i class="fas fa-clock me-1"></i>En attente
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        <div class="salary-amount">{{ etat.salaire_net|intcomma }} GNF</div>
+                        {% if etat.date_validation %}
+                        <small class="text-muted">
+                            Validé le {{ etat.date_validation|date:"d/m/Y" }}
+                        </small>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Détail du salaire -->
+                <div class="salary-breakdown">
+                    {% if etat.enseignant.est_taux_horaire and etat.total_heures and etat.enseignant.taux_horaire %}
+                    <!-- Calcul détaillé pour enseignants au taux horaire -->
+                    <div class="breakdown-item calculation-detail">
+                        <span><i class="fas fa-clock me-1"></i>Heures travaillées:</span>
+                        <span class="fw-bold">{{ etat.total_heures }} h</span>
+                    </div>
+                    <div class="breakdown-item calculation-detail">
+                        <span><i class="fas fa-calculator me-1"></i>Taux horaire:</span>
+                        <span class="fw-bold">{{ etat.enseignant.taux_horaire|intcomma }} GNF/h</span>
+                    </div>
+                    <div class="breakdown-item calculation-formula">
+                        <span><i class="fas fa-equals me-1"></i>Calcul:</span>
+                        <span class="text-primary fw-bold">{{ etat.total_heures }} h × {{ etat.enseignant.taux_horaire|intcomma }} GNF/h</span>
+                    </div>
+                    <div class="breakdown-item total-line">
+                        <span class="fw-bold">Salaire de base:</span>
+                        <span class="fw-bold">{{ etat.salaire_base|intcomma }} GNF</span>
+                    </div>
+                    {% else %}
+                    <!-- Affichage standard pour salaire fixe -->
+                    <div class="breakdown-item">
+                        <span>Salaire de base:</span>
+                        <span>{{ etat.salaire_base|intcomma }} GNF</span>
+                    </div>
+                    {% endif %}
+                    {% if etat.prime_transport and etat.prime_transport > 0 %}
+                    <div class="breakdown-item">
+                        <span>Prime transport:</span>
+                        <span class="text-success">+{{ etat.prime_transport|intcomma }} GNF</span>
+                    </div>
+                    {% endif %}
+                    {% if etat.prime_performance and etat.prime_performance > 0 %}
+                    <div class="breakdown-item">
+                        <span>Prime performance:</span>
+                        <span class="text-success">+{{ etat.prime_performance|intcomma }} GNF</span>
+                    </div>
+                    {% endif %}
+                    {% if etat.deduction_absence and etat.deduction_absence > 0 %}
+                    <div class="breakdown-item">
+                        <span>Déduction absence:</span>
+                        <span class="text-danger">-{{ etat.deduction_absence|intcomma }} GNF</span>
+                    </div>
+                    {% endif %}
+                    <div class="breakdown-item">
+                        <span><strong>Salaire net:</strong></span>
+                        <span><strong>{{ etat.salaire_net|intcomma }} GNF</strong></span>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="action-buttons">
+                    {% if not etat.valide and not etat.paye %}
+                    <form method="post" action="{% url 'salaires:valider_etat_salaire' etat.id %}" class="d-inline">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-success btn-action" 
+                                onclick="return confirm('Valider ce salaire ?')">
+                            <i class="fas fa-check"></i> Valider
+                        </button>
+                    </form>
+                    {% endif %}
+                    
+                    {% if etat.valide and not etat.paye %}
+                    <form method="post" action="{% url 'salaires:marquer_paye' etat.id %}" class="d-inline">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-info btn-action"
+                                onclick="return confirm('Marquer comme payé ?')">
+                            <i class="fas fa-money-bill"></i> Marquer Payé
+                        </button>
+                    </form>
+                    {% endif %}
+                    
+                    <a href="{% url 'salaires:detail_enseignant' etat.enseignant.id %}" 
+                       class="btn btn-outline-primary btn-action">
+                        <i class="fas fa-user"></i> Voir Enseignant
+                    </a>
+                    
+                    <button class="btn btn-outline-secondary btn-action" 
+                            onclick="imprimerFichePaie({{ etat.id }})">
+                        <i class="fas fa-print"></i> Imprimer
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <nav aria-label="Navigation des états de salaire">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page=1{% if request.GET.ecole %}&ecole={{ request.GET.ecole }}{% endif %}{% if request.GET.periode %}&periode={{ request.GET.periode }}{% endif %}{% if request.GET.statut %}&statut={{ request.GET.statut }}{% endif %}">
+                    <i class="fas fa-angle-double-left"></i>
+                </a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.ecole %}&ecole={{ request.GET.ecole }}{% endif %}{% if request.GET.periode %}&periode={{ request.GET.periode }}{% endif %}{% if request.GET.statut %}&statut={{ request.GET.statut }}{% endif %}">
+                    <i class="fas fa-angle-left"></i>
+                </a>
+            </li>
+            {% endif %}
+            
+            {% for num in page_obj.paginator.page_range %}
+            {% if page_obj.number == num %}
+            <li class="page-item active">
+                <span class="page-link">{{ num }}</span>
+            </li>
+            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ num }}{% if request.GET.ecole %}&ecole={{ request.GET.ecole }}{% endif %}{% if request.GET.periode %}&periode={{ request.GET.periode }}{% endif %}{% if request.GET.statut %}&statut={{ request.GET.statut }}{% endif %}">{{ num }}</a>
+            </li>
+            {% endif %}
+            {% endfor %}
+            
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.ecole %}&ecole={{ request.GET.ecole }}{% endif %}{% if request.GET.periode %}&periode={{ request.GET.periode }}{% endif %}{% if request.GET.statut %}&statut={{ request.GET.statut }}{% endif %}">
+                    <i class="fas fa-angle-right"></i>
+                </a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if request.GET.ecole %}&ecole={{ request.GET.ecole }}{% endif %}{% if request.GET.periode %}&periode={{ request.GET.periode }}{% endif %}{% if request.GET.statut %}&statut={{ request.GET.statut }}{% endif %}">
+                    <i class="fas fa-angle-double-right"></i>
+                </a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <!-- État vide -->
+    <div class="empty-state">
+        <i class="fas fa-file-invoice-dollar"></i>
+        <h4>Aucun état de salaire trouvé</h4>
+        <p class="text-muted">
+            {% if periode_selected_exists and request.GET.periode %}
+            La période sélectionnée existe mais aucun salaire n'a été calculé pour cette période.
+            <br><a href="{% url 'salaires:gestion_periodes' %}" class="btn btn-success mt-2">
+                <i class="fas fa-calculator"></i> Calculer les salaires pour cette période
+            </a>
+            <a href="{% url 'salaires:etats_salaire' %}" class="btn btn-outline-secondary mt-2 ms-2">
+                <i class="fas fa-times"></i> Réinitialiser les filtres
+            </a>
+            {% elif request.GET.ecole or request.GET.periode or request.GET.statut %}
+            Aucun état de salaire ne correspond aux filtres sélectionnés.
+            <br><a href="{% url 'salaires:etats_salaire' %}">Réinitialiser les filtres</a>
+            {% elif no_periods_exist %}
+            Aucune période de salaire n'a été créée. Commencez par créer une période.
+            <br><a href="{% url 'salaires:gestion_periodes' %}" class="btn btn-primary mt-2">
+                <i class="fas fa-plus"></i> Créer une période
+            </a>
+            {% else %}
+            Aucun état de salaire calculé. Commencez par calculer les salaires pour une période donnée.
+            <br><a href="{% url 'salaires:gestion_periodes' %}" class="btn btn-primary mt-2">
+                <i class="fas fa-calculator"></i> Gérer les périodes
+            </a>
+            {% endif %}
+        </p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Export CSV des états de salaire avec les filtres courants
+    document.getElementById('exportEtatsCsv')?.addEventListener('click', function() {
+        const params = new URLSearchParams();
+        const periode = document.querySelector('[name="periode"]');
+        const ecole = document.querySelector('[name="ecole"]');
+        const statut = document.querySelector('[name="statut"]');
+        const search = document.querySelector('[name="search"]');
+        if (periode && periode.value) params.set('periode', periode.value);
+        if (ecole && ecole.value) params.set('ecole', ecole.value);
+        if (statut && statut.value) params.set('statut', statut.value);
+        if (search && search.value) params.set('search', search.value);
+        const qs = params.toString();
+        const url = '{% url "salaires:export_etats_salaire_csv" %}' + (qs ? ('?' + qs) : '');
+        window.location.href = url;
+    });
+    document.addEventListener('DOMContentLoaded', function() {
+        // Animation des cartes
+        const salaryCards = document.querySelectorAll('.salary-card');
+        salaryCards.forEach((card, index) => {
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(20px)';
+            setTimeout(() => {
+                card.style.transition = 'all 0.5s ease';
+                card.style.opacity = '1';
+                card.style.transform = 'translateY(0)';
+            }, index * 100);
+        });
+
+        // Animation des statistiques
+        const statNumbers = document.querySelectorAll('.stat-number');
+        statNumbers.forEach(stat => {
+            const target = parseInt(stat.textContent.replace(/\s/g, ''));
+            if (!isNaN(target)) {
+                let current = 0;
+                const increment = Math.ceil(target / 30);
+                
+                const counter = setInterval(() => {
+                    current += increment;
+                    if (current >= target) {
+                        current = target;
+                        clearInterval(counter);
+                    }
+                    stat.textContent = current.toLocaleString('fr-FR');
+                }, 50);
+            }
+        });
+    });
+
+    function imprimerFichePaie(etatId) {
+        // Ouvrir la fiche de paie PDF dans un nouvel onglet
+        window.open(`/salaires/etats/${etatId}/fiche-paie/`, '_blank');
+    }
+
+    // Confirmation pour les actions de validation/paiement
+    document.querySelectorAll('form[action*="valider"], form[action*="marquer_paye"]').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            const action = this.action.includes('valider') ? 'valider' : 'marquer comme payé';
+            if (!confirm(`Êtes-vous sûr de vouloir ${action} ce salaire ?`)) {
+                e.preventDefault();
+            }
+        });
+    });
+
+    // Auto-submit des filtres avec délai
+    let filterTimeout;
+    document.querySelectorAll('.filter-card select').forEach(select => {
+        select.addEventListener('change', function() {
+            clearTimeout(filterTimeout);
+            filterTimeout = setTimeout(() => {
+                this.form.submit();
+            }, 500);
+        });
+    });
+</script>
+{% endblock %}

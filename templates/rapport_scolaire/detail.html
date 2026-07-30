@@ -1,0 +1,512 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Rapport Scolaire — {{ eleve.prenom }} {{ eleve.nom }}{% endblock %}
+
+{% block breadcrumb %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .rapport-hero {
+        background: linear-gradient(135deg, #0a58ca 0%, #0d6efd 50%, #3d8bfd 100%);
+        color: white;
+        padding: 2.5rem 0;
+        margin-top: -70px;
+        padding-top: calc(70px + 2.5rem);
+        margin-bottom: 2rem;
+    }
+    .rapport-hero h1 { font-size: 2rem; font-weight: 700; }
+
+    .section-card {
+        background: #fff;
+        border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,.08);
+        padding: 1.5rem 2rem;
+        margin-bottom: 1.5rem;
+    }
+    .section-title {
+        font-weight: 700;
+        font-size: 1.15rem;
+        color: #0a58ca;
+        border-bottom: 2px solid #0d6efd;
+        padding-bottom: .5rem;
+        margin-bottom: 1rem;
+    }
+    .section-title i { margin-right: .5rem; }
+
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem 2rem; }
+    .info-grid .info-item { display: flex; gap: .5rem; padding: .35rem 0; }
+    .info-grid .info-label { font-weight: 600; color: #555; min-width: 140px; }
+    .info-grid .info-value { color: #222; }
+
+    .student-photo {
+        width: 100px; height: 100px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 3px solid #fff;
+        box-shadow: 0 2px 10px rgba(0,0,0,.15);
+    }
+
+    /* Tableau de notes */
+    .table-notes { font-size: .82rem; }
+    .table-notes thead th {
+        background: #0d6efd;
+        color: #fff;
+        text-align: center;
+        font-size: .78rem;
+        padding: .4rem .3rem;
+        white-space: nowrap;
+    }
+    .table-notes tbody td {
+        text-align: center;
+        padding: .35rem .3rem;
+        vertical-align: middle;
+    }
+    .table-notes tbody td:first-child { text-align: left; font-weight: 600; }
+    .table-notes tbody tr:nth-child(even) { background: #f8f9fa; }
+    .note-bon { color: #198754; font-weight: 600; }
+    .note-moyen { color: #fd7e14; font-weight: 600; }
+    .note-faible { color: #dc3545; font-weight: 600; }
+
+    /* Classements */
+    .classement-card {
+        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        border-radius: 12px;
+        padding: 1rem 1.5rem;
+        text-align: center;
+        border: 1px solid #dee2e6;
+    }
+    .classement-rang { font-size: 1.8rem; font-weight: 800; color: #0d6efd; }
+    .classement-moyenne { font-size: 1.3rem; font-weight: 700; }
+    .classement-periode { font-size: .85rem; color: #6c757d; }
+
+    /* Forces/Faiblesses */
+    .force-item { background: #d1e7dd; border-radius: 8px; padding: .5rem .8rem; margin-bottom: .4rem; display: flex; justify-content: space-between; }
+    .force-item .badge { background: #198754; }
+    .faiblesse-item { background: #f8d7da; border-radius: 8px; padding: .5rem .8rem; margin-bottom: .4rem; display: flex; justify-content: space-between; }
+    .faiblesse-item .badge { background: #dc3545; }
+
+    /* Activités */
+    .activite-item {
+        border-left: 4px solid #0d6efd;
+        padding: .6rem 1rem;
+        margin-bottom: .6rem;
+        background: #f8f9fa;
+        border-radius: 0 8px 8px 0;
+    }
+    .activite-item.type-EVALUATION { border-left-color: #0d6efd; }
+    .activite-item.type-SPORTIVE { border-left-color: #198754; }
+    .activite-item.type-CULTURELLE { border-left-color: #fd7e14; }
+    .activite-item.type-ARTISTIQUE { border-left-color: #6f42c1; }
+    .activite-item.type-SORTIE { border-left-color: #0dcaf0; }
+    .activite-item.type-AUTRE { border-left-color: #6c757d; }
+
+    .btn-download-pdf {
+        background: linear-gradient(135deg, #0d6efd, #0a58ca);
+        color: #fff;
+        border: none;
+        padding: .8rem 2rem;
+        border-radius: 12px;
+        font-size: 1.1rem;
+        font-weight: 600;
+        box-shadow: 0 4px 15px rgba(13, 110, 253, 0.3);
+        transition: all .2s;
+    }
+    .btn-download-pdf:hover {
+        background: linear-gradient(135deg, #0a58ca, #084298);
+        color: #fff;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(13, 110, 253, 0.4);
+    }
+
+    .conseil-item {
+        padding: .5rem .8rem;
+        background: #fff3cd;
+        border-radius: 8px;
+        margin-bottom: .4rem;
+        border-left: 4px solid #ffc107;
+    }
+
+    @media print {
+        .no-print { display: none !important; }
+        .rapport-hero { margin-top: 0; padding-top: 2rem; }
+        .section-card { box-shadow: none; break-inside: avoid; }
+    }
+    @media (max-width: 768px) {
+        .info-grid { grid-template-columns: 1fr; }
+        .rapport-hero h1 { font-size: 1.5rem; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Hero -->
+<div class="rapport-hero text-center">
+    <div class="container">
+        <div class="d-flex justify-content-center align-items-center gap-3 mb-2">
+            {% if eleve.photo %}
+            <img src="{{ eleve.photo.url }}" alt="Photo" class="student-photo">
+            {% endif %}
+            <div>
+                <h1 class="mb-1"><i class="fas fa-graduation-cap me-2"></i>{{ eleve.prenom }} {{ eleve.nom }}</h1>
+                <p class="lead opacity-75 mb-0">{{ eleve.classe.nom }} — {{ annee }}</p>
+            </div>
+        </div>
+        <div class="mt-3 no-print">
+            <a href="{% url 'rapport_scolaire_pdf' %}?token={{ token }}" class="btn btn-download-pdf" target="_blank">
+                <i class="fas fa-file-pdf me-2"></i>Télécharger le rapport PDF
+            </a>
+            <a href="{% url 'rapport_scolaire' %}" class="btn btn-outline-light ms-2">
+                <i class="fas fa-arrow-left me-1"></i>Nouvelle recherche
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="container pb-5">
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- INFORMATIONS DE L'ÉLÈVE -->
+    <!-- ═══════════════════════════════════════════ -->
+    <div class="section-card">
+        <div class="section-title"><i class="fas fa-id-card"></i>Informations de l'élève</div>
+        <div class="info-grid">
+            <div class="info-item">
+                <span class="info-label"><i class="fas fa-barcode me-1"></i>Matricule</span>
+                <span class="info-value fw-bold">{{ eleve.matricule }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label"><i class="fas fa-user me-1"></i>Nom complet</span>
+                <span class="info-value">{{ eleve.prenom }} {{ eleve.nom }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label"><i class="fas fa-venus-mars me-1"></i>Sexe</span>
+                <span class="info-value">{{ eleve.get_sexe_display }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label"><i class="fas fa-birthday-cake me-1"></i>Date de naissance</span>
+                <span class="info-value">{{ eleve.date_naissance|date:"d/m/Y"|default:"—" }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label"><i class="fas fa-map-marker-alt me-1"></i>Lieu de naissance</span>
+                <span class="info-value">{{ eleve.lieu_naissance|default:"—" }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label"><i class="fas fa-school me-1"></i>École</span>
+                <span class="info-value">{{ ecole.nom|default:"—" }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label"><i class="fas fa-chalkboard me-1"></i>Classe</span>
+                <span class="info-value">{{ eleve.classe.nom }}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label"><i class="fas fa-calendar me-1"></i>Année scolaire</span>
+                <span class="info-value">{{ annee }}</span>
+            </div>
+            {% if eleve.responsable_principal %}
+            <div class="info-item">
+                <span class="info-label"><i class="fas fa-user-tie me-1"></i>Responsable</span>
+                <span class="info-value">{{ eleve.responsable_principal.nom_complet }} ({{ eleve.responsable_principal.get_relation_display }})</span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- MOYENNE GÉNÉRALE + RÉSUMÉ -->
+    <!-- ═══════════════════════════════════════════ -->
+    {% if moyenne_generale is not None %}
+    <div class="section-card text-center">
+        <div class="section-title"><i class="fas fa-chart-line"></i>Résumé des résultats</div>
+        <div class="row justify-content-center">
+            <div class="col-md-4">
+                <div class="p-3">
+                    <div style="font-size: 2.5rem; font-weight: 800; color: {% if moyenne_generale >= 14 %}#198754{% elif moyenne_generale >= 10 %}#fd7e14{% else %}#dc3545{% endif %}">
+                        {{ moyenne_generale }}/20
+                    </div>
+                    <div class="text-muted">Moyenne générale</div>
+                </div>
+            </div>
+            {% if classements %}
+            {% with dernier=classements.last %}
+            <div class="col-md-4">
+                <div class="p-3">
+                    <div style="font-size: 2.5rem; font-weight: 800; color: #0d6efd;">{{ dernier.rang_formate }}</div>
+                    <div class="text-muted">Dernier classement ({{ dernier.periode|cut:"_" }})</div>
+                </div>
+            </div>
+            {% endwith %}
+            {% endif %}
+            <div class="col-md-4">
+                <div class="p-3">
+                    <div style="font-size: 2.5rem; font-weight: 800; color: #6f42c1;">{{ matieres_data|length }}</div>
+                    <div class="text-muted">Matières suivies</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- FORCES ET FAIBLESSES -->
+    <!-- ═══════════════════════════════════════════ -->
+    {% if forces or faiblesses %}
+    <div class="row">
+        <div class="col-md-6">
+            <div class="section-card">
+                <div class="section-title" style="color: #198754; border-color: #198754;">
+                    <i class="fas fa-arrow-up"></i>Points forts
+                </div>
+                {% if forces %}
+                    {% for f in forces %}
+                    <div class="force-item">
+                        <span><i class="fas fa-check-circle text-success me-1"></i> {{ f.matiere }}</span>
+                        <span class="badge rounded-pill">{{ f.moyenne }}/20</span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted fst-italic mb-0">Pas encore de matière au-dessus de 14/20</p>
+                {% endif %}
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="section-card">
+                <div class="section-title" style="color: #dc3545; border-color: #dc3545;">
+                    <i class="fas fa-arrow-down"></i>Points à améliorer
+                </div>
+                {% if faiblesses %}
+                    {% for f in faiblesses %}
+                    <div class="faiblesse-item">
+                        <span><i class="fas fa-exclamation-circle text-danger me-1"></i> {{ f.matiere }}</span>
+                        <span class="badge rounded-pill">{{ f.moyenne }}/20</span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted fst-italic mb-0">Aucune matière en dessous de 10/20</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- CONSEILS -->
+    <!-- ═══════════════════════════════════════════ -->
+    {% if conseils %}
+    <div class="section-card">
+        <div class="section-title" style="color: #ffc107; border-color: #ffc107;">
+            <i class="fas fa-lightbulb"></i>Conseils personnalisés
+        </div>
+        {% for conseil in conseils %}
+        <div class="conseil-item">
+            <i class="fas fa-angle-right me-2 text-warning"></i>{{ conseil }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- TABLEAU DES NOTES MENSUELLES -->
+    <!-- ═══════════════════════════════════════════ -->
+    {% if matieres_data %}
+    <div class="section-card">
+        <div class="section-title"><i class="fas fa-table"></i>Notes mensuelles et compositions</div>
+        <div class="table-responsive">
+            <table class="table table-notes table-bordered mb-0">
+                <thead>
+                    <tr>
+                        <th style="text-align:left; min-width:120px;">Matière</th>
+                        <th>Coeff</th>
+                        {% for mois in mois_labels %}
+                        <th>{{ mois }}</th>
+                        {% endfor %}
+                        {% for periode_id, periode_label in compo_periodes %}
+                        <th style="background:#084298;">{{ periode_label|truncatechars:8 }}</th>
+                        {% endfor %}
+                        <th style="background:#198754;">Moy.</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for mat in matieres_data %}
+                    <tr>
+                        <td>{{ mat.nom }}</td>
+                        <td>{{ mat.coefficient|default:"—" }}</td>
+                        {% for note in mat.notes_mensuelles %}
+                        <td>{{ note }}</td>
+                        {% endfor %}
+                        {% for note in mat.notes_compo %}
+                        <td class="fw-bold">{{ note }}</td>
+                        {% endfor %}
+                        <td class="fw-bold {% if mat.moyenne is not None %}{% if mat.moyenne >= 14 %}note-bon{% elif mat.moyenne >= 10 %}note-moyen{% else %}note-faible{% endif %}{% endif %}">
+                            {{ mat.moyenne|default:"—" }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- CLASSEMENTS -->
+    <!-- ═══════════════════════════════════════════ -->
+    {% if classements %}
+    <div class="section-card">
+        <div class="section-title"><i class="fas fa-trophy"></i>Classements</div>
+        <div class="row g-3">
+            {% for cl in classements %}
+            <div class="col-md-4 col-sm-6">
+                <div class="classement-card">
+                    <div class="classement-periode mb-1">{{ cl.periode|cut:"_" }}</div>
+                    <div class="classement-rang">{{ cl.rang_formate }}</div>
+                    <div class="classement-moyenne {% if cl.moyenne_generale >= 14 %}note-bon{% elif cl.moyenne_generale >= 10 %}note-moyen{% else %}note-faible{% endif %}">
+                        {{ cl.moyenne_generale }}/20
+                    </div>
+                    {% if cl.mention %}
+                    <span class="badge bg-primary mt-1">{{ cl.mention }}</span>
+                    {% endif %}
+                    {% if cl.appreciation %}
+                    <div class="small text-muted mt-1">{{ cl.appreciation }}</div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- ACTIVITÉS JOURNALIÈRES -->
+    <!-- ═══════════════════════════════════════════ -->
+    {% if activites %}
+    <div class="section-card">
+        <div class="section-title"><i class="fas fa-calendar-day"></i>Activités journalières</div>
+        {% for act in activites %}
+        <div class="activite-item type-{{ act.type_activite }}">
+            <div class="d-flex justify-content-between align-items-start flex-wrap">
+                <div>
+                    <strong>{{ act.titre }}</strong>
+                    <span class="badge bg-secondary ms-1">{{ act.get_type_activite_display }}</span>
+                    {% if act.appreciation %}
+                    <span class="badge bg-info text-dark ms-1">{{ act.appreciation }}</span>
+                    {% endif %}
+                </div>
+                <small class="text-muted"><i class="fas fa-calendar me-1"></i>{{ act.date|date:"d/m/Y" }}</small>
+            </div>
+            {% if act.description %}
+            <div class="small text-muted mt-1">{{ act.description|truncatewords:40 }}</div>
+            {% endif %}
+            {% if act.pieces_jointes.count > 0 %}
+            <div class="mt-1">
+                {% for pj in act.pieces_jointes.all %}
+                {% if pj.is_image %}
+                <img src="{{ pj.fichier.url }}" alt="{{ pj.legende }}" style="height:60px; border-radius:6px; margin:2px;" class="no-print">
+                {% else %}
+                <a href="{{ pj.fichier.url }}" target="_blank" class="badge bg-light text-dark text-decoration-none me-1 no-print">
+                    <i class="fas fa-file me-1"></i>{{ pj.legende|truncatechars:20 }}
+                </a>
+                {% endif %}
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- REÇUS DE PAIEMENTS -->
+    <!-- ═══════════════════════════════════════════ -->
+    {% if paiements %}
+    <div class="section-card">
+        <div class="section-title" style="color: #198754; border-color: #198754;">
+            <i class="fas fa-receipt"></i>Reçus de paiements
+        </div>
+
+        {% if echeancier %}
+        <div class="row mb-3">
+            <div class="col-md-4 text-center">
+                <div class="p-2 rounded" style="background: #e8f5e9;">
+                    <div class="small text-muted">Total dû</div>
+                    <div class="fw-bold" style="font-size: 1.2rem;">{{ echeancier.total_du|floatformat:0 }} GNF</div>
+                </div>
+            </div>
+            <div class="col-md-4 text-center">
+                <div class="p-2 rounded" style="background: #e3f2fd;">
+                    <div class="small text-muted">Total payé</div>
+                    <div class="fw-bold text-primary" style="font-size: 1.2rem;">{{ echeancier.total_paye|floatformat:0 }} GNF</div>
+                </div>
+            </div>
+            <div class="col-md-4 text-center">
+                <div class="p-2 rounded" style="background: {% if echeancier.solde_restant > 0 %}#fce4ec{% else %}#e8f5e9{% endif %};">
+                    <div class="small text-muted">Reste à payer</div>
+                    <div class="fw-bold {% if echeancier.solde_restant > 0 %}text-danger{% else %}text-success{% endif %}" style="font-size: 1.2rem;">
+                        {% if echeancier.solde_restant > 0 %}
+                            {{ echeancier.solde_restant|floatformat:0 }} GNF
+                        {% else %}
+                            Soldé <i class="fas fa-check-circle"></i>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% if echeancier.pourcentage_paye is not None %}
+        <div class="progress mb-3" style="height: 8px;">
+            <div class="progress-bar {% if echeancier.pourcentage_paye >= 100 %}bg-success{% elif echeancier.pourcentage_paye >= 50 %}bg-primary{% else %}bg-warning{% endif %}"
+                 style="width: {{ echeancier.pourcentage_paye }}%;" role="progressbar"></div>
+        </div>
+        {% endif %}
+        {% endif %}
+
+        <div class="table-responsive">
+            <table class="table table-hover table-bordered mb-0" style="font-size: .9rem;">
+                <thead style="background: #198754; color: #fff;">
+                    <tr>
+                        <th>N° Reçu</th>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Mode</th>
+                        <th class="text-end">Montant</th>
+                        <th class="text-center no-print">Reçu PDF</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in paiements %}
+                    <tr>
+                        <td class="fw-bold">{{ p.numero_recu }}</td>
+                        <td>{{ p.date_paiement|date:"d/m/Y" }}</td>
+                        <td>{{ p.type_paiement.nom }}</td>
+                        <td>{{ p.mode_paiement.nom }}</td>
+                        <td class="text-end fw-bold">{{ p.montant|floatformat:0 }} GNF</td>
+                        <td class="text-center no-print">
+                            <a href="{% url 'rapport_scolaire_recu_pdf' p.pk %}?token={{ token }}"
+                               class="btn btn-sm btn-outline-success" target="_blank"
+                               title="Télécharger le reçu">
+                                <i class="fas fa-download me-1"></i>PDF
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ═══════════════════════════════════════════ -->
+    <!-- BOUTON PDF EN BAS -->
+    <!-- ═══════════════════════════════════════════ -->
+    <div class="text-center mt-4 no-print">
+        <a href="{% url 'rapport_scolaire_pdf' %}?token={{ token }}" class="btn btn-download-pdf" target="_blank">
+            <i class="fas fa-file-pdf me-2"></i>Télécharger le rapport complet en PDF
+        </a>
+        <div class="mt-2">
+            <a href="{% url 'rapport_scolaire' %}" class="text-muted">
+                <i class="fas fa-arrow-left me-1"></i>Nouvelle recherche
+            </a>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

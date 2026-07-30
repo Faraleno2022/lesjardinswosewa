@@ -1,0 +1,305 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Activation & Comptes — MySchoolGN{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-3">
+
+  <!-- En-tête -->
+  <div class="d-flex align-items-center mb-4">
+    <div class="me-3">
+      <span style="font-size:2rem;">🔑</span>
+    </div>
+    <div>
+      <h1 class="h3 mb-0 fw-bold">Activation &amp; Comptes</h1>
+      <small class="text-muted">Gérez la licence et les utilisateurs de MySchoolGN</small>
+    </div>
+  </div>
+
+  <!-- Messages Django -->
+  {% for msg in messages %}
+  <div class="alert alert-{{ msg.tags|default:'info' }} alert-dismissible fade show" role="alert">
+    {{ msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+
+  <div class="row g-4">
+
+    <!-- ══════════════════════════════════════════════════
+         COLONNE GAUCHE : LICENCE
+    ══════════════════════════════════════════════════ -->
+    <div class="col-lg-5">
+
+      <!-- Statut de la licence -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header fw-bold {% if license_status.valid %}bg-success text-white{% else %}bg-warning{% endif %}">
+          <i class="fas fa-shield-alt me-2"></i>
+          Statut de la Licence
+        </div>
+        <div class="card-body">
+
+          {% if license_status.valid %}
+            {% if license_status.trial %}
+              <div class="alert alert-warning mb-3">
+                <i class="fas fa-clock me-2"></i>
+                <strong>Mode Essai</strong> — {{ license_status.days_left }} jour(s) restant(s)
+              </div>
+            {% else %}
+              <div class="alert alert-success mb-3">
+                <i class="fas fa-check-circle me-2"></i>
+                <strong>Licence Valide</strong> — {{ license_status.days_left }} jour(s) restant(s)
+              </div>
+              {% if license_status.school %}
+              <p class="mb-1"><strong>École :</strong> {{ license_status.school }}</p>
+              {% endif %}
+              {% if license_status.edition %}
+              <p class="mb-1"><strong>Édition :</strong> {{ license_status.edition }}</p>
+              {% endif %}
+            {% endif %}
+          {% else %}
+            <div class="alert alert-danger mb-3">
+              <i class="fas fa-exclamation-triangle me-2"></i>
+              <strong>Licence expirée ou absente</strong><br>
+              {{ license_status.reason }}
+            </div>
+          {% endif %}
+
+          <!-- ID Machine -->
+          <div class="mt-3">
+            <label class="form-label fw-bold text-muted small">ID Machine (à envoyer à l'administrateur FARA LENO AU +224622613559)</label>
+            <div class="input-group">
+              <input type="text" class="form-control form-control-sm font-monospace"
+                     id="machineId" value="{{ license_status.machine_id }}" readonly>
+              <button class="btn btn-outline-secondary btn-sm" type="button"
+                      onclick="copyMachineId()">
+                <i class="fas fa-copy"></i> Copier
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activer une licence -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header fw-bold">
+          <i class="fas fa-key me-2"></i>Activer une Licence
+        </div>
+        <div class="card-body">
+          <p class="text-muted small mb-3">
+            Vous avez reçu un fichier <code>.lic</code> de l'administrateur FARA LENO AU +224622613559 ?
+            Importez-le ici pour activer votre licence permanente.
+          </p>
+          <form method="post" action="{% url 'utilisateurs:activer_licence' %}"
+                enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="mb-3">
+              <label class="form-label fw-bold">Fichier de licence (.lic)</label>
+              <input type="file" name="lic_file" accept=".lic,.json"
+                     class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-warning w-100 fw-bold">
+              <i class="fas fa-upload me-2"></i>Activer la Licence
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Changer mot de passe admin -->
+      <div class="card shadow-sm">
+        <div class="card-header fw-bold">
+          <i class="fas fa-lock me-2"></i>Changer mon Mot de Passe
+        </div>
+        <div class="card-body">
+          <form method="post" action="{% url 'utilisateurs:changer_mdp_admin' %}">
+            {% csrf_token %}
+            <div class="mb-2">
+              <label class="form-label small fw-bold">Mot de passe actuel</label>
+              <input type="password" name="old_password" class="form-control form-control-sm" required>
+            </div>
+            <div class="mb-2">
+              <label class="form-label small fw-bold">Nouveau mot de passe</label>
+              <input type="password" name="new_password" class="form-control form-control-sm"
+                     minlength="6" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-bold">Confirmer le nouveau mot de passe</label>
+              <input type="password" name="new_password2" class="form-control form-control-sm"
+                     minlength="6" required>
+            </div>
+            <button type="submit" class="btn btn-outline-primary w-100 btn-sm fw-bold">
+              <i class="fas fa-save me-2"></i>Mettre à jour le mot de passe
+            </button>
+          </form>
+        </div>
+      </div>
+
+    </div><!-- /col gauche -->
+
+
+    <!-- ══════════════════════════════════════════════════
+         COLONNE DROITE : COMPTES UTILISATEURS
+    ══════════════════════════════════════════════════ -->
+    <div class="col-lg-7">
+
+      <!-- Créer un nouveau compte -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-header fw-bold bg-primary text-white">
+          <i class="fas fa-user-plus me-2"></i>Créer un Compte Utilisateur
+        </div>
+        <div class="card-body">
+          <form method="post" action="{% url 'utilisateurs:creer_compte' %}">
+            {% csrf_token %}
+            <div class="row g-2">
+              <div class="col-sm-6">
+                <label class="form-label small fw-bold">Nom d'utilisateur *</label>
+                <input type="text" name="username" class="form-control form-control-sm"
+                       placeholder="Ex: prof.diallo" required>
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label small fw-bold">Rôle *</label>
+                <select name="role" class="form-select form-select-sm">
+                  <option value="user">Utilisateur (staff)</option>
+                  <option value="admin">Administrateur</option>
+                </select>
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label small fw-bold">Prénom</label>
+                <input type="text" name="first_name" class="form-control form-control-sm"
+                       placeholder="Ex: Mamadou">
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label small fw-bold">Nom de famille</label>
+                <input type="text" name="last_name" class="form-control form-control-sm"
+                       placeholder="Ex: Diallo">
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label small fw-bold">Email</label>
+                <input type="email" name="email" class="form-control form-control-sm"
+                       placeholder="Ex: m.diallo@ecole.gn">
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label small fw-bold">Mot de passe *</label>
+                <input type="password" name="password" class="form-control form-control-sm"
+                       minlength="6" required>
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label small fw-bold">Confirmer le mot de passe *</label>
+                <input type="password" name="password2" class="form-control form-control-sm"
+                       minlength="6" required>
+              </div>
+              <div class="col-12 mt-2">
+                <button type="submit" class="btn btn-primary fw-bold">
+                  <i class="fas fa-plus me-2"></i>Créer le Compte
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Liste des comptes existants -->
+      <div class="card shadow-sm">
+        <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+          <span><i class="fas fa-users me-2"></i>Comptes Existants</span>
+          <span class="badge bg-secondary">{{ users|length }} compte(s)</span>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Utilisateur</th>
+                  <th>Nom complet</th>
+                  <th>Rôle</th>
+                  <th>Email</th>
+                  <th class="text-center">Accès</th>
+                  <th class="text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for u in users %}
+                <tr {% if u == request.user %}class="table-primary"{% endif %}>
+                  <td>
+                    <i class="fas fa-{% if u.is_superuser %}crown text-warning{% else %}user text-secondary{% endif %} me-1"></i>
+                    <strong>{{ u.username }}</strong>
+                    {% if u == request.user %}<span class="badge bg-primary ms-1">Vous</span>{% endif %}
+                  </td>
+                  <td>{{ u.get_full_name|default:"—" }}</td>
+                  <td>
+                    {% if u.is_superuser %}
+                      <span class="badge bg-warning text-dark">Admin</span>
+                    {% elif u.is_staff %}
+                      <span class="badge bg-info text-dark">Staff</span>
+                    {% else %}
+                      <span class="badge bg-secondary">Utilisateur</span>
+                    {% endif %}
+                  </td>
+                  <td><small>{{ u.email|default:"—" }}</small></td>
+                  <td class="text-center">
+                    {% if u.is_superuser %}
+                      <span class="badge bg-success">Accès complet</span>
+                    {% elif u == request.user %}
+                      <span class="text-muted">—</span>
+                    {% else %}
+                      {% if u.profil.lecture_seule %}
+                        <span class="badge bg-danger mb-1 d-block">🔒 Lecture seule</span>
+                        <form method="post" action="{% url 'utilisateurs:toggle_lecture_seule' u.id %}" class="d-inline">
+                          {% csrf_token %}
+                          <button type="submit" class="btn btn-outline-success btn-sm py-0">Autoriser les actions</button>
+                        </form>
+                      {% else %}
+                        <span class="badge bg-success mb-1 d-block">Actions autorisées</span>
+                        <form method="post" action="{% url 'utilisateurs:toggle_lecture_seule' u.id %}" class="d-inline"
+                              onsubmit="return confirm('Mettre « {{ u.username }} » en lecture seule ? Il pourra consulter mais ne rien modifier.')">
+                          {% csrf_token %}
+                          <button type="submit" class="btn btn-outline-warning btn-sm py-0">Mettre en lecture seule</button>
+                        </form>
+                      {% endif %}
+                    {% endif %}
+                  </td>
+                  <td class="text-center">
+                    {% if u != request.user %}
+                    <form method="post"
+                          action="{% url 'utilisateurs:supprimer_compte' u.id %}"
+                          onsubmit="return confirm('Supprimer le compte « {{ u.username }} » ?')">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-outline-danger btn-sm py-0">
+                        <i class="fas fa-trash-alt"></i>
+                      </button>
+                    </form>
+                    {% else %}
+                    <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="text-center text-muted py-3">Aucun compte</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /col droite -->
+
+  </div><!-- /row -->
+</div><!-- /container -->
+
+<script>
+function copyMachineId() {
+  const el = document.getElementById('machineId');
+  el.select();
+  document.execCommand('copy');
+  const btn = el.nextElementSibling;
+  btn.innerHTML = '<i class="fas fa-check"></i> Copié !';
+  btn.classList.replace('btn-outline-secondary', 'btn-success');
+  setTimeout(() => {
+    btn.innerHTML = '<i class="fas fa-copy"></i> Copier';
+    btn.classList.replace('btn-success', 'btn-outline-secondary');
+  }, 2000);
+}
+</script>
+{% endblock %}

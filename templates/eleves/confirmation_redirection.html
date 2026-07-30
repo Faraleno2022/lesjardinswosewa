@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block title %}Confirmation{% endblock %}
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-md-8">
+      <div class="alert alert-success shadow-sm">
+        <div class="d-flex align-items-center">
+          <i class="fas fa-check-circle text-success me-2" style="font-size:1.5rem;"></i>
+          <div>
+            <h5 class="mb-1">Demande envoyée</h5>
+            <div>{{ message|default:"Votre demande a été envoyée avec succès." }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="text-center text-muted">
+        <small>Redirection vers l'accueil dans <span id="countdown">2</span> seconde(s)...</small><br>
+        <small><a class="text-decoration-none" href="{{ redirect_url|default:'/' }}">Cliquez ici si vous n'êtes pas redirigé</a></small>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+  (function(){
+    var seconds = 2;
+    var el = document.getElementById('countdown');
+    var interval = setInterval(function(){
+      seconds -= 1;
+      if (el) el.textContent = Math.max(0, seconds);
+      if (seconds <= 0) { clearInterval(interval); window.location.href = "{{ redirect_url|default:'/' }}"; }
+    }, 1000);
+  })();
+</script>
+{% endblock %}

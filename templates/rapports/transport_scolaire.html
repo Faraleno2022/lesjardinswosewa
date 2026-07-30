@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Rapport - Transport scolaire{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Transport scolaire par classe</h3>
+    {% if ecole %}<span class="badge bg-primary">{{ ecole }}</span>{% endif %}
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-striped table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Classe</th>
+              <th class="text-end">Nombre d'abonnés</th>
+              <th class="text-end">Total payé (GNF)</th>
+              <th class="text-end">Reste à payer (GNF)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% if lignes %}
+              {% for l in lignes %}
+                <tr>
+                  <td>{{ l.classe }}</td>
+                  <td class="text-end">{{ l.nb_abonnes|intcomma }}</td>
+                  <td class="text-end">{{ l.total_paye|intcomma }}</td>
+                  <td class="text-end fw-semibold text-danger">{{ l.reste|intcomma }}</td>
+                </tr>
+              {% endfor %}
+            {% else %}
+              <tr>
+                <td colspan="4" class="text-center text-muted py-4">Aucune donnée disponible</td>
+              </tr>
+            {% endif %}
+          </tbody>
+          <tfoot>
+            <tr class="table-secondary">
+              <th>Total</th>
+              <th class="text-end">{{ totals.nb_abonnes|intcomma }}</th>
+              <th class="text-end">{{ totals.total_paye|intcomma }}</th>
+              <th class="text-end">{{ totals.reste|intcomma }}</th>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {% if not has_payment_types %}
+    <div class="alert alert-warning mt-3" role="alert">
+      Aucun type de paiement de transport/bus trouvé. Le "Total payé" pourrait être incomplet. Ajoutez un type de paiement nommé par exemple "Transport" ou "Bus" dans la gestion des types de paiements.
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

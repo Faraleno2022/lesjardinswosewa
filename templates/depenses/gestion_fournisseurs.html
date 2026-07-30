@@ -1,0 +1,437 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Gestion des Fournisseurs{% endblock %}
+
+{% block extra_css %}
+<style>
+    .management-card {
+        background: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    .section-title {
+        color: #2c3e50;
+        border-bottom: 2px solid #6c757d;
+        padding-bottom: 8px;
+        margin-bottom: 20px;
+        font-weight: 600;
+    }
+    .supplier-card {
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+    }
+    .supplier-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    .supplier-type-badge {
+        font-size: 0.8rem;
+        padding: 0.3rem 0.6rem;
+    }
+    .stats-card {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border: none;
+        border-radius: 10px;
+        padding: 1.5rem;
+        text-align: center;
+        transition: all 0.3s ease;
+    }
+    .stats-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+    }
+    .stats-number {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #2c3e50;
+    }
+    .search-form {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    .btn-action {
+        padding: 0.4rem 0.8rem;
+        font-size: 0.85rem;
+        border-radius: 6px;
+    }
+    .contact-info {
+        font-size: 0.9rem;
+        color: #6c757d;
+    }
+    .contact-info i {
+        width: 16px;
+        text-align: center;
+        margin-right: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">Gestion des Fournisseurs</h1>
+            <p class="text-muted mb-0">Gérer les fournisseurs et prestataires de l'école</p>
+        </div>
+        <div>
+            <a href="{% url 'depenses:tableau_bord' %}" class="btn btn-outline-secondary me-2">
+                <i class="fas fa-arrow-left"></i> Retour
+            </a>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#ajouterFournisseurModal">
+                <i class="fas fa-plus"></i> Nouveau Fournisseur
+            </button>
+        </div>
+    </div>
+
+    <!-- Statistiques -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stats-card">
+                <div class="stats-number">{{ stats.total_fournisseurs }}</div>
+                <div class="text-muted">Total Fournisseurs</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card">
+                <div class="stats-number">{{ stats.fournisseurs_actifs }}</div>
+                <div class="text-muted">Actifs</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card">
+                <div class="stats-number">{{ stats.entreprises }}</div>
+                <div class="text-muted">Entreprises</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card">
+                <div class="stats-number">{{ stats.particuliers }}</div>
+                <div class="text-muted">Particuliers</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recherche et filtres -->
+    <div class="search-form">
+        <form method="get" class="row g-3">
+            <div class="col-md-4">
+                <input type="text" name="search" class="form-control" 
+                       placeholder="Rechercher par nom..." value="{{ request.GET.search }}">
+            </div>
+            <div class="col-md-3">
+                <select name="type_fournisseur" class="form-control">
+                    <option value="">Tous les types</option>
+                    <option value="ENTREPRISE" {% if request.GET.type_fournisseur == 'ENTREPRISE' %}selected{% endif %}>Entreprise</option>
+                    <option value="PARTICULIER" {% if request.GET.type_fournisseur == 'PARTICULIER' %}selected{% endif %}>Particulier</option>
+                    <option value="ADMINISTRATION" {% if request.GET.type_fournisseur == 'ADMINISTRATION' %}selected{% endif %}>Administration</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="actif" class="form-control">
+                    <option value="">Tous les statuts</option>
+                    <option value="1" {% if request.GET.actif == '1' %}selected{% endif %}>Actifs</option>
+                    <option value="0" {% if request.GET.actif == '0' %}selected{% endif %}>Inactifs</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-outline-primary w-100">
+                    <i class="fas fa-search"></i> Filtrer
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Liste des fournisseurs -->
+    <div class="management-card">
+        <h5 class="section-title">
+            <i class="fas fa-truck"></i> Liste des Fournisseurs
+            <span class="badge bg-secondary ms-2">{{ fournisseurs.count }} résultat{{ fournisseurs.count|pluralize }}</span>
+        </h5>
+
+        {% if fournisseurs %}
+        <div class="row">
+            {% for fournisseur in fournisseurs %}
+            <div class="col-lg-6 col-xl-4">
+                <div class="supplier-card">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="mb-0">{{ fournisseur.nom }}</h6>
+                        <div>
+                            {% if fournisseur.type_fournisseur == 'ENTREPRISE' %}
+                                <span class="badge bg-primary supplier-type-badge">Entreprise</span>
+                            {% elif fournisseur.type_fournisseur == 'PARTICULIER' %}
+                                <span class="badge bg-success supplier-type-badge">Particulier</span>
+                            {% elif fournisseur.type_fournisseur == 'ADMINISTRATION' %}
+                                <span class="badge bg-info supplier-type-badge">Administration</span>
+                            {% endif %}
+                            
+                            {% if not fournisseur.actif %}
+                                <span class="badge bg-danger supplier-type-badge">Inactif</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    {% if fournisseur.adresse %}
+                    <div class="contact-info mb-1">
+                        <i class="fas fa-map-marker-alt"></i>
+                        {{ fournisseur.adresse|truncatechars:40 }}
+                    </div>
+                    {% endif %}
+                    
+                    {% if fournisseur.telephone %}
+                    <div class="contact-info mb-1">
+                        <i class="fas fa-phone"></i>
+                        {{ fournisseur.telephone }}
+                    </div>
+                    {% endif %}
+                    
+                    {% if fournisseur.email %}
+                    <div class="contact-info mb-2">
+                        <i class="fas fa-envelope"></i>
+                        {{ fournisseur.email|truncatechars:30 }}
+                    </div>
+                    {% endif %}
+                    
+                    <div class="d-flex justify-content-between align-items-center mt-3">
+                        <small class="text-muted">
+                            Créé le {{ fournisseur.date_creation|date:"d/m/Y" }}
+                        </small>
+                        <div>
+                            <button class="btn btn-outline-primary btn-action me-1" 
+                                    onclick="modifierFournisseur({{ fournisseur.id }})"
+                                    title="Modifier">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            {% if fournisseur.actif %}
+                            <button class="btn btn-outline-warning btn-action" 
+                                    onclick="desactiverFournisseur({{ fournisseur.id }})"
+                                    title="Désactiver">
+                                <i class="fas fa-pause"></i>
+                            </button>
+                            {% else %}
+                            <button class="btn btn-outline-success btn-action" 
+                                    onclick="activerFournisseur({{ fournisseur.id }})"
+                                    title="Activer">
+                                <i class="fas fa-play"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <!-- Pagination -->
+        {% if is_paginated %}
+        <nav aria-label="Navigation des fournisseurs" class="mt-4">
+            <ul class="pagination justify-content-center">
+                {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page=1{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.type_fournisseur %}&type_fournisseur={{ request.GET.type_fournisseur }}{% endif %}{% if request.GET.actif %}&actif={{ request.GET.actif }}{% endif %}">
+                            <i class="fas fa-angle-double-left"></i>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.type_fournisseur %}&type_fournisseur={{ request.GET.type_fournisseur }}{% endif %}{% if request.GET.actif %}&actif={{ request.GET.actif }}{% endif %}">
+                            <i class="fas fa-angle-left"></i>
+                        </a>
+                    </li>
+                {% endif %}
+                
+                <li class="page-item active">
+                    <span class="page-link">
+                        Page {{ page_obj.number }} sur {{ page_obj.paginator.num_pages }}
+                    </span>
+                </li>
+                
+                {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.type_fournisseur %}&type_fournisseur={{ request.GET.type_fournisseur }}{% endif %}{% if request.GET.actif %}&actif={{ request.GET.actif }}{% endif %}">
+                            <i class="fas fa-angle-right"></i>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}{% if request.GET.type_fournisseur %}&type_fournisseur={{ request.GET.type_fournisseur }}{% endif %}{% if request.GET.actif %}&actif={{ request.GET.actif }}{% endif %}">
+                            <i class="fas fa-angle-double-right"></i>
+                        </a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+        
+        {% else %}
+        <div class="text-center py-5">
+            <i class="fas fa-truck fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">Aucun fournisseur trouvé</h5>
+            <p class="text-muted">Ajoutez votre premier fournisseur pour commencer.</p>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#ajouterFournisseurModal">
+                <i class="fas fa-plus"></i> Ajouter un Fournisseur
+            </button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Modal Ajouter/Modifier Fournisseur -->
+<div class="modal fade" id="ajouterFournisseurModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus"></i> Nouveau Fournisseur
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="fournisseurForm" method="post">
+                <div class="modal-body">
+                    {% csrf_token %}
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="mb-3">
+                                <label class="form-label">Nom du fournisseur <span class="text-danger">*</span></label>
+                                <input type="text" name="nom" class="form-control" required>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Type <span class="text-danger">*</span></label>
+                                <select name="type_fournisseur" class="form-control" required>
+                                    <option value="">-- Sélectionner --</option>
+                                    <option value="ENTREPRISE">Entreprise</option>
+                                    <option value="PARTICULIER">Particulier</option>
+                                    <option value="ADMINISTRATION">Administration</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Adresse</label>
+                        <textarea name="adresse" class="form-control" rows="2"></textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Téléphone</label>
+                                <input type="tel" name="telephone" class="form-control" placeholder="+224 XXX XXX XXX">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Email</label>
+                                <input type="email" name="email" class="form-control">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-check">
+                        <input type="checkbox" name="actif" class="form-check-input" id="actif" checked>
+                        <label class="form-check-label" for="actif">
+                            Fournisseur actif
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Enregistrer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Animation des cartes
+        const supplierCards = document.querySelectorAll('.supplier-card');
+        supplierCards.forEach((card, index) => {
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(20px)';
+            setTimeout(() => {
+                card.style.transition = 'all 0.5s ease';
+                card.style.opacity = '1';
+                card.style.transform = 'translateY(0)';
+            }, index * 100);
+        });
+
+        // Animation des statistiques
+        const statsNumbers = document.querySelectorAll('.stats-number');
+        statsNumbers.forEach(stat => {
+            const finalValue = parseInt(stat.textContent);
+            let currentValue = 0;
+            const increment = Math.ceil(finalValue / 20);
+            
+            const counter = setInterval(() => {
+                currentValue += increment;
+                if (currentValue >= finalValue) {
+                    currentValue = finalValue;
+                    clearInterval(counter);
+                }
+                stat.textContent = currentValue;
+            }, 50);
+        });
+    });
+
+    function modifierFournisseur(id) {
+        // Logique pour modifier un fournisseur
+        alert('Fonctionnalité de modification en cours de développement');
+    }
+
+    function activerFournisseur(id) {
+        if (confirm('Êtes-vous sûr de vouloir activer ce fournisseur ?')) {
+            // Logique pour activer un fournisseur
+            window.location.href = `/depenses/fournisseurs/activer/${id}/`;
+        }
+    }
+
+    function desactiverFournisseur(id) {
+        if (confirm('Êtes-vous sûr de vouloir désactiver ce fournisseur ?')) {
+            // Logique pour désactiver un fournisseur
+            window.location.href = `/depenses/fournisseurs/desactiver/${id}/`;
+        }
+    }
+
+    // Gestion du formulaire d'ajout
+    document.getElementById('fournisseurForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        
+        fetch('{% url "depenses:gestion_fournisseurs" %}', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erreur lors de l\'enregistrement: ' + (data.error || 'Erreur inconnue'));
+            }
+        })
+        .catch(error => {
+            console.error('Erreur:', error);
+            alert('Erreur lors de l\'enregistrement');
+        });
+    });
+</script>
+{% endblock %}

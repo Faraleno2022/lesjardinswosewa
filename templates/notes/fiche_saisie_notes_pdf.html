@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Fiche de Saisie des Notes - {{ classe.nom }}</title>
+    <style>
+        @page {
+            size: A4 landscape;
+            margin: 0.8cm;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.35;
+        }
+        
+        .page {
+            page-break-after: always;
+            padding: 5px;
+            position: relative;
+        }
+        
+        .page:last-child {
+            page-break-after: avoid;
+        }
+        
+        /* Filigrane avec le logo de l'école */
+        .watermark {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            opacity: 0.08;
+            z-index: -1;
+            pointer-events: none;
+        }
+        
+        .watermark img {
+            width: 400px;
+            height: auto;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #333;
+            padding-bottom: 5px;
+        }
+        
+        .header-left {
+            text-align: left;
+            font-size: 11px;
+        }
+        
+        .header-center {
+            text-align: center;
+            flex: 1;
+        }
+        
+        .header-center h1 {
+            font-size: 20px;
+            color: #1a5276;
+            margin-bottom: 3px;
+        }
+        
+        .header-center h2 {
+            font-size: 15px;
+            color: #333;
+        }
+        
+        .header-right {
+            text-align: right;
+            font-size: 11px;
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+        
+        .info-row span {
+            padding: 2px 5px;
+            background: #f0f0f0;
+            border-radius: 3px;
+        }
+        
+        .periode-title {
+            background: #1a5276;
+            color: white;
+            padding: 5px 10px;
+            font-size: 15px;
+            font-weight: bold;
+            margin: 10px 0 5px 0;
+            text-align: center;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+        
+        th, td {
+            border: 1px solid #333;
+            padding: 5px 4px;
+            text-align: center;
+            font-size: 12px;
+        }
+        
+        th {
+            background: #2c3e50;
+            color: white;
+            font-weight: bold;
+            font-size: 11px;
+        }
+        
+        th.col-num {
+            width: 25px;
+        }
+        
+        th.col-prenom {
+            width: 100px;
+            text-align: left;
+        }
+        
+        th.col-nom {
+            width: 80px;
+            text-align: left;
+        }
+        
+        th.col-sexe {
+            width: 25px;
+        }
+        
+        th.col-mois {
+            width: 40px;
+        }
+        
+        th.col-moy {
+            width: 45px;
+            background: #27ae60;
+        }
+        
+        th.col-comp {
+            width: 50px;
+            background: #e74c3c;
+        }
+        
+        td.col-prenom, td.col-nom {
+            text-align: left;
+            padding-left: 3px;
+            font-size: 12px;
+        }
+        
+        tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+        
+        tr:hover {
+            background: #e8f4f8;
+        }
+        
+        .empty-cell {
+            height: 26px;
+        }
+        
+        .footer {
+            margin-top: 15px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+        }
+        
+        .signature-box {
+            border: 1px solid #333;
+            padding: 5px;
+            width: 200px;
+            text-align: center;
+        }
+        
+        .signature-box p {
+            margin-bottom: 30px;
+        }
+        
+        .note-info {
+            font-size: 11px;
+            color: #666;
+            margin-top: 5px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <!-- Filigrane avec le logo de l'école -->
+    {% if logo_base64 %}
+    <div class="watermark">
+        <img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo">
+    </div>
+    {% endif %}
+    
+    {% if system_type == 'semestre' %}
+    <!-- Page 1: 1er Semestre -->
+    <div class="page">
+        <div class="header">
+            <div class="header-left">
+                {% if ecole %}
+                <strong>{{ ecole.nom }}</strong><br>
+                {{ ecole.adresse|default:"" }}
+                {% endif %}
+            </div>
+            <div class="header-center">
+                <h1>FICHE DE SAISIE DES NOTES</h1>
+                <h2>{{ periode1_nom }}</h2>
+            </div>
+            <div class="header-right">
+                Année: <strong>{{ annee_scolaire }}</strong><br>
+                Imprimé le: {{ date_impression|date:"d/m/Y" }}
+            </div>
+        </div>
+        
+        <div class="info-row">
+            <span><strong>Classe:</strong> {{ classe.nom }}</span>
+            {% if matiere %}<span><strong>Matière:</strong> {{ matiere.nom }}</span>{% endif %}
+            <span><strong>Effectif:</strong> {{ eleves|length }} élèves</span>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th class="col-num">N°</th>
+                    <th class="col-prenom">Prénoms</th>
+                    <th class="col-nom">Nom</th>
+                    <th class="col-sexe">Sexe</th>
+                    {% for col in colonnes_periode1 %}
+                        {% if 'Moy' in col %}
+                        <th class="col-moy">{{ col }}</th>
+                        {% elif 'Comp' in col %}
+                        <th class="col-comp">{{ col }}</th>
+                        {% else %}
+                        <th class="col-mois">{{ col }}</th>
+                        {% endif %}
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for eleve in eleves %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td class="col-prenom">{{ eleve.prenom }}</td>
+                    <td class="col-nom">{{ eleve.nom }}</td>
+                    <td>{{ eleve.sexe|default:"" }}</td>
+                    {% for col in colonnes_periode1 %}
+                    <td class="empty-cell"></td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <div class="footer">
+            <div class="signature-box">
+                <p>Signature du Professeur</p>
+                <span>_________________________</span>
+            </div>
+            <div class="note-info">
+                Notes sur 20 | Moy. Cours = Moyenne des notes mensuelles
+            </div>
+            <div class="signature-box">
+                <p>Visa du Directeur</p>
+                <span>_________________________</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Page 2: 2ème Semestre -->
+    <div class="page">
+        <div class="header">
+            <div class="header-left">
+                {% if ecole %}
+                <strong>{{ ecole.nom }}</strong><br>
+                {{ ecole.adresse|default:"" }}
+                {% endif %}
+            </div>
+            <div class="header-center">
+                <h1>FICHE DE SAISIE DES NOTES</h1>
+                <h2>{{ periode2_nom }}</h2>
+            </div>
+            <div class="header-right">
+                Année: <strong>{{ annee_scolaire }}</strong><br>
+                Imprimé le: {{ date_impression|date:"d/m/Y" }}
+            </div>
+        </div>
+        
+        <div class="info-row">
+            <span><strong>Classe:</strong> {{ classe.nom }}</span>
+            {% if matiere %}<span><strong>Matière:</strong> {{ matiere.nom }}</span>{% endif %}
+            <span><strong>Effectif:</strong> {{ eleves|length }} élèves</span>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th class="col-num">N°</th>
+                    <th class="col-prenom">Prénoms</th>
+                    <th class="col-nom">Nom</th>
+                    <th class="col-sexe">Sexe</th>
+                    {% for col in colonnes_periode2 %}
+                        {% if 'Moy' in col %}
+                        <th class="col-moy">{{ col }}</th>
+                        {% elif 'Comp' in col %}
+                        <th class="col-comp">{{ col }}</th>
+                        {% else %}
+                        <th class="col-mois">{{ col }}</th>
+                        {% endif %}
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for eleve in eleves %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td class="col-prenom">{{ eleve.prenom }}</td>
+                    <td class="col-nom">{{ eleve.nom }}</td>
+                    <td>{{ eleve.sexe|default:"" }}</td>
+                    {% for col in colonnes_periode2 %}
+                    <td class="empty-cell"></td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <div class="footer">
+            <div class="signature-box">
+                <p>Signature du Professeur</p>
+                <span>_________________________</span>
+            </div>
+            <div class="note-info">
+                Notes sur 20 | Moy. Cours = Moyenne des notes mensuelles
+            </div>
+            <div class="signature-box">
+                <p>Visa du Directeur</p>
+                <span>_________________________</span>
+            </div>
+        </div>
+    </div>
+    
+    {% else %}
+    <!-- Système Trimestriel -->
+    
+    <!-- Page 1: 1er Trimestre -->
+    <div class="page">
+        <div class="header">
+            <div class="header-left">
+                {% if ecole %}
+                <strong>{{ ecole.nom }}</strong><br>
+                {{ ecole.adresse|default:"" }}
+                {% endif %}
+            </div>
+            <div class="header-center">
+                <h1>FICHE DE SAISIE DES NOTES</h1>
+                <h2>{{ periode1_nom }}</h2>
+            </div>
+            <div class="header-right">
+                Année: <strong>{{ annee_scolaire }}</strong><br>
+                Imprimé le: {{ date_impression|date:"d/m/Y" }}
+            </div>
+        </div>
+        
+        <div class="info-row">
+            <span><strong>Classe:</strong> {{ classe.nom }}</span>
+            {% if matiere %}<span><strong>Matière:</strong> {{ matiere.nom }}</span>{% endif %}
+            <span><strong>Effectif:</strong> {{ eleves|length }} élèves</span>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th class="col-num">N°</th>
+                    <th class="col-prenom">Prénoms</th>
+                    <th class="col-nom">Nom</th>
+                    <th class="col-sexe">Sexe</th>
+                    {% for col in colonnes_periode1 %}
+                        {% if 'Moy' in col %}
+                        <th class="col-moy">{{ col }}</th>
+                        {% elif 'Comp' in col %}
+                        <th class="col-comp">{{ col }}</th>
+                        {% else %}
+                        <th class="col-mois">{{ col }}</th>
+                        {% endif %}
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for eleve in eleves %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td class="col-prenom">{{ eleve.prenom }}</td>
+                    <td class="col-nom">{{ eleve.nom }}</td>
+                    <td>{{ eleve.sexe|default:"" }}</td>
+                    {% for col in colonnes_periode1 %}
+                    <td class="empty-cell"></td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <div class="footer">
+            <div class="signature-box">
+                <p>Signature du Professeur</p>
+                <span>_________________________</span>
+            </div>
+            <div class="note-info">
+                Notes sur 20 | Moy. Cours = Moyenne des notes mensuelles
+            </div>
+            <div class="signature-box">
+                <p>Visa du Directeur</p>
+                <span>_________________________</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Page 2: 2ème Trimestre -->
+    <div class="page">
+        <div class="header">
+            <div class="header-left">
+                {% if ecole %}
+                <strong>{{ ecole.nom }}</strong><br>
+                {{ ecole.adresse|default:"" }}
+                {% endif %}
+            </div>
+            <div class="header-center">
+                <h1>FICHE DE SAISIE DES NOTES</h1>
+                <h2>{{ periode2_nom }}</h2>
+            </div>
+            <div class="header-right">
+                Année: <strong>{{ annee_scolaire }}</strong><br>
+                Imprimé le: {{ date_impression|date:"d/m/Y" }}
+            </div>
+        </div>
+        
+        <div class="info-row">
+            <span><strong>Classe:</strong> {{ classe.nom }}</span>
+            {% if matiere %}<span><strong>Matière:</strong> {{ matiere.nom }}</span>{% endif %}
+            <span><strong>Effectif:</strong> {{ eleves|length }} élèves</span>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th class="col-num">N°</th>
+                    <th class="col-prenom">Prénoms</th>
+                    <th class="col-nom">Nom</th>
+                    <th class="col-sexe">Sexe</th>
+                    {% for col in colonnes_periode2 %}
+                        {% if 'Moy' in col %}
+                        <th class="col-moy">{{ col }}</th>
+                        {% elif 'Comp' in col %}
+                        <th class="col-comp">{{ col }}</th>
+                        {% else %}
+                        <th class="col-mois">{{ col }}</th>
+                        {% endif %}
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for eleve in eleves %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td class="col-prenom">{{ eleve.prenom }}</td>
+                    <td class="col-nom">{{ eleve.nom }}</td>
+                    <td>{{ eleve.sexe|default:"" }}</td>
+                    {% for col in colonnes_periode2 %}
+                    <td class="empty-cell"></td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <div class="footer">
+            <div class="signature-box">
+                <p>Signature du Professeur</p>
+                <span>_________________________</span>
+            </div>
+            <div class="note-info">
+                Notes sur 20 | Moy. Cours = Moyenne des notes mensuelles
+            </div>
+            <div class="signature-box">
+                <p>Visa du Directeur</p>
+                <span>_________________________</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Page 3: 3ème Trimestre -->
+    <div class="page">
+        <div class="header">
+            <div class="header-left">
+                {% if ecole %}
+                <strong>{{ ecole.nom }}</strong><br>
+                {{ ecole.adresse|default:"" }}
+                {% endif %}
+            </div>
+            <div class="header-center">
+                <h1>FICHE DE SAISIE DES NOTES</h1>
+                <h2>{{ periode3_nom }}</h2>
+            </div>
+            <div class="header-right">
+                Année: <strong>{{ annee_scolaire }}</strong><br>
+                Imprimé le: {{ date_impression|date:"d/m/Y" }}
+            </div>
+        </div>
+        
+        <div class="info-row">
+            <span><strong>Classe:</strong> {{ classe.nom }}</span>
+            {% if matiere %}<span><strong>Matière:</strong> {{ matiere.nom }}</span>{% endif %}
+            <span><strong>Effectif:</strong> {{ eleves|length }} élèves</span>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th class="col-num">N°</th>
+                    <th class="col-prenom">Prénoms</th>
+                    <th class="col-nom">Nom</th>
+                    <th class="col-sexe">Sexe</th>
+                    {% for col in colonnes_periode3 %}
+                        {% if 'Moy' in col %}
+                        <th class="col-moy">{{ col }}</th>
+                        {% elif 'Comp' in col %}
+                        <th class="col-comp">{{ col }}</th>
+                        {% else %}
+                        <th class="col-mois">{{ col }}</th>
+                        {% endif %}
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for eleve in eleves %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td class="col-prenom">{{ eleve.prenom }}</td>
+                    <td class="col-nom">{{ eleve.nom }}</td>
+                    <td>{{ eleve.sexe|default:"" }}</td>
+                    {% for col in colonnes_periode3 %}
+                    <td class="empty-cell"></td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <div class="footer">
+            <div class="signature-box">
+                <p>Signature du Professeur</p>
+                <span>_________________________</span>
+            </div>
+            <div class="note-info">
+                Notes sur 20 | Moy. Cours = Moyenne des notes mensuelles
+            </div>
+            <div class="signature-box">
+                <p>Visa du Directeur</p>
+                <span>_________________________</span>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</body>
+</html>

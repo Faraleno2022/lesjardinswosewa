@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}Alertes d'absences{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h2 class="mb-0"><i class="fas fa-bell text-danger me-2"></i>Alertes d'absences consécutives</h2>
+        <div>
+            <a href="{% url 'presence:pointage' %}" class="btn btn-outline-primary"><i class="fas fa-clipboard-check me-1"></i>Pointage</a>
+            <a href="{% url 'presence:rapport' %}" class="btn btn-outline-info"><i class="fas fa-chart-bar me-1"></i>Rapport</a>
+        </div>
+    </div>
+
+    <form method="get" class="row g-2 align-items-end mb-3">
+        <div class="col-auto">
+            <label class="form-label">Seuil (absences consécutives)</label>
+            <input type="number" name="seuil" value="{{ seuil }}" min="2" class="form-control" style="width:120px" onchange="this.form.submit()">
+        </div>
+    </form>
+
+    {% if alertes %}
+    <div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-1"></i><strong>{{ alertes|length }}</strong> élève(s) absent(s) au moins {{ seuil }} jours d'affilée.</div>
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr><th>N°</th><th>Matricule</th><th>Élève</th><th>Classe</th><th>Absences consécutives</th><th></th></tr>
+                </thead>
+                <tbody>
+                    {% for a in alertes %}
+                    <tr>
+                        <td>{{ forloop.counter }}</td>
+                        <td>{{ a.eleve.matricule }}</td>
+                        <td>{{ a.eleve.prenom }} <strong>{{ a.eleve.nom }}</strong></td>
+                        <td>{{ a.eleve.classe.nom }}</td>
+                        <td><span class="badge bg-danger fs-6">{{ a.consecutives }} jours</span></td>
+                        <td><a href="{% url 'presence:rapport' %}?classe_id={{ a.eleve.classe_id }}" class="btn btn-sm btn-outline-info">Voir la classe</a></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-success"><i class="fas fa-check-circle me-1"></i>Aucune alerte : aucun élève n'atteint {{ seuil }} absences consécutives.</div>
+    {% endif %}
+</div>
+{% endblock %}

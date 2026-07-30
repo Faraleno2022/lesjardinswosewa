@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+
+{% block title %}Fonctionnalités - MySchoolGN Guinée{% endblock %}
+{% block meta_description %}MySchoolGN est conçu pour les réalités des écoles guinéennes : paiements, bulletins, absences, communication parents, enseignants, offline et Mobile Money.{% endblock %}
+
+{% block content %}
+<section class="container py-5">
+  <div class="row align-items-center g-4 mb-5">
+    <div class="col-lg-8">
+      <span class="badge text-bg-primary mb-3">Conçu pour la Guinée</span>
+      <h1 class="text-primary fw-bold">Le système de gestion scolaire adapté aux réalités des écoles guinéennes</h1>
+      <p class="lead text-muted mb-0">
+        MySchoolGN aide les écoles privées, groupes scolaires et centres de formation à mieux suivre les paiements,
+        produire des bulletins professionnels, communiquer avec les parents et travailler même avec une connexion instable.
+      </p>
+    </div>
+    <div class="col-lg-4">
+      <div class="card shadow-sm border-primary">
+        <div class="card-body">
+          <h2 class="h5">Objectif produit</h2>
+          <p class="text-muted mb-0">Une secrétaire doit comprendre l'essentiel en une journée, et le directeur doit voir la situation de l'école en quelques secondes.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-5">
+    <div class="col-lg-4">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <i class="fas fa-money-bill-wave text-success fs-2 mb-3"></i>
+          <h2 class="h4">Gestion financière ultra forte</h2>
+          <ul class="text-muted mb-0">
+            <li>Paiements par tranche et historique complet</li>
+            <li>Solde automatique et situation par élève</li>
+            <li>Alertes impayés, remises, bourses et pénalités</li>
+            <li>Reçus PDF et prévisions de recettes</li>
+            <li>Préparation Orange Money, Wave et MTN MoMo</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <i class="fas fa-file-signature text-primary fs-2 mb-3"></i>
+          <h2 class="h4">Bulletins professionnels</h2>
+          <ul class="text-muted mb-0">
+            <li>Moyennes, rangs et classements automatiques</li>
+            <li>Modèles modernes pour impression PDF</li>
+            <li>Graphiques d'évolution et appréciations</li>
+            <li>QR Code de vérification en ligne</li>
+            <li>Signature numérique de l'établissement</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <i class="fas fa-wifi text-warning fs-2 mb-3"></i>
+          <h2 class="h4">Cloud, offline et hybride</h2>
+          <ul class="text-muted mb-0">
+            <li>Version en ligne pour accès partout</li>
+            <li>Installation locale pour écoles sans Internet stable</li>
+            <li>Déploiement hybride selon l'organisation</li>
+            <li>Licence adaptée à l'école ou distribuable</li>
+            <li>Sauvegardes et reprise plus simples</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-5">
+    <div class="col-md-6 col-lg-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <h3 class="h5"><i class="fas fa-users text-primary me-2"></i>Élèves</h3>
+          <p class="text-muted mb-0">Inscriptions, dossiers, classes, cartes scolaires, années scolaires et statistiques d'effectifs.</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <h3 class="h5"><i class="fas fa-user-check text-success me-2"></i>Présence</h3>
+          <p class="text-muted mb-0">Absences, retards, discipline, sanctions, convocations et suivi du comportement.</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <h3 class="h5"><i class="fas fa-chalkboard-teacher text-info me-2"></i>Enseignants</h3>
+          <p class="text-muted mb-0">Salaires, présences, heures enseignées, cahier de texte numérique et performance.</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body">
+          <h3 class="h5"><i class="fas fa-comments text-danger me-2"></i>Parents</h3>
+          <p class="text-muted mb-0">Rapports scolaires, échéances de paiement, notifications SMS/WhatsApp et suivi des notes.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm bg-light border-0">
+    <div class="card-body p-4 d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3">
+      <div>
+        <h2 class="h4 mb-1">La priorité : rendre la gestion réelle de l'école simple</h2>
+        <p class="text-muted mb-0">Paiements, bulletins, parents et direction : tout doit être clair, rapide et professionnel.</p>
+      </div>
+      <a href="{% url 'demo' %}" class="btn btn-primary btn-lg">
+        <i class="fas fa-calendar-check me-2"></i>Demander une démonstration
+      </a>
+    </div>
+  </div>
+</section>
+{% endblock %}

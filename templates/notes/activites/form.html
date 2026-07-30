@@ -1,0 +1,377 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% if mode == 'modifier' %}Modifier{% else %}Ajouter{% endif %} une observation{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-container {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    .form-card {
+        background: #fff;
+        border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,.1);
+        padding: 2rem;
+    }
+    .page-header-form {
+        background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+        color: white;
+        padding: 1.5rem 2rem;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+    }
+    .pj-existing {
+        display: inline-flex;
+        align-items: center;
+        gap: .5rem;
+        padding: .3rem .7rem;
+        background: #f5f5f5;
+        border-radius: 8px;
+        margin: .25rem;
+    }
+    .pj-existing img {
+        width: 40px;
+        height: 40px;
+        object-fit: cover;
+        border-radius: 4px;
+    }
+    .preview-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+        margin-top: .5rem;
+    }
+    .preview-container img {
+        width: 80px;
+        height: 80px;
+        object-fit: cover;
+        border-radius: 8px;
+        border: 2px solid #e0e0e0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container form-container">
+
+    <div class="page-header-form">
+        <h2 class="mb-0">
+            <i class="fas fa-{% if mode == 'modifier' %}edit{% else %}plus-circle{% endif %} me-2"></i>
+            {% if mode == 'modifier' %}Modifier l'observation{% else %}Nouvelle observation de vie scolaire{% endif %}
+        </h2>
+    </div>
+
+    <div class="form-card">
+        <form method="post" enctype="multipart/form-data" id="activiteForm">
+            {% csrf_token %}
+
+            {% if form.errors or pj_form.errors %}
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle me-1"></i>
+                Veuillez corriger les erreurs ci-dessous.
+                {{ form.errors }}
+                {{ pj_form.errors }}
+            </div>
+            {% endif %}
+
+            <div class="row g-3">
+                <!-- Classe -->
+                <div class="col-md-6">
+                    <label for="{{ form.classe.id_for_label }}" class="form-label fw-bold">
+                        <i class="fas fa-school me-1 text-primary"></i> Classe
+                    </label>
+                    {{ form.classe }}
+                </div>
+
+                <!-- Élève -->
+                <div class="col-md-6">
+                    <label for="{{ form.eleve.id_for_label }}" class="form-label fw-bold">
+                        <i class="fas fa-user-graduate me-1 text-success"></i> Élève
+                    </label>
+                    {{ form.eleve }}
+                    <div id="eleve-loading" class="text-muted small d-none">
+                        <i class="fas fa-spinner fa-spin"></i> Chargement des élèves...
+                    </div>
+                </div>
+
+                <!-- Date -->
+                <div class="col-md-4">
+                    <label for="{{ form.date.id_for_label }}" class="form-label fw-bold">
+                        <i class="fas fa-calendar me-1 text-danger"></i> Date
+                    </label>
+                    {{ form.date }}
+                </div>
+
+                <!-- Type -->
+                <div class="col-md-4">
+                    <label for="{{ form.type_activite.id_for_label }}" class="form-label fw-bold">
+                        <i class="fas fa-tag me-1 text-warning"></i> Type d'observation
+                    </label>
+                    {{ form.type_activite }}
+                </div>
+
+                <!-- Appréciation -->
+                <div class="col-md-4">
+                    <label for="{{ form.appreciation.id_for_label }}" class="form-label fw-bold">
+                        <i class="fas fa-star me-1 text-info"></i> Appréciation
+                    </label>
+                    {{ form.appreciation }}
+                </div>
+
+                <!-- Titre -->
+                <div class="col-12">
+                    <label for="{{ form.titre.id_for_label }}" class="form-label fw-bold">
+                        <i class="fas fa-heading me-1"></i> Titre
+                    </label>
+                    {{ form.titre }}
+                </div>
+
+                <!-- Description -->
+                <div class="col-12">
+                    <label for="{{ form.description.id_for_label }}" class="form-label fw-bold">
+                        <i class="fas fa-align-left me-1"></i> Description / Observation
+                    </label>
+                    {{ form.description }}
+                </div>
+
+                <!-- Pièces jointes existantes (en mode modification) -->
+                {% if activite and activite.pieces_jointes.count > 0 %}
+                <div class="col-12">
+                    <label class="form-label fw-bold">
+                        <i class="fas fa-paperclip me-1"></i> Pièces jointes existantes
+                    </label>
+                    <div class="d-flex flex-wrap gap-2">
+                        {% for pj in activite.pieces_jointes.all %}
+                        <div class="pj-existing" id="pj-{{ pj.pk }}">
+                            {% if pj.is_image %}
+                            <img src="{{ pj.fichier.url }}" alt="{{ pj.legende }}">
+                            {% else %}
+                            <i class="fas fa-file fa-2x text-muted"></i>
+                            {% endif %}
+                            <span class="small">{{ pj.legende|truncatechars:20 }}</span>
+                            <button type="button" class="btn btn-sm btn-outline-danger btn-delete-pj"
+                                    data-pj-id="{{ pj.pk }}" title="Supprimer">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Nouvelles pièces jointes -->
+                <div class="col-12">
+                    <label class="form-label fw-bold">
+                        <i class="fas fa-upload me-1 text-secondary"></i> {{ pj_form.fichiers.label }}
+                    </label>
+                    {{ pj_form.fichiers }}
+                    <div class="form-text">Justificatif d'absence, convocation, photo ou document utile... (max 10 Mo par fichier)</div>
+
+                    <!-- Déclencheur caméra -->
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        <button type="button" class="btn btn-outline-primary" id="btn-camera">
+                            <i class="fas fa-camera me-1"></i> Prendre une photo
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary d-none" id="btn-camera-stop">
+                            <i class="fas fa-stop me-1"></i> Arrêter la caméra
+                        </button>
+                    </div>
+                    <input type="file" accept="image/*" capture="environment" id="camera-capture" class="d-none">
+
+                    <!-- Zone caméra live (desktop / fallback getUserMedia) -->
+                    <div id="camera-live" class="mt-3 d-none">
+                        <video id="camera-video" autoplay playsinline
+                               style="width:100%;max-width:480px;border-radius:10px;background:#000;"></video>
+                        <div class="mt-2">
+                            <button type="button" class="btn btn-success" id="btn-camera-shoot">
+                                <i class="fas fa-circle me-1"></i> Capturer
+                            </button>
+                        </div>
+                        <canvas id="camera-canvas" class="d-none"></canvas>
+                    </div>
+
+                    <div class="preview-container" id="preview-container"></div>
+                </div>
+            </div>
+
+            <hr>
+            <div class="d-flex justify-content-between">
+                <a href="{% url 'notes:liste_activites' %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i> Annuler
+                </a>
+                <button type="submit" class="btn btn-primary btn-lg">
+                    <i class="fas fa-save me-1"></i>
+                    {% if mode == 'modifier' %}Enregistrer{% else %}Ajouter l'observation{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const classeSelect = document.getElementById('id_classe');
+    const eleveSelect = document.getElementById('id_eleve');
+    const loadingDiv = document.getElementById('eleve-loading');
+
+    // Chargement AJAX des élèves quand la classe change
+    if (classeSelect) {
+        classeSelect.addEventListener('change', function() {
+            const classeId = this.value;
+            eleveSelect.innerHTML = '<option value="">---------</option>';
+            if (!classeId) return;
+
+            loadingDiv.classList.remove('d-none');
+            fetch(`{% url 'notes:api_eleves_classe_activite' %}?classe_id=${classeId}`)
+                .then(r => r.json())
+                .then(data => {
+                    data.forEach(e => {
+                        const opt = document.createElement('option');
+                        opt.value = e.id;
+                        opt.textContent = `${e.nom} ${e.prenom} (${e.matricule || ''})`;
+                        eleveSelect.appendChild(opt);
+                    });
+                    loadingDiv.classList.add('d-none');
+                })
+                .catch(() => loadingDiv.classList.add('d-none'));
+        });
+    }
+
+    // Prévisualisation des fichiers
+    const fileInput = document.querySelector('input[name="fichiers"]');
+    const previewContainer = document.getElementById('preview-container');
+    if (fileInput) {
+        fileInput.addEventListener('change', function() {
+            previewContainer.innerHTML = '';
+            Array.from(this.files).forEach(file => {
+                if (file.type.startsWith('image/')) {
+                    const reader = new FileReader();
+                    reader.onload = e => {
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        previewContainer.appendChild(img);
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    const div = document.createElement('div');
+                    div.className = 'badge bg-secondary p-2';
+                    div.textContent = file.name;
+                    previewContainer.appendChild(div);
+                }
+            });
+        });
+    }
+
+    // ===== Déclenchement caméra =====
+    const btnCamera = document.getElementById('btn-camera');
+    const btnCameraStop = document.getElementById('btn-camera-stop');
+    const btnCameraShoot = document.getElementById('btn-camera-shoot');
+    const cameraCapture = document.getElementById('camera-capture');
+    const cameraLive = document.getElementById('camera-live');
+    const cameraVideo = document.getElementById('camera-video');
+    const cameraCanvas = document.getElementById('camera-canvas');
+    let cameraStream = null;
+
+    function isMobile() {
+        return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    }
+
+    function addFileToInput(file) {
+        if (!fileInput) return;
+        const dt = new DataTransfer();
+        Array.from(fileInput.files || []).forEach(f => dt.items.add(f));
+        dt.items.add(file);
+        fileInput.files = dt.files;
+        fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function stopCameraStream() {
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(t => t.stop());
+            cameraStream = null;
+        }
+        cameraLive.classList.add('d-none');
+        btnCameraStop.classList.add('d-none');
+        btnCamera.classList.remove('d-none');
+    }
+
+    if (btnCamera) {
+        btnCamera.addEventListener('click', async function() {
+            if (isMobile() || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                cameraCapture.click();
+                return;
+            }
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' },
+                    audio: false
+                });
+                cameraVideo.srcObject = cameraStream;
+                cameraLive.classList.remove('d-none');
+                btnCameraStop.classList.remove('d-none');
+                btnCamera.classList.add('d-none');
+            } catch (err) {
+                console.warn('getUserMedia indisponible, fallback input capture', err);
+                cameraCapture.click();
+            }
+        });
+    }
+
+    if (btnCameraStop) {
+        btnCameraStop.addEventListener('click', stopCameraStream);
+    }
+
+    if (btnCameraShoot) {
+        btnCameraShoot.addEventListener('click', function() {
+            if (!cameraStream) return;
+            const w = cameraVideo.videoWidth;
+            const h = cameraVideo.videoHeight;
+            cameraCanvas.width = w;
+            cameraCanvas.height = h;
+            cameraCanvas.getContext('2d').drawImage(cameraVideo, 0, 0, w, h);
+            cameraCanvas.toBlob(blob => {
+                if (!blob) return;
+                const ts = new Date().toISOString().replace(/[:.]/g, '-');
+                const file = new File([blob], `photo-${ts}.jpg`, { type: 'image/jpeg' });
+                addFileToInput(file);
+                stopCameraStream();
+            }, 'image/jpeg', 0.92);
+        });
+    }
+
+    if (cameraCapture) {
+        cameraCapture.addEventListener('change', function() {
+            if (this.files && this.files[0]) {
+                addFileToInput(this.files[0]);
+                this.value = '';
+            }
+        });
+    }
+
+    // Suppression de PJ existante (AJAX)
+    document.querySelectorAll('.btn-delete-pj').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const pjId = this.dataset.pjId;
+            if (!confirm('Supprimer cette pièce jointe ?')) return;
+            fetch(`/notes/activites/pj/${pjId}/supprimer/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById(`pj-${pjId}`).remove();
+                }
+            });
+        });
+    });
+});
+</script>
+{% endblock %}

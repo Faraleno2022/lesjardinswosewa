@@ -1,0 +1,212 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-container {
+        background: #ffffff;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        padding: 2rem;
+    }
+    .form-section {
+        border-bottom: 1px solid #e9ecef;
+        padding-bottom: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    .form-section:last-child {
+        border-bottom: none;
+        margin-bottom: 0;
+    }
+    .section-title {
+        color: #2c3e50;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        font-size: 1.1rem;
+    }
+    .required-field {
+        color: #dc3545;
+    }
+    .form-help {
+        font-size: 0.875rem;
+        color: #6c757d;
+        margin-top: 0.25rem;
+    }
+    .montant-display {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 4px;
+        padding: 0.5rem;
+        margin-top: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- En-tête -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">{{ title }}</h1>
+            <p class="text-muted mb-0">
+                {% if depense %}
+                Modification de la dépense {{ depense.numero_facture }}
+                {% else %}
+                Saisie d'une nouvelle dépense
+                {% endif %}
+            </p>
+        </div>
+        <div>
+            <a href="{% url 'depenses:liste_depenses' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Retour à la liste
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="form-container">
+                <form method="post" id="depenseForm">
+                    {% csrf_token %}
+                    
+                    <!-- Formulaire simplifié -->
+                    <div class="form-section">
+                        <h5 class="section-title">
+                            <i class="fas fa-receipt"></i> Enregistrer une dépense
+                        </h5>
+                        
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="{{ form.date_facture.id_for_label }}" class="form-label">
+                                        {{ form.date_facture.label }} <span class="required-field">*</span>
+                                    </label>
+                                    {{ form.date_facture }}
+                                    {% if form.date_facture.errors %}
+                                        <div class="text-danger mt-1">{{ form.date_facture.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-8">
+                                <div class="mb-3">
+                                    <label for="{{ form.montant_ht.id_for_label }}" class="form-label">
+                                        {{ form.montant_ht.label }} <span class="required-field">*</span>
+                                    </label>
+                                    {{ form.montant_ht }}
+                                    {% if form.montant_ht.errors %}
+                                        <div class="text-danger mt-1">{{ form.montant_ht.errors.0 }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="{{ form.description.id_for_label }}" class="form-label">
+                                {{ form.description.label }} <span class="required-field">*</span>
+                            </label>
+                            {{ form.description }}
+                            {% if form.description.errors %}
+                                <div class="text-danger mt-1">{{ form.description.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Erreurs générales du formulaire -->
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {{ form.non_field_errors }}
+                        </div>
+                    {% endif %}
+
+                    <!-- Boutons d'action -->
+                    <div class="d-flex justify-content-between">
+                        <a href="{% url 'depenses:liste_depenses' %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-times"></i> Annuler
+                        </a>
+                        <button type="submit" class="btn btn-outline-secondary">
+                            <i class="fas fa-save"></i> 
+                            {% if depense %}Modifier{% else %}Enregistrer{% endif %}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const montantHtField = document.getElementById('{{ form.montant_ht.id_for_label }}');
+        const descriptionField = document.getElementById('{{ form.description.id_for_label }}');
+        const dateFactureField = document.getElementById('{{ form.date_facture.id_for_label }}');
+
+        // Animation du formulaire
+        const formSections = document.querySelectorAll('.form-section');
+        formSections.forEach((section, index) => {
+            section.style.opacity = '0';
+            section.style.transform = 'translateY(20px)';
+            setTimeout(() => {
+                section.style.transition = 'all 0.5s ease';
+                section.style.opacity = '1';
+                section.style.transform = 'translateY(0)';
+            }, index * 200);
+        });
+
+        // Validation côté client
+        const form = document.getElementById('depenseForm');
+        form.addEventListener('submit', function(e) {
+            const montant = parseFloat(montantHtField.value);
+            if (!montant || montant <= 0) {
+                e.preventDefault();
+                alert('Le montant doit être supérieur à 0.');
+                montantHtField.focus();
+                return;
+            }
+
+            const description = descriptionField.value.trim();
+            if (!description) {
+                e.preventDefault();
+                alert('La description est obligatoire.');
+                descriptionField.focus();
+                return;
+            }
+
+            const dateFacture = dateFactureField.value;
+            if (!dateFacture) {
+                e.preventDefault();
+                alert('La date est obligatoire.');
+                dateFactureField.focus();
+                return;
+            }
+        });
+
+        // Définir la date d'aujourd'hui par défaut
+        if (!dateFactureField.value) {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            dateFactureField.value = `${year}-${month}-${day}`;
+        }
+
+        // Focus automatique sur la description après sélection de la date
+        dateFactureField.addEventListener('change', function() {
+            if (this.value) {
+                descriptionField.focus();
+            }
+        });
+
+        // Focus automatique sur le montant après saisie de la description
+        descriptionField.addEventListener('blur', function() {
+            if (this.value.trim()) {
+                montantHtField.focus();
+            }
+        });
+    });
+</script>
+{% endblock %}

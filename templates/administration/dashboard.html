@@ -1,0 +1,302 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .stat-card h3 {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+    
+    .stat-card p {
+        margin: 0;
+        opacity: 0.9;
+    }
+    
+    .maintenance-alert {
+        background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+        color: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    
+    .log-item {
+        border-left: 4px solid #007bff;
+        padding: 10px 15px;
+        margin-bottom: 10px;
+        background: #f8f9fa;
+        border-radius: 0 5px 5px 0;
+    }
+    
+    .log-item.DELETE {
+        border-left-color: #dc3545;
+    }
+    
+    .log-item.ERROR {
+        border-left-color: #ffc107;
+    }
+    
+    .log-item.LOGIN {
+        border-left-color: #28a745;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="mb-4">
+                <i class="fas fa-tachometer-alt text-primary"></i>
+                {{ titre_page }}
+            </h1>
+        </div>
+    </div>
+    
+    <!-- Mode maintenance -->
+    {% if maintenance_mode and maintenance_mode.is_active %}
+    <div class="row">
+        <div class="col-12">
+            <div class="maintenance-alert">
+                <h4><i class="fas fa-tools"></i> Mode maintenance actif</h4>
+                <p>{{ maintenance_mode.message }}</p>
+                <small>Activé le {{ maintenance_mode.activated_at|date:"d/m/Y à H:i" }} par {{ maintenance_mode.activated_by }}</small>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Statistiques -->
+    <div class="row">
+        <div class="col-md-2">
+            <div class="stat-card">
+                <h3>{{ stats.total_users }}</h3>
+                <p><i class="fas fa-users"></i> Utilisateurs</p>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="stat-card">
+                <h3>{{ stats.total_eleves }}</h3>
+                <p><i class="fas fa-user-graduate"></i> Élèves</p>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="stat-card">
+                <h3>{{ stats.total_ecoles }}</h3>
+                <p><i class="fas fa-school"></i> Écoles</p>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="stat-card">
+                <h3>{{ stats.total_paiements }}</h3>
+                <p><i class="fas fa-money-bill"></i> Paiements</p>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="stat-card">
+                <h3>{{ stats.users_actifs }}</h3>
+                <p><i class="fas fa-user-check"></i> Actifs</p>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="stat-card">
+                <h3>{{ stats.paiements_mois }}</h3>
+                <p><i class="fas fa-calendar-month"></i> Ce mois</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <!-- Actions rapides -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-bolt"></i> Actions rapides</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <a href="{% url 'administration:users_management' %}" class="btn btn-primary">
+                            <i class="fas fa-users-cog"></i> Gestion des utilisateurs
+                        </a>
+                        <a href="{% url 'utilisateurs:comptable_create' %}" class="btn btn-success">
+                            <i class="fas fa-user-plus"></i> Créer un Comptable
+                        </a>
+                        <a href="{% url 'utilisateurs:gestion_permissions' %}" class="btn btn-outline-primary">
+                            <i class="fas fa-key"></i> Gestion des permissions
+                        </a>
+                        <a href="{% url 'administration:system_stats' %}" class="btn btn-info">
+                            <i class="fas fa-chart-bar"></i> Statistiques détaillées
+                        </a>
+                        {% if user.is_superuser %}
+                        <a href="{% url 'administration:system_logs' %}" class="btn btn-secondary">
+                            <i class="fas fa-list-alt"></i> Consulter les logs
+                        </a>
+                        {% endif %}
+                        
+                        <!-- Mode maintenance -->
+                        <form method="post" action="{% url 'administration:toggle_maintenance' %}" class="mt-2">
+                            {% csrf_token %}
+                            {% if maintenance_mode and maintenance_mode.is_active %}
+                                <input type="hidden" name="action" value="deactivate">
+                                <button type="submit" class="btn btn-success w-100">
+                                    <i class="fas fa-play"></i> Désactiver la maintenance
+                                </button>
+                            {% else %}
+                                <input type="hidden" name="action" value="activate">
+                                <input type="text" name="message" class="form-control mb-2" 
+                                       placeholder="Message de maintenance (optionnel)"
+                                       value="Le système est en maintenance. Veuillez réessayer plus tard.">
+                                <button type="submit" class="btn btn-warning w-100">
+                                    <i class="fas fa-pause"></i> Activer la maintenance
+                                </button>
+                            {% endif %}
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Logs récents -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-history"></i> Activité récente</h5>
+                </div>
+                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    {% for log in recent_logs %}
+                    <div class="log-item {{ log.action }}">
+                        <div class="d-flex justify-content-between">
+                            <strong>{{ log.get_action_display }}</strong>
+                            <small class="text-muted">{{ log.timestamp|date:"d/m H:i" }}</small>
+                        </div>
+                        <div>{{ log.description }}</div>
+                        {% if log.user %}
+                        <small class="text-muted">Par {{ log.user.get_full_name|default:log.user.username }}</small>
+                        {% endif %}
+                    </div>
+                    {% empty %}
+                    <p class="text-muted">Aucune activité récente.</p>
+                    {% endfor %}
+                    
+                    {% if recent_logs and user.is_superuser %}
+                        <div class="text-center mt-3">
+                            <a href="{% url 'administration:system_logs' %}" class="btn btn-sm btn-outline-primary">
+                                Voir tous les logs
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Demandes d'école en attente -->
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-school text-warning"></i> Demandes d'école en attente</h5>
+                    <span class="badge bg-warning text-dark">{{ pending_count }} en attente</span>
+                </div>
+                <div class="card-body" style="max-height: 320px; overflow-y: auto;">
+                    {% if pending_schools %}
+                        <table class="table table-sm align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Nom</th>
+                                    <th>Directeur</th>
+                                    <th>Téléphone</th>
+                                    <th>Email</th>
+                                    <th>Soumise le</th>
+                                    <th>Soumise par</th>
+                                    <th class="text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for e in pending_schools %}
+                                <tr>
+                                    <td>{{ e.nom }}</td>
+                                    <td>{{ e.directeur }}</td>
+                                    <td>{{ e.telephone }}</td>
+                                    <td>{{ e.email|default:'—' }}</td>
+                                    <td>{{ e.date_creation|date:'d/m/Y H:i' }}</td>
+                                    <td>
+                                        {% if e.created_by %}
+                                            {{ e.created_by.get_full_name|default:e.created_by.username }}
+                                        {% else %}
+                                            —
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="d-inline-flex gap-2">
+                                            <form method="post" action="{% url 'administration:valider_ecole' e.id %}" class="d-inline">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn-sm btn-success btn-validate">
+                                                    <i class="fas fa-check"></i>
+                                                </button>
+                                            </form>
+                                            <form method="post" action="{% url 'administration:rejeter_ecole' e.id %}" class="d-inline">
+                                                {% csrf_token %}
+                                                <button type="submit" class="btn btn-sm btn-outline-danger btn-reject">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        <div class="text-muted small">Validez ou rejetez les écoles depuis l'administration des écoles.</div>
+                    {% else %}
+                        <p class="text-muted mb-0">Aucune demande d'école en attente.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Confirmation pour le mode maintenance
+    $('form[action*="toggle_maintenance"]').on('submit', function(e) {
+        const action = $(this).find('input[name="action"]').val();
+        const message = action === 'activate' ? 
+            'Êtes-vous sûr de vouloir activer le mode maintenance ?' :
+            'Êtes-vous sûr de vouloir désactiver le mode maintenance ?';
+        
+        if (!confirm(message)) {
+            e.preventDefault();
+        }
+    });
+
+    // Confirmations pour valider/rejeter une école
+    $('.btn-validate').on('click', function(e) {
+        if (!confirm('Valider cette école ?')) {
+            e.preventDefault();
+        }
+    });
+    $('.btn-reject').on('click', function(e) {
+        if (!confirm("Rejeter cette école ?")) {
+            e.preventDefault();
+        }
+    });
+});
+</script>
+{% endblock %}

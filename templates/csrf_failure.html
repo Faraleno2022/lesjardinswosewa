@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Session expirée — MySchoolGN</title>
+    <style>
+        :root { color-scheme: light dark; }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; min-height: 100vh;
+            display: flex; align-items: center; justify-content: center;
+            font-family: "Segoe UI", Roboto, system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #eef2ff 0%, #f8fafc 100%);
+            color: #1e293b; padding: 1.5rem;
+        }
+        .card {
+            background: #fff; border-radius: 18px; max-width: 480px; width: 100%;
+            padding: 2.5rem 2rem; text-align: center;
+            box-shadow: 0 20px 45px rgba(30, 41, 59, .12);
+            border: 1px solid #e2e8f0;
+        }
+        .icon {
+            width: 76px; height: 76px; margin: 0 auto 1.25rem;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            background: #fef3c7; color: #d97706; font-size: 2.2rem;
+        }
+        h1 { font-size: 1.4rem; margin: 0 0 .6rem; color: #0f172a; }
+        p { font-size: 1rem; line-height: 1.55; color: #475569; margin: 0 0 1.6rem; }
+        .actions { display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; }
+        .btn {
+            display: inline-flex; align-items: center; gap: .5rem;
+            padding: .7rem 1.4rem; border-radius: 10px; font-size: .98rem; font-weight: 600;
+            text-decoration: none; cursor: pointer; border: 0; transition: transform .12s, box-shadow .12s;
+        }
+        .btn:hover { transform: translateY(-1px); }
+        .btn-primary { background: #4f46e5; color: #fff; box-shadow: 0 6px 16px rgba(79, 70, 229, .3); }
+        .btn-light { background: #f1f5f9; color: #334155; }
+        .hint { margin-top: 1.4rem; font-size: .82rem; color: #94a3b8; }
+        @media (prefers-color-scheme: dark) {
+            body { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: #e2e8f0; }
+            .card { background: #1e293b; border-color: #334155; box-shadow: 0 20px 45px rgba(0,0,0,.4); }
+            h1 { color: #f1f5f9; } p { color: #cbd5e1; }
+            .btn-light { background: #334155; color: #e2e8f0; }
+            .icon { background: #78350f33; }
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">⏱️</div>
+        <h1>Votre session a expiré</h1>
+        <p>
+            Pour votre sécurité, ce formulaire n'a pas pu être validé car la page
+            est restée ouverte trop longtemps. Aucune donnée n'a été perdue —
+            il vous suffit de réessayer.
+        </p>
+        <div class="actions">
+            <a href="{{ back_url }}" class="btn btn-primary">↩ Revenir en arrière</a>
+            <a href="/" class="btn btn-light">Accueil</a>
+        </div>
+        <div class="hint">MySchoolGN — Système de gestion scolaire</div>
+    </div>
+</body>
+</html>

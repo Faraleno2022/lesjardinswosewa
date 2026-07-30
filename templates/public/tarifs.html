@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+
+{% block title %}Tarifs - MySchoolGN Guinée{% endblock %}
+{% block meta_description %}Tarifs MySchoolGN : Starter, Pro et installation offline pour les écoles guinéennes. Contactez FARA LENO pour une offre adaptée.{% endblock %}
+
+{% block content %}
+<section class="container py-5">
+  <div class="text-center mb-5">
+    <span class="badge text-bg-primary mb-3">Offres adaptées aux écoles guinéennes</span>
+    <h1 class="text-primary fw-bold">Tarifs MySchoolGN</h1>
+    <p class="lead text-muted mx-auto" style="max-width: 760px;">
+      Choisissez une formule selon la taille de votre école, le nombre d'utilisateurs et le mode de déploiement souhaité.
+      Les montants finaux sont confirmés après démonstration et analyse de vos besoins.
+    </p>
+  </div>
+
+  <div class="row g-4 mb-5">
+    <div class="col-lg-4">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body p-4">
+          <h2 class="h4">Starter</h2>
+          <p class="text-muted">Pour les petites écoles qui veulent commencer proprement.</p>
+          <p class="display-6 fw-bold text-primary">300 000 - 500 000 GNF</p>
+          <p class="text-muted">par mois, selon configuration</p>
+          <ul class="text-muted">
+            <li>Gestion élèves et classes</li>
+            <li>Paiements et reçus</li>
+            <li>Notes et bulletins</li>
+            <li>Rapport scolaire parent</li>
+            <li>Support de démarrage</li>
+          </ul>
+          <a href="{% url 'contact' %}" class="btn btn-outline-primary w-100">Demander Starter</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card h-100 shadow border-primary">
+        <div class="card-body p-4">
+          <span class="badge text-bg-success mb-2">Recommandé</span>
+          <h2 class="h4">Pro</h2>
+          <p class="text-muted">Pour les groupes scolaires et écoles qui veulent piloter toute l'administration.</p>
+          <p class="display-6 fw-bold text-primary">1 - 3 millions GNF</p>
+          <p class="text-muted">par mois, selon modules</p>
+          <ul class="text-muted">
+            <li>Tout Starter</li>
+            <li>Multi-utilisateurs et permissions</li>
+            <li>Comptabilité, dépenses et salaires</li>
+            <li>SMS/WhatsApp et relances</li>
+            <li>Statistiques avancées directeur</li>
+          </ul>
+          <a href="{% url 'demo' %}" class="btn btn-primary w-100">Voir Pro en démonstration</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body p-4">
+          <h2 class="h4">Offline / Hybride</h2>
+          <p class="text-muted">Pour les écoles qui veulent fonctionner localement même sans connexion stable.</p>
+          <p class="display-6 fw-bold text-primary">Sur devis</p>
+          <p class="text-muted">installation, formation et licence</p>
+          <ul class="text-muted">
+            <li>Installation locale Windows</li>
+            <li>Licence école ou distribuable</li>
+            <li>Formation du personnel</li>
+            <li>Sauvegarde et maintenance</li>
+            <li>Option synchronisation cloud</li>
+          </ul>
+          <a href="{% url 'contact' %}" class="btn btn-outline-primary w-100">Demander Offline</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 align-items-stretch">
+    <div class="col-lg-6">
+      <div class="card h-100 shadow-sm">
+        <div class="card-body p-4">
+          <h2 class="h4">Pourquoi ces formules ?</h2>
+          <p class="text-muted mb-0">
+            Le but est d'éviter un prix trop bas qui empêche le support, et un prix trop élevé qui bloque les écoles.
+            Chaque formule doit rester rentable, accompagnée et adaptée à la réalité du terrain.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card h-100 shadow-sm bg-light border-0">
+        <div class="card-body p-4">
+          <h2 class="h4">Contact commercial</h2>
+          <p class="text-muted">Pour une offre précise, contactez l'administrateur FARA LENO.</p>
+          <p class="mb-2"><i class="fas fa-phone text-success me-2"></i><a href="tel:+224622613559">+224 622 61 35 59</a></p>
+          <p class="mb-0"><i class="fas fa-envelope text-info me-2"></i><a href="mailto:contact@myschoolgn.space">contact@myschoolgn.space</a></p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

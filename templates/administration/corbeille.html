@@ -1,0 +1,367 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .corbeille-card {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        border-left: 4px solid #dc3545;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 15px;
+        transition: all 0.3s ease;
+    }
+    
+    .corbeille-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .corbeille-card.restaure {
+        border-left-color: #28a745;
+        background: linear-gradient(135deg, #f8fff8 0%, #e8f5e8 100%);
+    }
+    
+    .stats-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        padding: 20px;
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    
+    .stats-card h3 {
+        font-size: 2rem;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+    
+    .btn-restaurer {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        border: none;
+        color: white;
+        padding: 8px 16px;
+        border-radius: 5px;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-restaurer:hover {
+        background: linear-gradient(135deg, #20c997 0%, #17a2b8 100%);
+        transform: translateY(-1px);
+    }
+    
+    .btn-restaurer:disabled {
+        background: #6c757d;
+        cursor: not-allowed;
+    }
+    
+    .details-json {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        padding: 10px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.85rem;
+        max-height: 150px;
+        overflow-y: auto;
+    }
+    
+    .timestamp {
+        color: #6c757d;
+        font-size: 0.9rem;
+    }
+    
+    .user-badge {
+        background: #007bff;
+        color: white;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- En-tête -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>
+                    <i class="fas fa-trash-restore text-danger"></i>
+                    Corbeille - Éléments supprimés
+                </h1>
+                <div>
+                    <a href="{% url 'administration:dashboard' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Retour
+                    </a>
+                    <button class="btn btn-info" onclick="location.reload()">
+                        <i class="fas fa-sync"></i> Actualiser
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Statistiques -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="stats-card">
+                <h3>{{ stats.total_suppressions }}</h3>
+                <p><i class="fas fa-trash"></i> Total suppressions</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="stats-card">
+                <h3>{{ stats.suppressions_aujourd_hui }}</h3>
+                <p><i class="fas fa-calendar-day"></i> Aujourd'hui</p>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="stats-card">
+                <h3>{{ stats.suppressions_cette_semaine }}</h3>
+                <p><i class="fas fa-calendar-week"></i> Cette semaine</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Liste des suppressions -->
+    <div class="row">
+        <div class="col-12">
+            {% if suppressions %}
+                {% for suppression in suppressions %}
+                <div class="corbeille-card" id="suppression-{{ suppression.id }}">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <!-- Informations principales -->
+                            <h5 class="mb-2">
+                                <i class="fas fa-user-times text-danger"></i>
+                                {{ suppression.description }}
+                            </h5>
+                            
+                            <!-- Détails de l'élève -->
+                            {% if suppression.details %}
+                            <div class="mb-3">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <p class="mb-1">
+                                            <strong>Matricule:</strong> 
+                                            <code>{{ suppression.details.matricule|default:"N/A" }}</code>
+                                        </p>
+                                        <p class="mb-1">
+                                            <strong>Nom complet:</strong> 
+                                            {{ suppression.details.nom_complet|default:"N/A" }}
+                                        </p>
+                                        <p class="mb-1">
+                                            <strong>Classe:</strong> 
+                                            {{ suppression.details.classe|default:"N/A" }}
+                                        </p>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <p class="mb-1">
+                                            <strong>Paiements supprimés:</strong> 
+                                            <span class="badge bg-warning">
+                                                {{ suppression.details.paiements_supprimes|length|default:0 }}
+                                            </span>
+                                        </p>
+                                        <p class="mb-1">
+                                            <strong>Code de vérification:</strong> 
+                                            <code>{{ suppression.details.code_verification|default:"N/A" }}</code>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                            
+                            <!-- Métadonnées -->
+                            <div class="d-flex align-items-center gap-3">
+                                <span class="user-badge">
+                                    <i class="fas fa-user"></i> 
+                                    {{ suppression.user.get_full_name|default:suppression.user.username }}
+                                </span>
+                                <span class="timestamp">
+                                    <i class="fas fa-clock"></i> 
+                                    {{ suppression.timestamp|date:"d/m/Y H:i:s" }}
+                                </span>
+                                <span class="badge bg-secondary">
+                                    IP: {{ suppression.ip_address|default:"N/A" }}
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4 text-end">
+                            <!-- Actions de restauration -->
+                            <div class="mb-3">
+                                <button class="btn btn-restaurer" 
+                                        onclick="restaurerElement({{ suppression.id }})"
+                                        id="btn-restaurer-{{ suppression.id }}">
+                                    <i class="fas fa-undo"></i> Restaurer
+                                </button>
+                            </div>
+                            
+                            <!-- Bouton pour voir les détails -->
+                            <button class="btn btn-outline-info btn-sm" 
+                                    type="button" 
+                                    data-bs-toggle="collapse" 
+                                    data-bs-target="#details-{{ suppression.id }}" 
+                                    aria-expanded="false">
+                                <i class="fas fa-info-circle"></i> Détails techniques
+                            </button>
+                            
+                            <!-- Détails techniques (collapsible) -->
+                            <div class="collapse mt-3" id="details-{{ suppression.id }}">
+                                <div class="details-json">
+                                    <strong>Détails JSON:</strong><br>
+                                    <pre>{{ suppression.details|pprint }}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+                
+                <!-- Pagination -->
+                {% if suppressions.has_other_pages %}
+                <nav aria-label="Pagination corbeille">
+                    <ul class="pagination justify-content-center">
+                        {% if suppressions.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ suppressions.previous_page_number }}">
+                                    <i class="fas fa-chevron-left"></i> Précédent
+                                </a>
+                            </li>
+                        {% endif %}
+                        
+                        <li class="page-item active">
+                            <span class="page-link">
+                                Page {{ suppressions.number }} sur {{ suppressions.paginator.num_pages }}
+                            </span>
+                        </li>
+                        
+                        {% if suppressions.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ suppressions.next_page_number }}">
+                                    Suivant <i class="fas fa-chevron-right"></i>
+                                </a>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                {% endif %}
+                
+            {% else %}
+                <!-- Aucune suppression -->
+                <div class="text-center py-5">
+                    <i class="fas fa-trash text-muted" style="font-size: 4rem;"></i>
+                    <h3 class="text-muted mt-3">Corbeille vide</h3>
+                    <p class="text-muted">Aucun élément supprimé définitivement trouvé.</p>
+                    <a href="{% url 'administration:dashboard' %}" class="btn btn-primary">
+                        <i class="fas fa-tachometer-alt"></i> Retour au tableau de bord
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function restaurerElement(logId) {
+    const btn = document.getElementById(`btn-restaurer-${logId}`);
+    const card = document.getElementById(`suppression-${logId}`);
+    
+    // Confirmation
+    if (!confirm('Êtes-vous sûr de vouloir restaurer cet élément ?\n\nCela créera un nouvel élève avec un matricule modifié.')) {
+        return;
+    }
+    
+    // Désactiver le bouton
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Restauration...';
+    
+    // Requête AJAX
+    fetch(`{% url 'administration:restaurer_element' 0 %}`.replace('0', logId), {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Succès
+            btn.innerHTML = '<i class="fas fa-check"></i> Restauré';
+            btn.classList.remove('btn-restaurer');
+            btn.classList.add('btn-success');
+            
+            // Marquer la carte comme restaurée
+            card.classList.add('restaure');
+            
+            // Afficher le message de succès
+            showMessage('success', data.message);
+            
+            // Ajouter les informations de restauration
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'alert alert-success mt-2';
+            infoDiv.innerHTML = `
+                <i class="fas fa-check-circle"></i> 
+                <strong>Restauré avec succès!</strong><br>
+                Nouveau matricule: <code>${data.new_matricule}</code><br>
+                ID élève: ${data.new_eleve_id}
+            `;
+            card.appendChild(infoDiv);
+            
+        } else {
+            // Erreur
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-undo"></i> Restaurer';
+            showMessage('error', data.error || 'Erreur lors de la restauration');
+        }
+    })
+    .catch(error => {
+        console.error('Erreur:', error);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-undo"></i> Restaurer';
+        showMessage('error', 'Erreur de connexion lors de la restauration');
+    });
+}
+
+function showMessage(type, message) {
+    // Créer et afficher un message d'alerte
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type === 'success' ? 'success' : 'danger'} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'}"></i>
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    // Insérer en haut de la page
+    const container = document.querySelector('.container-fluid');
+    container.insertBefore(alertDiv, container.firstChild);
+    
+    // Auto-dismiss après 5 secondes
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 5000);
+}
+
+// Ajouter le token CSRF pour les requêtes AJAX
+document.addEventListener('DOMContentLoaded', function() {
+    // Créer un input hidden pour le token CSRF
+    const csrfInput = document.createElement('input');
+    csrfInput.type = 'hidden';
+    csrfInput.name = 'csrfmiddlewaretoken';
+    csrfInput.value = '{{ csrf_token }}';
+    document.body.appendChild(csrfInput);
+});
+</script>
+{% endblock %}

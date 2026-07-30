@@ -1,0 +1,572 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }} - myschool{% endblock %}
+
+{% block breadcrumb_items %}
+    <li class="breadcrumb-item"><a href="{% url 'paiements:tableau_bord' %}">Paiements</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'eleves:detail_eleve' eleve.id %}">{{ eleve.prenom }} {{ eleve.nom }}</a></li>
+    <li class="breadcrumb-item active">Échéancier</li>
+{% endblock %}
+
+{% block page_actions %}
+    <div>
+        <a href="{% url 'paiements:ajouter_paiement_eleve' eleve.id %}" class="btn btn-primary">
+            <i class="fas fa-plus me-1"></i>Nouveau Paiement
+        </a>
+        {% if not echeancier %}
+        <a href="{% url 'paiements:creer_echeancier' eleve.id %}" class="btn btn-success">
+            <i class="fas fa-calendar-plus me-1"></i>Créer (manuel)
+        </a>
+        <a href="{% url 'paiements:assurer_echeancier' eleve.id %}" class="btn btn-outline-success">
+            <i class="fas fa-magic me-1"></i>Créer automatiquement
+        </a>
+        {% endif %}
+        {% if echeancier %}
+        <form method="post" action="{% url 'paiements:valider_echeancier' eleve.id %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-warning" {% if echeancier.statut == 'PAYE_COMPLET' %}disabled title="Échéancier déjà soldé"{% endif %}>
+                <i class="fas fa-check-circle me-1"></i>Valider l'échéancier
+            </button>
+        </form>
+        {% endif %}
+        <a href="{% url 'eleves:detail_eleve' eleve.id %}" class="btn btn-outline-info">
+            <i class="fas fa-user me-1"></i>Profil Élève
+        </a>
+    </div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .eleve-header {
+        background: linear-gradient(135deg, #007bff, #0056b3);
+        color: white;
+        border-radius: 15px;
+        padding: 30px;
+        margin-bottom: 30px;
+        box-shadow: 0 4px 15px rgba(0,123,255,0.3);
+    }
+    
+    .echeancier-card {
+        background: white;
+        border-radius: 15px;
+        padding: 25px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        border-left: 5px solid #007bff;
+    }
+    
+    .tranche-item {
+        background: #f8f9fa;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 15px;
+        border-left: 4px solid #dee2e6;
+        transition: all 0.3s ease;
+    }
+    
+    .tranche-item.paye { border-left-color: #28a745; background: #d4edda; }
+    .tranche-item.partiel { border-left-color: #ffc107; background: #fff3cd; }
+    .tranche-item.impaye { border-left-color: #dc3545; background: #f8d7da; }
+    .tranche-item.en-retard { border-left-color: #fd7e14; background: #ffeaa7; }
+    
+    .progress-custom {
+        height: 25px;
+        border-radius: 15px;
+        background: #e9ecef;
+        overflow: hidden;
+        box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+    }
+    
+    .progress-bar-custom {
+        background: linear-gradient(90deg, #28a745, #20c997);
+        height: 100%;
+        border-radius: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+        transition: width 0.6s ease;
+    }
+    
+    .stat-box {
+        text-align: center;
+        padding: 20px;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    
+    .stat-value {
+        font-size: 1.8rem;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+    
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    .payment-history {
+        max-height: 500px;
+        overflow-y: auto;
+    }
+    
+    .payment-item {
+        border-left: 4px solid #007bff;
+        padding: 15px;
+        margin-bottom: 10px;
+        background: white;
+        border-radius: 0 8px 8px 0;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .payment-item.validated { border-left-color: #28a745; }
+    .payment-item.pending { border-left-color: #ffc107; }
+    .payment-item.rejected { border-left-color: #dc3545; }
+
+    .finance-focus-card {
+        background: #fff;
+        border: 1px solid #e9ecef;
+        border-radius: 12px;
+        padding: 18px;
+        height: 100%;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    }
+
+    .finance-focus-label {
+        color: #6c757d;
+        font-size: .78rem;
+        text-transform: uppercase;
+        letter-spacing: .06rem;
+        margin-bottom: 6px;
+    }
+
+    .finance-focus-value {
+        font-size: 1.35rem;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+
+    .relance-message-box {
+        min-height: 190px;
+        font-size: .95rem;
+        white-space: pre-line;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+    <!-- En-tête élève -->
+    <div class="eleve-header">
+        <div class="row align-items-center">
+            <div class="col-md-2 text-center">
+                {% if eleve.photo %}
+                    <img src="{{ eleve.photo.url }}" alt="Photo" class="rounded-circle" width="80" height="80" style="border: 3px solid white;">
+                {% else %}
+                    <div class="bg-light rounded-circle d-flex align-items-center justify-content-center mx-auto" style="width: 80px; height: 80px; border: 3px solid white;">
+                        <i class="fas fa-user text-primary fa-2x"></i>
+                    </div>
+                {% endif %}
+            </div>
+            <div class="col-md-6">
+                <h3 class="mb-2">{{ eleve.prenom }} {{ eleve.nom }}</h3>
+                <p class="mb-1"><i class="fas fa-id-card me-2"></i>Matricule : {{ eleve.matricule }}</p>
+                <p class="mb-1"><i class="fas fa-graduation-cap me-2"></i>{{ eleve.classe.nom }} - {{ eleve.classe.ecole.nom }}</p>
+                <p class="mb-0"><i class="fas fa-calendar me-2"></i>Inscrit le {{ eleve.date_inscription|date:"d/m/Y" }}</p>
+            </div>
+            <div class="col-md-4 text-end">
+                <div class="stat-box bg-transparent text-white border border-light">
+                    <div class="stat-value">
+                        {% if echeancier %}
+                            {{ echeancier.pourcentage_paye|floatformat:1 }}%
+                        {% else %}
+                            0%
+                        {% endif %}
+                    </div>
+                    <div class="stat-label text-light">Paiements effectués</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if echeancier %}
+    <!-- Résumé financier -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stat-box">
+                <div class="stat-value text-primary">{{ finance_eleve.total_du|floatformat:0|intcomma }}</div>
+                <div class="stat-label">Total dû (GNF)</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-box">
+                <div class="stat-value text-success">{{ finance_eleve.total_couvert|floatformat:0|intcomma }}</div>
+                <div class="stat-label">Payé + remises (GNF)</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-box">
+                <div class="stat-value text-danger">{{ finance_eleve.reste_a_payer|floatformat:0|intcomma }}</div>
+                <div class="stat-label">Reste à payer (GNF)</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-box">
+                <div class="stat-value {% if finance_eleve.retard_reel > 0 %}text-danger{% else %}text-success{% endif %}">
+                    {{ finance_eleve.retard_reel|floatformat:0|intcomma }}
+                </div>
+                <div class="stat-label">Retard réel (GNF)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Situation rapide secrétariat -->
+    <div class="row g-3 mb-4">
+        <div class="col-lg-4">
+            <div class="finance-focus-card">
+                <div class="finance-focus-label">Situation immédiate</div>
+                <div class="finance-focus-value {% if finance_eleve.reste_a_payer > 0 %}text-danger{% else %}text-success{% endif %}">
+                    {% if finance_eleve.reste_a_payer > 0 %}Non soldé{% else %}Soldé{% endif %}
+                </div>
+                <div class="mt-2 text-muted">
+                    Paiements saisis : {{ finance_eleve.total_paye_brut|floatformat:0|intcomma }} GNF<br>
+                    Remises/Bourses : {{ finance_eleve.remises_total|floatformat:0|intcomma }} GNF<br>
+                    Année scolaire : {{ echeancier.annee_scolaire }}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="finance-focus-card">
+                <div class="finance-focus-label">Prochain paiement attendu</div>
+                {% if finance_eleve.prochain_paiement %}
+                    <div class="finance-focus-value text-primary">{{ finance_eleve.prochain_paiement.libelle }}</div>
+                    <div class="mt-2 text-muted">
+                        Montant restant : {{ finance_eleve.prochain_paiement.reste|floatformat:0|intcomma }} GNF<br>
+                        Échéance : {{ finance_eleve.prochain_paiement.echeance|date:"d/m/Y"|default:"Non définie" }}
+                        {% if finance_eleve.prochain_paiement.en_retard %}
+                            <br><span class="badge bg-danger mt-2">En retard</span>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <div class="finance-focus-value text-success">Aucun paiement attendu</div>
+                    <p class="text-muted mb-0 mt-2">Toutes les échéances prévues sont couvertes.</p>
+                {% endif %}
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="finance-focus-card">
+                <div class="finance-focus-label">Action parent</div>
+                <div class="d-grid gap-2">
+                    <a href="{% url 'paiements:generer_note_rappel_pdf' eleve.id %}" class="btn btn-outline-danger">
+                        <i class="fas fa-file-pdf me-2"></i>Note de rappel PDF
+                    </a>
+                    {% if finance_eleve.whatsapp_relance_link %}
+                    <a href="{{ finance_eleve.whatsapp_relance_link }}" target="_blank" rel="noopener" class="btn btn-success">
+                        <i class="fab fa-whatsapp me-2"></i>Ouvrir WhatsApp
+                    </a>
+                    {% else %}
+                    <button type="button" class="btn btn-outline-secondary" disabled>
+                        <i class="fab fa-whatsapp me-2"></i>Téléphone parent absent
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if finance_eleve.reste_a_payer > 0 %}
+    <div class="echeancier-card">
+        <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
+            <div class="flex-grow-1">
+                <h5><i class="fas fa-message me-2"></i>Message de relance prêt à envoyer</h5>
+                <textarea id="relanceMessage" class="form-control relance-message-box" readonly>{{ finance_eleve.message_relance }}</textarea>
+            </div>
+            <div style="min-width: 220px;">
+                <h6 class="text-muted">Contact parent</h6>
+                <p class="mb-3">{{ finance_eleve.telephone_parent|default:"Non renseigné" }}</p>
+                <button type="button" class="btn btn-outline-primary w-100" onclick="copyRelanceMessage()">
+                    <i class="fas fa-copy me-2"></i>Copier le message
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Barre de progression -->
+    <div class="echeancier-card">
+        <h5><i class="fas fa-chart-line me-2"></i>Progression des paiements</h5>
+        <div class="progress-custom">
+            <div class="progress-bar-custom" style="width: {{ finance_eleve.taux_paye_bar }}%">
+                {{ finance_eleve.taux_paye|floatformat:1 }}%
+            </div>
+        </div>
+        <div class="d-flex justify-content-between mt-2">
+            <small class="text-muted">0 GNF</small>
+            <small class="text-muted">{{ finance_eleve.total_du|floatformat:0|intcomma }} GNF</small>
+        </div>
+    </div>
+
+    <!-- Détail des tranches -->
+    <div class="echeancier-card">
+        <h5><i class="fas fa-calendar-check me-2"></i>Détail des échéances</h5>
+        
+        <!-- Frais d'inscription -->
+        <div class="tranche-item {% if echeancier.frais_inscription_paye >= echeancier.frais_inscription_du %}paye{% elif echeancier.frais_inscription_paye > 0 %}partiel{% elif echeancier.date_echeance_inscription < today %}en-retard{% else %}impaye{% endif %}">
+            <div class="row align-items-center">
+                <div class="col-md-4">
+                    <h6 class="mb-1">
+                        <i class="fas fa-clipboard-list me-2"></i>Frais d'inscription
+                    </h6>
+                    <small class="text-muted">Échéance : {{ echeancier.date_echeance_inscription|date:"d/m/Y" }}</small>
+                </div>
+                <div class="col-md-3 text-center">
+                    <strong>{{ echeancier.frais_inscription_du|floatformat:0|intcomma }} GNF</strong>
+                    <br><small class="text-muted">Montant dû</small>
+                </div>
+                <div class="col-md-3 text-center">
+                    <strong class="text-success">{{ echeancier.frais_inscription_paye|floatformat:0|intcomma }} GNF</strong>
+                    <br><small class="text-muted">Payé</small>
+                </div>
+                <div class="col-md-2 text-end">
+                    {% if echeancier.frais_inscription_paye >= echeancier.frais_inscription_du %}
+                        <span class="badge bg-success"><i class="fas fa-check"></i> Payé</span>
+                    {% elif echeancier.frais_inscription_paye > 0 %}
+                        <span class="badge bg-warning"><i class="fas fa-clock"></i> Partiel</span>
+                    {% elif echeancier.date_echeance_inscription < today %}
+                        <span class="badge bg-danger"><i class="fas fa-exclamation"></i> Retard</span>
+                    {% else %}
+                        <span class="badge bg-secondary"><i class="fas fa-hourglass"></i> À payer</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Tranche 1 -->
+        <div class="tranche-item {% if echeancier.tranche_1_payee >= echeancier.tranche_1_due %}paye{% elif echeancier.tranche_1_payee > 0 %}partiel{% elif echeancier.date_echeance_tranche_1 < today %}en-retard{% else %}impaye{% endif %}">
+            <div class="row align-items-center">
+                <div class="col-md-4">
+                    <h6 class="mb-1">
+                        <i class="fas fa-1 me-2"></i>1ère Tranche
+                    </h6>
+                    <small class="text-muted">Échéance : {{ echeancier.date_echeance_tranche_1|date:"d/m/Y" }}</small>
+                </div>
+                <div class="col-md-3 text-center">
+                    <strong>{{ echeancier.tranche_1_due|floatformat:0|intcomma }} GNF</strong>
+                    <br><small class="text-muted">Montant dû</small>
+                </div>
+                <div class="col-md-3 text-center">
+                    <strong class="text-success">{{ echeancier.tranche_1_payee|floatformat:0|intcomma }} GNF</strong>
+                    <br><small class="text-muted">Payé</small>
+                </div>
+                <div class="col-md-2 text-end">
+                    {% if echeancier.tranche_1_payee >= echeancier.tranche_1_due %}
+                        <span class="badge bg-success"><i class="fas fa-check"></i> Payé</span>
+                    {% elif echeancier.tranche_1_payee > 0 %}
+                        <span class="badge bg-warning"><i class="fas fa-clock"></i> Partiel</span>
+                    {% elif echeancier.date_echeance_tranche_1 < today %}
+                        <span class="badge bg-danger"><i class="fas fa-exclamation"></i> Retard</span>
+                    {% else %}
+                        <span class="badge bg-secondary"><i class="fas fa-hourglass"></i> À payer</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Tranche 2 -->
+        <div class="tranche-item {% if echeancier.tranche_2_payee >= echeancier.tranche_2_due %}paye{% elif echeancier.tranche_2_payee > 0 %}partiel{% elif echeancier.date_echeance_tranche_2 < today %}en-retard{% else %}impaye{% endif %}">
+            <div class="row align-items-center">
+                <div class="col-md-4">
+                    <h6 class="mb-1">
+                        <i class="fas fa-2 me-2"></i>2ème Tranche
+                    </h6>
+                    <small class="text-muted">Échéance : {{ echeancier.date_echeance_tranche_2|date:"d/m/Y" }}</small>
+                </div>
+                <div class="col-md-3 text-center">
+                    <strong>{{ echeancier.tranche_2_due|floatformat:0|intcomma }} GNF</strong>
+                    <br><small class="text-muted">Montant dû</small>
+                </div>
+                <div class="col-md-3 text-center">
+                    <strong class="text-success">{{ echeancier.tranche_2_payee|floatformat:0|intcomma }} GNF</strong>
+                    <br><small class="text-muted">Payé</small>
+                </div>
+                <div class="col-md-2 text-end">
+                    {% if echeancier.tranche_2_payee >= echeancier.tranche_2_due %}
+                        <span class="badge bg-success"><i class="fas fa-check"></i> Payé</span>
+                    {% elif echeancier.tranche_2_payee > 0 %}
+                        <span class="badge bg-warning"><i class="fas fa-clock"></i> Partiel</span>
+                    {% elif echeancier.date_echeance_tranche_2 < today %}
+                        <span class="badge bg-danger"><i class="fas fa-exclamation"></i> Retard</span>
+                    {% else %}
+                        <span class="badge bg-secondary"><i class="fas fa-hourglass"></i> À payer</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Tranche 3 -->
+        <div class="tranche-item {% if echeancier.tranche_3_payee >= echeancier.tranche_3_due %}paye{% elif echeancier.tranche_3_payee > 0 %}partiel{% elif echeancier.date_echeance_tranche_3 < today %}en-retard{% else %}impaye{% endif %}">
+            <div class="row align-items-center">
+                <div class="col-md-4">
+                    <h6 class="mb-1">
+                        <i class="fas fa-3 me-2"></i>3ème Tranche
+                    </h6>
+                    <small class="text-muted">Échéance : {{ echeancier.date_echeance_tranche_3|date:"d/m/Y" }}</small>
+                </div>
+                <div class="col-md-3 text-center">
+                    <strong>{{ echeancier.tranche_3_due|floatformat:0|intcomma }} GNF</strong>
+                    <br><small class="text-muted">Montant dû</small>
+                </div>
+                <div class="col-md-3 text-center">
+                    <strong class="text-success">{{ echeancier.tranche_3_payee|floatformat:0|intcomma }} GNF</strong>
+                    <br><small class="text-muted">Payé</small>
+                </div>
+                <div class="col-md-2 text-end">
+                    {% if echeancier.tranche_3_payee >= echeancier.tranche_3_due %}
+                        <span class="badge bg-success"><i class="fas fa-check"></i> Payé</span>
+                    {% elif echeancier.tranche_3_payee > 0 %}
+                        <span class="badge bg-warning"><i class="fas fa-clock"></i> Partiel</span>
+                    {% elif echeancier.date_echeance_tranche_3 < today %}
+                        <span class="badge bg-danger"><i class="fas fa-exclamation"></i> Retard</span>
+                    {% else %}
+                        <span class="badge bg-secondary"><i class="fas fa-hourglass"></i> À payer</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <!-- Aucun échéancier -->
+    <div class="text-center py-5">
+        <i class="fas fa-calendar-times fa-4x text-muted mb-4"></i>
+        <h4 class="text-muted">Aucun échéancier défini</h4>
+        <p class="text-muted mb-4">Créez un échéancier pour cet élève pour suivre ses paiements.</p>
+        <div class="d-flex justify-content-center gap-2">
+            <a href="{% url 'paiements:creer_echeancier' eleve.id %}" class="btn btn-primary btn-lg">
+                <i class="fas fa-calendar-plus me-2"></i>Créer manuellement
+            </a>
+            <a href="{% url 'paiements:assurer_echeancier' eleve.id %}" class="btn btn-success btn-lg">
+                <i class="fas fa-magic me-2"></i>Créer automatiquement
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Historique des paiements -->
+    <div class="echeancier-card">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5><i class="fas fa-history me-2"></i>Historique des paiements</h5>
+            <span class="badge bg-info">{{ paiements.count }} paiement{{ paiements.count|pluralize }}</span>
+        </div>
+        
+        {% if paiements %}
+            <div class="payment-history">
+                {% for paiement in paiements %}
+                    <div class="payment-item {% if paiement.statut == 'VALIDE' %}validated{% elif paiement.statut == 'EN_ATTENTE' %}pending{% else %}rejected{% endif %}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="mb-1">
+                                    <a href="{% url 'paiements:detail_paiement' paiement.id %}" class="text-decoration-none">
+                                        {{ paiement.type_paiement.nom }}
+                                    </a>
+                                </h6>
+                                <p class="mb-1">
+                                    <span class="badge bg-secondary">{{ paiement.mode_paiement.nom }}</span>
+                                    {% if paiement.statut == 'VALIDE' %}
+                                        <span class="badge bg-success">Validé</span>
+                                    {% elif paiement.statut == 'EN_ATTENTE' %}
+                                        <span class="badge bg-warning">En attente</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">{{ paiement.get_statut_display }}</span>
+                                    {% endif %}
+                                </p>
+                                <small class="text-muted">
+                                    <i class="fas fa-calendar me-1"></i>{{ paiement.date_paiement|date:"d/m/Y" }}
+                                    <i class="fas fa-receipt ms-2 me-1"></i>{{ paiement.numero_recu }}
+                                    {% if paiement.observations %}
+                                        <br><i class="fas fa-comment me-1"></i>{{ paiement.observations|truncatechars:50 }}
+                                    {% endif %}
+                                </small>
+                            </div>
+                            <div class="text-end">
+                                <h6 class="mb-1">{{ paiement.montant|floatformat:0|intcomma }} GNF</h6>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{% url 'paiements:detail_paiement' paiement.id %}" 
+                                       class="btn btn-outline-primary" title="Voir détails">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% if paiement.statut == 'VALIDE' %}
+                                    <a href="{% url 'paiements:generer_recu_pdf' paiement.id %}" 
+                                       class="btn btn-outline-success" title="Télécharger reçu">
+                                        <i class="fas fa-download"></i>
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="text-center py-4">
+                <i class="fas fa-receipt fa-3x text-muted mb-3"></i>
+                <h6 class="text-muted">Aucun paiement enregistré</h6>
+                <p class="text-muted">Les paiements de cet élève apparaîtront ici</p>
+                <a href="{% url 'paiements:ajouter_paiement_eleve' eleve.id %}" class="btn btn-primary">
+                    <i class="fas fa-plus me-2"></i>Premier paiement
+                </a>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Animation de la barre de progression
+    const progressBar = document.querySelector('.progress-bar-custom');
+    if (progressBar) {
+        const targetWidth = progressBar.style.width;
+        progressBar.style.width = '0%';
+        setTimeout(() => {
+            progressBar.style.width = targetWidth;
+        }, 500);
+    }
+    
+    // Animation des cartes de tranches
+    const trancheItems = document.querySelectorAll('.tranche-item');
+    trancheItems.forEach((item, index) => {
+        item.style.opacity = '0';
+        item.style.transform = 'translateY(20px)';
+        setTimeout(() => {
+            item.style.transition = 'all 0.5s ease';
+            item.style.opacity = '1';
+            item.style.transform = 'translateY(0)';
+        }, 200 * (index + 1));
+    });
+});
+
+function copyRelanceMessage() {
+    const textarea = document.getElementById('relanceMessage');
+    if (!textarea) return;
+    textarea.select();
+    textarea.setSelectionRange(0, 99999);
+    navigator.clipboard.writeText(textarea.value).then(() => {
+        const old = textarea.value;
+        textarea.value = 'Message copié avec succès.';
+        setTimeout(() => {
+            textarea.value = old;
+        }, 1200);
+    }).catch(() => {
+        document.execCommand('copy');
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,125 @@
+{% extends 'base.html' %}
+{% block title %}Emploi du temps{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h2 class="mb-0"><i class="fas fa-calendar-alt text-primary me-2"></i>Emploi du temps</h2>
+        <a href="{% url 'notes:tableau_bord' %}" class="btn btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i>Retour Notes</a>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-md-6">
+                    <label class="form-label">Classe</label>
+                    <select name="classe_id" class="form-select" onchange="this.form.submit()">
+                        <option value="">— Choisir une classe —</option>
+                        {% for c in classes %}
+                        <option value="{{ c.id }}" {% if classe_id == c.id|stringformat:"s" %}selected{% endif %}>{{ c.nom }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% if classe %}
+                <div class="col-md-6 text-end">
+                    <a class="btn btn-outline-danger" href="{% url 'notes:emploi_du_temps_pdf' %}?classe_id={{ classe.id }}"><i class="fas fa-file-pdf me-1"></i>PDF</a>
+                    <a class="btn btn-outline-success" href="{% url 'notes:emploi_du_temps_excel' %}?classe_id={{ classe.id }}"><i class="fas fa-file-excel me-1"></i>Excel</a>
+                </div>
+                {% endif %}
+            </form>
+        </div>
+    </div>
+
+    {% if classe %}
+    <!-- Grille -->
+    <div class="card mb-3">
+        <div class="card-header"><strong>{{ classe.nom }}</strong> — {{ classe.annee_scolaire }}</div>
+        <div class="table-responsive">
+            <table class="table table-bordered align-middle text-center mb-0" style="min-width:900px">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:110px">Horaire</th>
+                        {% for code, lib in jours %}<th>{{ lib }}</th>{% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for lg in lignes %}
+                    <tr>
+                        <th class="table-light">{{ lg.hd|time:'H:i' }}<br>{{ lg.hf|time:'H:i' }}</th>
+                        {% for cell in lg.cells %}
+                        <td>
+                            {% if cell %}
+                            <div class="fw-bold text-primary">{{ cell.intitule }}</div>
+                            {% if cell.enseignant %}<div class="small">{{ cell.enseignant.nom }} {{ cell.enseignant.prenoms }}</div>{% endif %}
+                            {% if cell.salle %}<div class="small text-muted">Salle {{ cell.salle }}</div>{% endif %}
+                            <form method="post" action="{% url 'notes:supprimer_creneau' cell.id %}" class="d-inline" onsubmit="return confirm('Supprimer ce créneau ?');">
+                                {% csrf_token %}
+                                <button class="btn btn-sm btn-link text-danger p-0" title="Supprimer"><i class="fas fa-times"></i></button>
+                            </form>
+                            {% else %}<span class="text-muted">—</span>{% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="7" class="text-muted py-3">Aucun créneau. Ajoutez-en ci-dessous.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Ajouter un créneau -->
+    <div class="card">
+        <div class="card-header"><i class="fas fa-plus me-1"></i>Ajouter un créneau</div>
+        <div class="card-body">
+            <form method="post" class="row g-2 align-items-end">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="ajouter">
+                <input type="hidden" name="classe_id" value="{{ classe.id }}">
+                <div class="col-md-2">
+                    <label class="form-label">Jour</label>
+                    <select name="jour" class="form-select" required>
+                        {% for code, lib in jours %}<option value="{{ code }}">{{ lib }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label">Début</label>
+                    <input type="time" name="heure_debut" class="form-control" required>
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label">Fin</label>
+                    <input type="time" name="heure_fin" class="form-control" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Matière</label>
+                    <select name="matiere_id" class="form-select">
+                        <option value="">— (ou libellé) —</option>
+                        {% for m in matieres %}<option value="{{ m.id }}">{{ m.nom }}</option>{% endfor %}
+                    </select>
+                    <input type="text" name="libelle" class="form-control form-control-sm mt-1" placeholder="Libellé si pas une matière (ex: Récréation)">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Professeur</label>
+                    <select name="enseignant_id" class="form-select">
+                        <option value="">—</option>
+                        {% for e in enseignants %}<option value="{{ e.id }}">{{ e.nom }} {{ e.prenoms }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label">Salle</label>
+                    <input type="text" name="salle" class="form-control" placeholder="Salle">
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100"><i class="fas fa-plus me-1"></i>Ajouter</button>
+                </div>
+            </form>
+            {% if not enseignants %}
+            <div class="form-text text-warning mt-2"><i class="fas fa-info-circle me-1"></i>Aucun professeur enregistré pour cette école (module Salaires → Enseignants). Vous pouvez quand même créer l'emploi du temps sans professeur.</div>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-secondary">Choisissez une classe pour concevoir son emploi du temps.</div>
+    {% endif %}
+</div>
+{% endblock %}
