@@ -46,20 +46,25 @@ def robots_txt(request):
         "Disallow: /salaires/",
         "Disallow: /notes/",
         "Disallow: /chatbot/",
-        "Sitemap: https://www.myschoolgn.space/sitemap.xml",
+        # Le sitemap suit le domaine qui sert la page (myschoolgn.space,
+        # lesjardinswosewa.com…) : un sitemap cross-domaine est ignoré par Google.
+        f"Sitemap: {request.scheme}://{request.get_host()}/sitemap.xml",
         "",
     ])
     return HttpResponse(content, content_type="text/plain")
 
 
 def sitemap_xml(request):
+    # Construit sur le domaine de la requête : chaque site (myschoolgn.space,
+    # lesjardinswosewa.com…) publie ainsi son propre sitemap valide.
+    base = f"{request.scheme}://{request.get_host()}"
     urls = [
-        ("https://www.myschoolgn.space/", "1.0"),
-        ("https://www.myschoolgn.space/fonctionnalites/", "0.9"),
-        ("https://www.myschoolgn.space/rapport-scolaire/", "0.8"),
-        ("https://www.myschoolgn.space/contact/", "0.8"),
-        ("https://www.myschoolgn.space/demo/", "0.8"),
-        ("https://www.myschoolgn.space/tarifs/", "0.6"),
+        (f"{base}/", "1.0"),
+        (f"{base}/fonctionnalites/", "0.9"),
+        (f"{base}/rapport-scolaire/", "0.8"),
+        (f"{base}/contact/", "0.8"),
+        (f"{base}/demo/", "0.8"),
+        (f"{base}/tarifs/", "0.6"),
     ]
     items = "\n".join(
         f"  <url><loc>{loc}</loc><changefreq>weekly</changefreq><priority>{priority}</priority></url>"
