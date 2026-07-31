@@ -231,6 +231,46 @@
     margin-bottom: 0;
   }
 
+  /* ===== Tableau des tarifs ===== */
+  .w-tarifs {
+    background: #fff;
+    border-radius: .9rem;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(15, 63, 125, .07);
+  }
+
+  .w-tarifs thead th {
+    background: var(--w-blue);
+    color: #fff;
+    font-weight: 600;
+    border: 0;
+    white-space: nowrap;
+    padding: .9rem 1rem;
+  }
+
+  .w-tarifs tbody th,
+  .w-tarifs tbody td {
+    padding: .8rem 1rem;
+    border-color: #e9eff7;
+    color: var(--w-muted);
+  }
+
+  .w-tarifs tbody th {
+    color: var(--w-ink);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .w-tarifs tbody tr:hover {
+    background: var(--w-blue-soft);
+  }
+
+  .w-tarifs .w-montant {
+    font-weight: 700;
+    color: var(--w-blue);
+    white-space: nowrap;
+  }
+
   /* ===== Engagements ===== */
   .w-commit {
     display: flex;
@@ -631,6 +671,172 @@
           </div>
         </div>
       </div>
+    </div>
+  </section>
+
+  {% comment %}
+    Tarifs de l'année 2025-2026, repris des fiches de renseignement du campus de Siguiri.
+    À mettre à jour à chaque rentrée : le tableau ci-dessous, les frais d'inscription,
+    la documentation, les services et la période de réinscription.
+  {% endcomment %}
+  <section class="w-section" id="inscriptions">
+    <div class="container">
+      <div class="text-center mb-5">
+        <span class="w-eyebrow">Inscriptions</span>
+        <h2 class="w-title h2 mb-2">Frais de scolarité 2025 – 2026</h2>
+        <p class="w-lead mb-0">
+          Tarifs du campus de Siguiri. <strong>Tenue, maillot et t-shirt sont inclus</strong> dans les frais de scolarité.
+        </p>
+      </div>
+
+      <div class="table-responsive mb-4">
+        <table class="table w-tarifs align-middle mb-0">
+          <thead>
+            <tr>
+              <th scope="col">Niveau</th>
+              <th scope="col">Âge</th>
+              <th scope="col">Scolarité annuelle</th>
+              <th scope="col">Modalités de paiement</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Crèche</th>
+              <td>6 mois à 1 an</td>
+              <td class="w-montant">1 200 000 GNF</td>
+              <td>Paiement unique</td>
+            </tr>
+            <tr>
+              <th scope="row">TPS</th>
+              <td>1 à 2 ans</td>
+              <td class="w-montant">1 200 000 GNF</td>
+              <td>Paiement unique</td>
+            </tr>
+            <tr>
+              <th scope="row">Petite section</th>
+              <td>3 à 4 ans</td>
+              <td class="w-montant">1 000 000 GNF</td>
+              <td>Paiement unique</td>
+            </tr>
+            <tr>
+              <th scope="row">Moyenne section</th>
+              <td>4 à 5 ans</td>
+              <td class="w-montant">1 000 000 GNF</td>
+              <td>Paiement unique</td>
+            </tr>
+            <tr>
+              <th scope="row">Grande section</th>
+              <td>5 ans</td>
+              <td class="w-montant">1 050 000 GNF</td>
+              <td>Paiement unique</td>
+            </tr>
+            <tr>
+              <th scope="row">1<sup>re</sup> à 4<sup>e</sup> année</th>
+              <td>—</td>
+              <td class="w-montant">1 100 000 GNF</td>
+              <td>600 000 puis 500 000 GNF</td>
+            </tr>
+            <tr>
+              <th scope="row">5<sup>e</sup> année</th>
+              <td>—</td>
+              <td class="w-montant">1 150 000 GNF</td>
+              <td>650 000 puis 500 000 GNF</td>
+            </tr>
+            <tr>
+              <th scope="row">6<sup>e</sup> année <span class="text-muted fw-normal">(garderie incluse)</span></th>
+              <td>—</td>
+              <td class="w-montant">2 700 000 GNF</td>
+              <td>1 500 000, 700 000 puis 500 000 GNF</td>
+            </tr>
+            <tr>
+              <th scope="row">7<sup>e</sup>, 8<sup>e</sup> et 9<sup>e</sup> année</th>
+              <td>—</td>
+              <td class="w-montant">1 450 000 GNF</td>
+              <td>750 000 puis 700 000 GNF</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="row g-4 mb-4">
+        <div class="col-md-4">
+          <div class="w-card h-100">
+            <h3><i class="fas fa-file-signature me-2"></i>Inscription</h3>
+            <ul class="mb-0 text-muted">
+              <li>Crèche au primaire&nbsp;: <strong>50 000 GNF</strong> + un paquet de papier RAM</li>
+              <li>Collège&nbsp;: <strong>70 000 GNF</strong> + un paquet de papier</li>
+              <li>Réinscription&nbsp;: 30 000 GNF (primaire) · 50 000 GNF (collège)</li>
+            </ul>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="w-card w-card--orange h-100">
+            <h3><i class="fas fa-book me-2"></i>Documentation</h3>
+            <ul class="mb-0 text-muted">
+              <li>Maternelle&nbsp;: <strong>200 000 GNF</strong></li>
+              <li>Primaire&nbsp;: <strong>250 000 GNF</strong></li>
+              <li>5<sup>e</sup> et 6<sup>e</sup> année&nbsp;: 300 000 GNF</li>
+              <li>Collège&nbsp;: 350 000 GNF</li>
+            </ul>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="w-card h-100">
+            <h3><i class="fas fa-bus me-2"></i>Services</h3>
+            <ul class="mb-0 text-muted">
+              <li>Garderie maternelle&nbsp;: 2 600 000 GNF</li>
+              <li>Garderie primaire&nbsp;: 2 700 000 GNF</li>
+              <li>Cantine&nbsp;: 150 000 à 200 000 GNF / mois</li>
+              <li>Transport&nbsp;: 120 000 GNF / mois</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-4">
+        <div class="col-lg-6">
+          <div class="w-card h-100">
+            <h3><i class="fas fa-folder-open me-2"></i>Dossier à fournir</h3>
+            <p class="text-muted mb-2"><strong>Maternelle et primaire</strong></p>
+            <ul class="text-muted">
+              <li>Une copie de l'extrait d'acte de naissance</li>
+              <li>Carnet de vaccination pour les tout-petits</li>
+              <li>Quatre photos d'identité</li>
+              <li>Livret scolaire (obligatoire pour le primaire)</li>
+            </ul>
+            <p class="text-muted mb-2"><strong>Collège</strong></p>
+            <ul class="text-muted mb-0">
+              <li>Une copie de l'extrait d'acte de naissance</li>
+              <li>Certificat d'admission au collège</li>
+              <li>Quatre photos d'identité</li>
+              <li>Livret scolaire (obligatoire)</li>
+            </ul>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="w-card w-card--orange h-100">
+            <h3><i class="fas fa-clock me-2"></i>Horaires et informations pratiques</h3>
+            <ul class="text-muted">
+              <li>Maternelle&nbsp;: 7h45 – 12h00</li>
+              <li>Primaire&nbsp;: 7h45 – 14h00</li>
+              <li>Garderie&nbsp;: 7h45 – 17h00</li>
+              <li>Du lundi au vendredi</li>
+            </ul>
+            <ul class="text-muted mb-0">
+              <li>Les places sont limitées&nbsp;; les tests de niveau sont obligatoires pour les nouveaux élèves.</li>
+              <li>Tenues, t-shirts, maillots de sport et chaussettes blanches sont obligatoires.</li>
+              <li>Toute scolarité payée n'est ni remboursable, ni transférable à un autre élève.</li>
+              <li>Cours d'informatique et internat&nbsp;: se renseigner auprès de la direction.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <p class="text-center text-muted mt-4 mb-0">
+        <i class="fas fa-circle-info me-1"></i>
+        Montants donnés à titre indicatif pour l'année scolaire 2025-2026&nbsp;;
+        contactez la direction pour toute confirmation.
+      </p>
     </div>
   </section>
 
