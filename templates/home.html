@@ -1,8 +1,8 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Les Jardins Wosewa — Groupe Scolaire Privé à Conakry (Maternelle, Primaire, Collège, Lycée){% endblock %}
-{% block meta_description %}Les Jardins Wosewa est une institution privée d'enseignement général à Kipé T2, Conakry. Programme franco-guinéen de la maternelle au lycée, dans un cadre d'apprentissage, de créativité et d'excellence.{% endblock %}
+{% block title %}Les Jardins Wosewa — Groupe Scolaire Privé à Conakry et Siguiri (Maternelle, Primaire, Collège, Lycée){% endblock %}
+{% block meta_description %}Les Jardins Wosewa est une institution privée d'enseignement général présente à Kipé T2 (Conakry) et à Siguiri. Programme franco-guinéen de la maternelle au lycée, dans un cadre d'apprentissage, de créativité et d'excellence.{% endblock %}
 {% block og_title %}Les Jardins Wosewa — Un cadre d'apprentissage, de créativité et d'excellence{% endblock %}
 {% block og_description %}Institution privée d'enseignement général à Conakry : maternelle, primaire, collège et lycée, programme franco-guinéen.{% endblock %}
 {% block twitter_title %}Les Jardins Wosewa — Groupe Scolaire Privé à Conakry{% endblock %}
@@ -24,6 +24,17 @@
   "telephone": ["+224622751518", "+224623480586", "+224660199851"],
   "email": "lesjardinswosewa.gui23@gmail.com",
   "sameAs": ["https://www.facebook.com/LESJARDINSWOSEWA"],
+  "subOrganization": {
+    "@type": "School",
+    "name": "Les Jardins Wosewa — Campus de Siguiri",
+    "address": {
+      "@type": "PostalAddress",
+      "addressLocality": "Siguiri",
+      "addressRegion": "Kankan",
+      "addressCountry": "GN"
+    },
+    "telephone": "+224627604016"
+  },
   "image": "{{ request.scheme }}://{{ request.get_host }}{% static 'images/optimized/ecole.webp' %}",
   "url": "{{ request.scheme }}://{{ request.get_host }}/"
 }
@@ -385,6 +396,18 @@
     font-weight: 600;
   }
 
+  .w-campus {
+    height: 100%;
+    background: rgba(255, 255, 255, .09);
+    border: 1px solid rgba(255, 255, 255, .16);
+    border-radius: .8rem;
+    padding: 1.5rem;
+  }
+
+  .w-campus a:hover {
+    text-decoration: underline !important;
+  }
+
   .w-quote {
     font-size: 1.35rem;
     font-weight: 700;
@@ -468,8 +491,8 @@
             <ul class="list-unstyled mb-0">
               <li class="d-flex gap-3 mb-3">
                 <i class="fas fa-location-dot fa-fw mt-1" style="color: var(--w-orange);"></i>
-                <span><strong>Adresse</strong><br>
-                  <span class="text-muted">Carrefour Métal Guinée, Kipé T2 — Conakry, Guinée</span></span>
+                <span><strong>Implantations</strong><br>
+                  <span class="text-muted">Conakry — Carrefour Métal Guinée, Kipé T2<br>Siguiri — Région de Kankan</span></span>
               </li>
               <li class="d-flex gap-3 mb-3">
                 <i class="fas fa-layer-group fa-fw mt-1" style="color: var(--w-orange);"></i>
@@ -683,50 +706,71 @@
   <section class="w-section pt-0" id="contact">
     <div class="container">
       <div class="w-contact">
-        <div class="row g-4 align-items-center">
-          <div class="col-lg-7">
-            <span class="w-contact__icon"><i class="fas fa-location-dot fa-lg"></i></span>
-            <h2 class="h3 fw-bold mb-2">Venez nous rencontrer</h2>
-            <p class="mb-3 opacity-75">
-              Groupe Scolaire Privé Les Jardins Wosewa<br>
-              Carrefour Métal Guinée, Kipé T2 — Commune de Ratoma, Conakry
-            </p>
-            <ul class="list-unstyled mb-3">
-              <li class="mb-2">
-                <i class="fas fa-phone fa-fw me-2"></i>
-                <a href="tel:+224622751518" class="text-white text-decoration-none">622 75 15 18</a>
-                <span class="opacity-50 mx-1">·</span>
-                <a href="tel:+224623480586" class="text-white text-decoration-none">623 48 05 86</a>
-                <span class="opacity-50 mx-1">·</span>
-                <a href="tel:+224660199851" class="text-white text-decoration-none">660 19 98 51</a>
-              </li>
-              <li class="mb-2">
-                <i class="fas fa-envelope fa-fw me-2"></i>
-                <a href="mailto:lesjardinswosewa.gui23@gmail.com" class="text-white text-decoration-none">lesjardinswosewa.gui23@gmail.com</a>
-              </li>
-              <li>
-                <i class="fab fa-facebook fa-fw me-2"></i>
-                <a href="https://www.facebook.com/LESJARDINSWOSEWA" class="text-white text-decoration-none" target="_blank" rel="noopener">Suivre l'école sur Facebook</a>
-              </li>
-            </ul>
-            <p class="mb-0 opacity-75">
-              Inscriptions, visite de l'établissement, informations sur les cycles&nbsp;: notre équipe se tient
-              à la disposition des familles.
-            </p>
-          </div>
-          <div class="col-lg-5">
-            <div class="d-grid gap-2">
-              <a href="{% url 'contact' %}" class="btn btn-light btn-lg">
-                <i class="fas fa-envelope me-2"></i>Nous contacter
-              </a>
-              <a href="{% url 'rapport_scolaire' %}" class="btn btn-outline-light btn-lg">
-                <i class="fas fa-file-alt me-2"></i>Consulter le rapport scolaire
-              </a>
-              <a href="{% url 'utilisateurs:login' %}" class="btn btn-outline-light btn-lg">
-                <i class="fas fa-lock me-2"></i>Espace personnel de l'école
-              </a>
+        <div class="text-center mb-4">
+          <span class="w-contact__icon"><i class="fas fa-location-dot fa-lg"></i></span>
+          <h2 class="h3 fw-bold mb-2">Venez nous rencontrer</h2>
+          <p class="mb-0 opacity-75">
+            Les Jardins Wosewa accueillent les familles sur deux campus, à Conakry et à Siguiri.
+          </p>
+        </div>
+
+        <div class="row g-4">
+          <div class="col-lg-6">
+            <div class="w-campus">
+              <h3 class="h5 fw-bold mb-1">Campus de Conakry</h3>
+              <p class="opacity-75 mb-3">Carrefour Métal Guinée, Kipé T2 — Commune de Ratoma</p>
+              <ul class="list-unstyled mb-0">
+                <li class="mb-2">
+                  <i class="fas fa-phone fa-fw me-2"></i>
+                  <a href="tel:+224622751518" class="text-white text-decoration-none">622 75 15 18</a>
+                  <span class="opacity-50 mx-1">·</span>
+                  <a href="tel:+224623480586" class="text-white text-decoration-none">623 48 05 86</a>
+                  <span class="opacity-50 mx-1">·</span>
+                  <a href="tel:+224660199851" class="text-white text-decoration-none">660 19 98 51</a>
+                </li>
+                <li>
+                  <i class="fas fa-envelope fa-fw me-2"></i>
+                  <a href="mailto:lesjardinswosewa.gui23@gmail.com" class="text-white text-decoration-none">lesjardinswosewa.gui23@gmail.com</a>
+                </li>
+              </ul>
             </div>
           </div>
+          <div class="col-lg-6">
+            <div class="w-campus">
+              <h3 class="h5 fw-bold mb-1">Campus de Siguiri</h3>
+              <p class="opacity-75 mb-3">Siguiri — Région de Kankan</p>
+              <ul class="list-unstyled mb-0">
+                <li class="mb-2">
+                  <i class="fas fa-phone fa-fw me-2"></i>
+                  <a href="tel:+224627604016" class="text-white text-decoration-none">627 60 40 16</a>
+                </li>
+                <li>
+                  <i class="fas fa-certificate fa-fw me-2"></i>
+                  <span class="opacity-75">Agrément n° 0096</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <p class="text-center opacity-75 mt-4 mb-4">
+          Inscriptions, visite de l'établissement, informations sur les cycles&nbsp;: notre équipe se tient
+          à la disposition des familles.
+        </p>
+
+        <div class="d-flex flex-wrap justify-content-center gap-2">
+          <a href="{% url 'contact' %}" class="btn btn-light btn-lg">
+            <i class="fas fa-envelope me-2"></i>Nous contacter
+          </a>
+          <a href="https://www.facebook.com/LESJARDINSWOSEWA" class="btn btn-outline-light btn-lg" target="_blank" rel="noopener">
+            <i class="fab fa-facebook me-2"></i>Suivre sur Facebook
+          </a>
+          <a href="{% url 'rapport_scolaire' %}" class="btn btn-outline-light btn-lg">
+            <i class="fas fa-file-alt me-2"></i>Rapport scolaire
+          </a>
+          <a href="{% url 'utilisateurs:login' %}" class="btn btn-outline-light btn-lg">
+            <i class="fas fa-lock me-2"></i>Espace personnel
+          </a>
         </div>
       </div>
 
