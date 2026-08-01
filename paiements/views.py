@@ -19,6 +19,7 @@ from io import BytesIO
 import os
 import logging
 import urllib.parse
+import unicodedata
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment, Font, PatternFill, Border, Side, numbers
@@ -37,6 +38,12 @@ from .models import Paiement, EcheancierPaiement, TypePaiement, ModePaiement, Re
 from eleves.models import Eleve, GrilleTarifaire, Classe
 from eleves.utils_annee import get_annee_active
 from .forms import PaiementForm, EcheancierForm, RechercheForm
+from .allocation import (
+    allocate_amount_sequentially,
+    build_payment_allocation_history,
+    due_balances,
+    remaining_balances,
+)
 from .remise_forms import PaiementRemiseForm, CalculateurRemiseForm
 from utilisateurs.utils import user_is_admin, user_is_superadmin, filter_by_user_school, user_school
 from utilisateurs.permissions import has_permission, get_user_permissions, can_add_payments, can_modify_payments, can_delete_payments, can_validate_payments, can_view_reports, can_apply_discounts
@@ -46,6 +53,93 @@ from .notifications import (
     send_relance_notification,
     send_retard_notification,
 )
+
+
+def _normalize_payment_type_name(type_name: str) -> str:
+    """Normalise les accents pour reconnaître uniformément les types de paiement."""
+    normalized = unicodedata.normalize("NFKD", (type_name or "").strip().lower())
+    return "".join(char for char in normalized if not unicodedata.combining(char))
+
+
+def _enrollment_preference_from_type(type_name: str):
+    """Retourne True pour réinscription, False pour inscription, sinon None."""
+    normalized = _normalize_payment_type_name(type_name)
+    compact = "".join(char for char in normalized if char.isalnum())
+    if "reinscription" in compact:
+        return True
+    if "inscription" in compact:
+        return False
+    return None
+
+
+def _enrollment_preference_for_eleve(eleve, preferred_type_name=None):
+    """Détermine le frais d'inscription utilisé par l'élève sur l'année."""
+    validated_payments = (
+        Paiement.objects.filter(eleve=eleve, statut="VALIDE")
+        .select_related("type_paiement")
+        .order_by("date_paiement", "date_creation", "id")
+    )
+    for existing_payment in validated_payments.iterator():
+        preference = _enrollment_preference_from_type(
+            getattr(existing_payment.type_paiement, "nom", "")
+        )
+        if preference is not None:
+            return preference
+    return _enrollment_preference_from_type(preferred_type_name)
+
+
+def _applicable_grille_for_eleve(eleve, annee_scolaire=None):
+    try:
+        ecole = eleve.classe.ecole
+        niveau = eleve.classe.niveau
+    except Exception:
+        return None
+
+    queryset = GrilleTarifaire.objects.filter(ecole=ecole, niveau=niveau)
+    years = [annee_scolaire, getattr(eleve.classe, "annee_scolaire", None)]
+    for year in years:
+        if year:
+            grille = queryset.filter(annee_scolaire=year).first()
+            if grille:
+                return grille
+    return queryset.order_by("-annee_scolaire").first()
+
+
+def _align_enrollment_fee(eleve, echeancier, preferred_type_name=None):
+    """Aligne le frais dû sur inscription ou réinscription.
+
+    Le premier paiement d'inscription/réinscription validé fixe la nature du
+    frais. Avant le premier paiement validé, le type actuellement sélectionné
+    sert de préférence. Cela corrige les échéanciers précréés avec le tarif
+    d'inscription alors que l'élève effectue une réinscription.
+    """
+    preference = _enrollment_preference_for_eleve(eleve, preferred_type_name)
+    if preference is None:
+        return echeancier
+
+    grille = _applicable_grille_for_eleve(eleve, echeancier.annee_scolaire)
+    if not grille:
+        return echeancier
+
+    expected_fee = (
+        Decimal(str(grille.frais_reinscription or 0))
+        if preference
+        else Decimal(str(grille.frais_inscription or 0))
+    )
+    current_fee = Decimal(str(echeancier.frais_inscription_du or 0))
+    configured_fees = {
+        Decimal(str(grille.frais_inscription or 0)),
+        Decimal(str(grille.frais_reinscription or 0)),
+        Decimal("0"),
+    }
+    # Ne pas écraser un montant personnalisé saisi manuellement dans l'échéancier.
+    if current_fee not in configured_fees:
+        return echeancier
+    if current_fee != expected_fee:
+        echeancier.frais_inscription_du = expected_fee
+        echeancier.save(update_fields=["frais_inscription_du", "date_modification"])
+    return echeancier
+
 
 def ensure_echeancier_for_eleve(eleve: "Eleve", *, created_by=None, prefer_reinscription: bool = False) -> "EcheancierPaiement":
     """Crée (silencieusement) un `EcheancierPaiement` pour l'élève s'il n'existe pas.
@@ -210,15 +304,16 @@ def ajax_montant_suggere(request):
         eleve = get_object_or_404(eleve_qs, pk=int(eleve_id))
 
         type_pmt = get_object_or_404(TypePaiement, pk=int(type_id))
-        type_nom = (type_pmt.nom or '').strip().lower()
+        type_nom = _normalize_payment_type_name(type_pmt.nom)
 
         # Assurer un échéancier
         ech = getattr(eleve, 'echeancier', None)
         if not ech:
-            prefer_reinsc = ('réinscription' in type_nom) or ('reinscription' in type_nom)
+            prefer_reinsc = _enrollment_preference_from_type(type_nom) is True
             ech = ensure_echeancier_for_eleve(eleve, created_by=request.user, prefer_reinscription=prefer_reinsc)
         if not ech:
             return JsonResponse({'ok': False, 'error': "Aucun échéancier disponible pour l'élève."}, status=400)
+        _align_enrollment_fee(eleve, ech, type_nom)
 
         # Récup montants dus/payés
         try:
@@ -287,13 +382,13 @@ def ajax_montant_suggere(request):
         logging.getLogger(__name__).exception("ajax_montant_suggere failed")
         return JsonResponse({'ok': False, 'error': 'Erreur interne'}, status=500)
 
+
 def _allocate_payment_to_echeancier(paiement: "Paiement") -> None:
     """Alloue intelligemment le montant d'un paiement dans l'échéancier de l'élève.
 
     Règles:
     - Allouer d'abord les frais d'inscription si encore dûs (fi_due - fi_payee)
     - Puis répartition séquentielle: T1 -> T2 -> T3
-    - Si le type contient 'annuel', répartir proportionnellement entre tranches restantes après inscription
     - Ne jamais dépasser les montants dus par tranche
     - Utilise Decimal partout pour éviter les pertes de précision
     """
@@ -301,13 +396,22 @@ def _allocate_payment_to_echeancier(paiement: "Paiement") -> None:
 
     try:
         eleve = paiement.eleve
+        type_nom = _normalize_payment_type_name(
+            getattr(paiement.type_paiement, "nom", "")
+        )
 
         # Tout le bloc d'allocation est atomique avec verrouillage (select_for_update)
         with transaction.atomic():
             # Verrouiller l'échéancier pour éviter les écritures concurrentes
             ech = EcheancierPaiement.objects.select_for_update().filter(eleve=eleve).first()
             if not ech:
-                ech = ensure_echeancier_for_eleve(eleve, created_by=getattr(paiement, 'cree_par', None))
+                ech = ensure_echeancier_for_eleve(
+                    eleve,
+                    created_by=getattr(paiement, 'cree_par', None),
+                    prefer_reinscription=(
+                        _enrollment_preference_from_type(type_nom) is True
+                    ),
+                )
                 if ech:
                     # Re-verrouiller après création
                     ech = EcheancierPaiement.objects.select_for_update().filter(pk=ech.pk).first()
@@ -318,111 +422,28 @@ def _allocate_payment_to_echeancier(paiement: "Paiement") -> None:
                 )
                 return
 
+            _align_enrollment_fee(eleve, ech, type_nom)
+
             montant = Decimal(str(paiement.montant or 0))
             if montant <= _ZERO:
                 return
 
-            # Récupérer dû et payé actuels (garder en Decimal)
-            fi_due = Decimal(str(ech.frais_inscription_du or 0))
-            fi_payee = Decimal(str(ech.frais_inscription_paye or 0))
-            t1_due = Decimal(str(ech.tranche_1_due or 0))
-            t1_payee = Decimal(str(ech.tranche_1_payee or 0))
-            t2_due = Decimal(str(ech.tranche_2_due or 0))
-            t2_payee = Decimal(str(ech.tranche_2_payee or 0))
-            t3_due = Decimal(str(ech.tranche_3_due or 0))
-            t3_payee = Decimal(str(ech.tranche_3_payee or 0))
-
-            type_nom = (getattr(paiement.type_paiement, 'nom', '') or '').strip().lower()
-
-            remaining = montant
+            allocation, _, remaining = allocate_amount_sequentially(
+                montant, remaining_balances(ech)
+            )
+            field_by_key = {
+                "inscription": "frais_inscription_paye",
+                "tranche_1": "tranche_1_payee",
+                "tranche_2": "tranche_2_payee",
+                "tranche_3": "tranche_3_payee",
+            }
             changed = False
-
-            # 1) Inscription d'abord si due, quel que soit le type (règle métier: priorité à l'inscription)
-            manque_insc = max(_ZERO, fi_due - fi_payee)
-            take = min(remaining, manque_insc)
-            if take > _ZERO:
-                ech.frais_inscription_paye = fi_payee + take
-                remaining -= take
-                fi_payee += take
-                changed = True
-
-            # Helper pour allocation séquentielle
-            def alloc_seq(current_due, current_paid):
-                nonlocal remaining, changed
-                manque = max(_ZERO, Decimal(str(current_due or 0)) - Decimal(str(current_paid or 0)))
-                if manque <= _ZERO or remaining <= _ZERO:
-                    return _ZERO
-                take_local = min(remaining, manque)
-                remaining -= take_local
-                changed = True
-                return take_local
-
-            # 2) Mode proportionnel si 'annuel' est indiqué (après inscription)
-            if 'annuel' in type_nom and remaining > _ZERO:
-                r1 = max(_ZERO, t1_due - t1_payee)
-                r2 = max(_ZERO, t2_due - t2_payee)
-                r3 = max(_ZERO, t3_due - t3_payee)
-                total_rest = r1 + r2 + r3
-                if total_rest > _ZERO:
-                    a_repartir = min(remaining, total_rest)
-
-                    from decimal import ROUND_DOWN
-                    p1 = (a_repartir * r1 / total_rest).quantize(Decimal('1'), rounding=ROUND_DOWN) if r1 > _ZERO else _ZERO
-                    p2 = (a_repartir * r2 / total_rest).quantize(Decimal('1'), rounding=ROUND_DOWN) if r2 > _ZERO else _ZERO
-                    p3 = a_repartir - (p1 + p2)
-
-                    take1 = min(p1, r1) if p1 > _ZERO else _ZERO
-                    take2 = min(p2, r2) if p2 > _ZERO else _ZERO
-                    take3 = min(p3, r3) if p3 > _ZERO else _ZERO
-
-                    # Redistribuer le reste après plafonnement
-                    reste_cap = a_repartir - (take1 + take2 + take3)
-                    if reste_cap > _ZERO:
-                        for idx, (tk, rk) in enumerate([(take1, r1), (take2, r2), (take3, r3)]):
-                            dispo = rk - tk
-                            if dispo > _ZERO and reste_cap > _ZERO:
-                                extra = min(reste_cap, dispo)
-                                if idx == 0:
-                                    take1 += extra
-                                elif idx == 1:
-                                    take2 += extra
-                                else:
-                                    take3 += extra
-                                reste_cap -= extra
-
-                    if take1 > _ZERO:
-                        ech.tranche_1_payee = t1_payee + take1
-                        t1_payee += take1
-                        changed = True
-                    if take2 > _ZERO:
-                        ech.tranche_2_payee = t2_payee + take2
-                        t2_payee += take2
-                        changed = True
-                    if take3 > _ZERO:
-                        ech.tranche_3_payee = t3_payee + take3
-                        t3_payee += take3
-                        changed = True
-
-                    remaining -= (take1 + take2 + take3)
-
-            # 3) Allocation séquentielle pour le reste (ou si non-annuel)
-            if remaining > _ZERO:
-                take = alloc_seq(t1_due, t1_payee)
-                if take > _ZERO:
-                    ech.tranche_1_payee = t1_payee + take
-                    t1_payee += take
-
-            if remaining > _ZERO:
-                take = alloc_seq(t2_due, t2_payee)
-                if take > _ZERO:
-                    ech.tranche_2_payee = t2_payee + take
-                    t2_payee += take
-
-            if remaining > _ZERO:
-                take = alloc_seq(t3_due, t3_payee)
-                if take > _ZERO:
-                    ech.tranche_3_payee = t3_payee + take
-                    t3_payee += take
+            for key, field_name in field_by_key.items():
+                added = allocation[key]
+                if added > _ZERO:
+                    current_value = Decimal(str(getattr(ech, field_name) or 0))
+                    setattr(ech, field_name, current_value + added)
+                    changed = True
 
             # Sauvegarder seulement si des changements ont été effectués
             if changed:
@@ -445,8 +466,9 @@ def _allocate_payment_to_echeancier(paiement: "Paiement") -> None:
     except Exception:
         logging.getLogger(__name__).exception("Erreur allocation paiement -> échéancier")
 
+
 def _allocate_combined_payment(paiement: "Paiement", echeancier: "EcheancierPaiement" = None) -> None:
-    """CompatibilitÃ© avec les anciens tests et appels internes."""
+    """Compatibilité avec les anciens tests et appels internes."""
     _allocate_payment_to_echeancier(paiement)
 
 
@@ -470,13 +492,12 @@ def _sum_validated_payments_and_remises(eleve):
 def _auto_validate_echeancier_for_eleve(eleve: "Eleve") -> None:
     """Synchronise l'échéancier de l'élève avec les paiements VALIDÉS avant impression du reçu.
 
-    Règles conservatrices:
+    Règles:
     - Si la somme des paiements validés + remises couvre le total dû -> statut = PAYE_COMPLET.
     - Les champs *_paye restent limités aux encaissements; les remises restent séparées.
-    - Si couverture = 0 -> statut = A_PAYER (pas d'allocation détaillée effectuée ici)
-    - Sinon -> statut = PAYE_PARTIEL (sans répartir finement par tranche)
+    - Les encaissements sont recalculés dans l'ordre Inscription -> T1 -> T2 -> T3.
 
-    Cette fonction évite les incohérences si l'allocation manuelle par tranche a été oubliée.
+    Le recalcul complet répare aussi les anciennes affectations proportionnelles.
     """
     try:
         # Récupérer l'échéancier (sans exception si absent)
@@ -485,6 +506,8 @@ def _auto_validate_echeancier_for_eleve(eleve: "Eleve") -> None:
             echeancier = EcheancierPaiement.objects.filter(eleve=eleve).first()
         if not echeancier:
             return
+
+        _align_enrollment_fee(eleve, echeancier)
 
         # Totaux dus
         total_du = int((echeancier.frais_inscription_du or 0)
@@ -495,7 +518,17 @@ def _auto_validate_echeancier_for_eleve(eleve: "Eleve") -> None:
         # Paiements validés et remises appliquées sur des paiements
         sum_montant, sum_remises = _sum_validated_payments_and_remises(eleve)
 
-        couverture = max(0, sum_montant + sum_remises)
+        recorded_cash = max(
+            0,
+            int(echeancier.frais_inscription_paye or 0)
+            + int(echeancier.tranche_1_payee or 0)
+            + int(echeancier.tranche_2_payee or 0)
+            + int(echeancier.tranche_3_payee or 0),
+        )
+        # Conserver les encaissements saisis/importés manuellement lorsqu'ils
+        # ne disposent pas d'un objet Paiement correspondant.
+        cash_to_allocate = max(sum_montant, recorded_cash)
+        couverture = max(0, cash_to_allocate + sum_remises)
 
         # Déterminer le nouveau statut avec gestion du retard
         # Calcul de l'exigible (sommes dont la date d'échéance est passée ou aujourd'hui)
@@ -511,46 +544,21 @@ def _auto_validate_echeancier_for_eleve(eleve: "Eleve") -> None:
         if echeancier.date_echeance_tranche_3 and echeancier.date_echeance_tranche_3 <= today:
             exigible += int(echeancier.tranche_3_due or 0)
 
-        # Allocation conservatrice sur les tranches SANS jamais réduire l'existant
-        # 1) total déjà indiqué comme payé dans l'échéancier
-        old_insc = int(echeancier.frais_inscription_paye or 0)
-        old_t1 = int(echeancier.tranche_1_payee or 0)
-        old_t2 = int(echeancier.tranche_2_payee or 0)
-        old_t3 = int(echeancier.tranche_3_payee or 0)
-        current_total_paid = max(0, old_insc + old_t1 + old_t2 + old_t3)
-
-        # 2) Les champs *_paye représentent uniquement les encaissements réels.
-        # Les remises participent à la couverture et au statut, mais ne doivent
-        # pas être enregistrées une seconde fois comme des montants encaissés.
-        increment = max(0, sum_montant - current_total_paid)
-        remaining = increment
-
-        def _alloc(due: int, paid: int, remaining_local: int):
-            due_i = int(due or 0)
-            paid_i = int(paid or 0)
-            room = max(0, due_i - paid_i)
-            take = min(room, max(0, int(remaining_local)))
-            return paid_i + take, remaining_local - take
-
+        # Les champs *_paye représentent uniquement les encaissements réels.
+        # Les remises participent au statut mais ne deviennent pas un encaissement.
+        cash_allocation, _, _ = allocate_amount_sequentially(
+            cash_to_allocate, due_balances(echeancier)
+        )
+        paid_fields = {
+            "frais_inscription_paye": cash_allocation["inscription"],
+            "tranche_1_payee": cash_allocation["tranche_1"],
+            "tranche_2_payee": cash_allocation["tranche_2"],
+            "tranche_3_payee": cash_allocation["tranche_3"],
+        }
         changed = False
-        if remaining > 0:
-            # Ordre: inscription -> T1 -> T2 -> T3
-            new_insc, remaining = _alloc(echeancier.frais_inscription_du, old_insc, remaining)
-            new_t1, remaining = _alloc(echeancier.tranche_1_due, old_t1, remaining)
-            new_t2, remaining = _alloc(echeancier.tranche_2_due, old_t2, remaining)
-            new_t3, remaining = _alloc(echeancier.tranche_3_due, old_t3, remaining)
-
-            if new_insc != old_insc:
-                echeancier.frais_inscription_paye = new_insc
-                changed = True
-            if new_t1 != old_t1:
-                echeancier.tranche_1_payee = new_t1
-                changed = True
-            if new_t2 != old_t2:
-                echeancier.tranche_2_payee = new_t2
-                changed = True
-            if new_t3 != old_t3:
-                echeancier.tranche_3_payee = new_t3
+        for field_name, expected_value in paid_fields.items():
+            if Decimal(str(getattr(echeancier, field_name) or 0)) != expected_value:
+                setattr(echeancier, field_name, expected_value)
                 changed = True
 
         # Somme payée effective bornée au total dû
@@ -1540,6 +1548,12 @@ def ajouter_paiement(request, eleve_id:int=None):
     titre_page = "Ajouter un paiement"
     action = "Enregistrer"
 
+    # Destination après enregistrement, fournie par la page appelante.
+    # Utilisée par l'enchaînement inscription -> paiement -> nouvel élève.
+    next_url = (request.POST.get('next') or request.GET.get('next') or '').strip()
+    if next_url and not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+        next_url = ''
+
     eleve = None
     initial = {}
     if eleve_id:
@@ -1553,6 +1567,9 @@ def ajouter_paiement(request, eleve_id:int=None):
         if form.is_valid():
             # Pré-valider la cohérence métier avant d'enregistrer
             paiement: Paiement = form.save(commit=False)
+            type_nom = _normalize_payment_type_name(
+                getattr(paiement.type_paiement, "nom", "")
+            )
 
             # Vérifier que l'élève du paiement est bien dans l'école de l'utilisateur (sauf admin)
             if not user_is_admin(request.user):
@@ -1576,6 +1593,9 @@ def ajouter_paiement(request, eleve_id:int=None):
                     ech = ensure_echeancier_for_eleve(
                         paiement.eleve,
                         created_by=request.user if request.user.is_authenticated else None,
+                        prefer_reinscription=(
+                            _enrollment_preference_from_type(type_nom) is True
+                        ),
                     )
                 except Exception:
                     ech = None
@@ -1590,8 +1610,9 @@ def ajouter_paiement(request, eleve_id:int=None):
                     'eleve': eleve,
                 })
 
+            _align_enrollment_fee(paiement.eleve, ech, type_nom)
+
             # 1) Validation du montant saisi vs montant du type de paiement
-            type_nom = (getattr(paiement.type_paiement, 'nom', '') or '').strip().lower()
             try:
                 fi_due = int(ech.frais_inscription_du or 0)
                 fi_payee = int(ech.frais_inscription_paye or 0)
@@ -1608,40 +1629,49 @@ def ajouter_paiement(request, eleve_id:int=None):
             montant_saisi = int(paiement.montant or 0)
             montant_attendu = 0
             type_description = ""
+            enrollment_description = (
+                "réinscription"
+                if _enrollment_preference_from_type(type_nom) is True
+                else "inscription"
+            )
+            fi_remaining = max(0, fi_due - fi_payee)
+            t1_remaining = max(0, t1_due - t1_payee)
+            t2_remaining = max(0, t2_due - t2_payee)
+            t3_remaining = max(0, t3_due - t3_payee)
             
             # IMPORTANT: évaluer d'abord les types combinés pour éviter que 'inscription' seul ne matche
             if ('inscription' in type_nom and 'annuel' in type_nom):
                 # Frais d'inscription + Annuel (T1+T2+T3)
-                montant_attendu = fi_due + t1_due + t2_due + t3_due
-                type_description = "frais d'inscription + Annuel"
+                montant_attendu = fi_remaining + t1_remaining + t2_remaining + t3_remaining
+                type_description = f"frais de {enrollment_description} + Annuel"
             elif ('inscription' in type_nom and ('tranche 1 + tranche 2' in type_nom or 'tranche1 + tranche2' in type_nom)):
                 # Frais d'inscription + T1 + T2
-                montant_attendu = fi_due + t1_due + t2_due
-                type_description = "frais d'inscription + Tranche 1 + Tranche 2"
+                montant_attendu = fi_remaining + t1_remaining + t2_remaining
+                type_description = f"frais de {enrollment_description} + Tranche 1 + Tranche 2"
             elif ('inscription' in type_nom and ('tranche 1' in type_nom or '1ère tranche' in type_nom or '1ere tranche' in type_nom)):
                 # Frais d'inscription + T1
-                montant_attendu = fi_due + t1_due
-                type_description = "frais d'inscription + Tranche 1"
+                montant_attendu = fi_remaining + t1_remaining
+                type_description = f"frais de {enrollment_description} + Tranche 1"
             elif 'inscription' in type_nom:
-                montant_attendu = fi_due
-                type_description = "frais d'inscription"
+                montant_attendu = fi_remaining
+                type_description = f"frais de {enrollment_description}"
             elif ('tranche 1 + tranche 2 + tranche 3' in type_nom or 'tranche1 + tranche2 + tranche3' in type_nom):
-                montant_attendu = t1_due + t2_due + t3_due
+                montant_attendu = t1_remaining + t2_remaining + t3_remaining
                 type_description = "Tranche 1 + Tranche 2 + Tranche 3"
             elif 'tranche 1 + tranche 2' in type_nom or 'tranche1 + tranche2' in type_nom:
-                montant_attendu = t1_due + t2_due
+                montant_attendu = t1_remaining + t2_remaining
                 type_description = "Tranche 1 + Tranche 2"
             elif 'tranche 2 + tranche 3' in type_nom or 'tranche2 + tranche3' in type_nom:
-                montant_attendu = t2_due + t3_due
+                montant_attendu = t2_remaining + t3_remaining
                 type_description = "Tranche 2 + Tranche 3"
             elif 'tranche 1' in type_nom or '1ère tranche' in type_nom or '1ere tranche' in type_nom:
-                montant_attendu = t1_due
+                montant_attendu = t1_remaining
                 type_description = "1ère tranche"
             elif 'tranche 2' in type_nom or '2ème tranche' in type_nom or '2eme tranche' in type_nom:
-                montant_attendu = t2_due
+                montant_attendu = t2_remaining
                 type_description = "2ème tranche"
             elif 'tranche 3' in type_nom or '3ème tranche' in type_nom or '3eme tranche' in type_nom:
-                montant_attendu = t3_due
+                montant_attendu = t3_remaining
                 type_description = "3ème tranche"
             
             # Vérifier si le montant correspond au type sélectionné
@@ -1682,6 +1712,10 @@ def ajouter_paiement(request, eleve_id:int=None):
                     # anti-surpaiement par groupe et le plafond global empêcheront tout excès réel.
                     pass
 
+            # Un excédent est autorisé tant que le solde annuel le permet: il sera
+            # affecté automatiquement aux postes suivants jusqu'à la tranche 3.
+            allow_sequential_overflow = True
+
             # 2) Bloquer si la tranche ciblée est déjà soldée ou risque de sur-paiement
             
             # Vérification pour l'inscription (seulement si type = inscription seule, pas combiné)
@@ -1692,9 +1726,9 @@ def ajouter_paiement(request, eleve_id:int=None):
                     from django.utils.safestring import mark_safe
                     message_html = mark_safe(
                         f'<span style="color: #dc3545; font-weight: bold; font-size: 1.1em;">'
-                        f'❌ ERREUR: L\'inscription est déjà totalement payée pour cet élève.</span><br>'
+                        f'❌ ERREUR: La {enrollment_description} est déjà totalement payée pour cet élève.</span><br>'
                         f'<strong>Montant dû:</strong> {fi_due:,} GNF | <strong>Déjà payé:</strong> {fi_payee:,} GNF<br>'
-                        f'<strong>Aucune somme supplémentaire n\'est autorisée pour l\'inscription.</strong>'
+                        f'<strong>Aucune somme supplémentaire n\'est autorisée pour la {enrollment_description}.</strong>'
                     )
                     messages.error(request, message_html)
                     return render(request, 'paiements/form_paiement.html', {
@@ -1703,13 +1737,13 @@ def ajouter_paiement(request, eleve_id:int=None):
                         'form': form,
                         'eleve': eleve,
                     })
-                elif (fi_due > 0) and ((fi_payee + montant_saisi) > fi_due):
+                elif (fi_due > 0) and ((fi_payee + montant_saisi) > fi_due) and not allow_sequential_overflow:
                     from django.utils.safestring import mark_safe
                     sur_paiement = (fi_payee + montant_saisi) - fi_due
                     montant_max = fi_due - fi_payee
                     message_html = mark_safe(
                         f'<span style="color: #dc3545; font-weight: bold; font-size: 1.1em;">'
-                        f'❌ ERREUR: Sur-paiement détecté pour l\'inscription!</span><br>'
+                        f'❌ ERREUR: Sur-paiement détecté pour la {enrollment_description}!</span><br>'
                         f'<strong>Montant dû:</strong> {fi_due:,} GNF | <strong>Déjà payé:</strong> {fi_payee:,} GNF<br>'
                         f'<strong>Montant saisi:</strong> {montant_saisi:,} GNF | <strong>Sur-paiement:</strong> {sur_paiement:,} GNF<br>'
                         f'<strong>Montant maximum autorisé:</strong> {montant_max:,} GNF'
@@ -1741,7 +1775,7 @@ def ajouter_paiement(request, eleve_id:int=None):
                         'eleve': eleve,
                     })
                 # Vérifier uniquement les sur-paiements (pas les paiements partiels)
-                elif ((t1_due + t2_due) > 0) and (((t1_payee + t2_payee) + montant_saisi) > (t1_due + t2_due)):
+                elif ((t1_due + t2_due) > 0) and (((t1_payee + t2_payee) + montant_saisi) > (t1_due + t2_due)) and not allow_sequential_overflow:
                     from django.utils.safestring import mark_safe
                     total_paye = t1_payee + t2_payee
                     total_du = t1_due + t2_due
@@ -1781,7 +1815,7 @@ def ajouter_paiement(request, eleve_id:int=None):
                         'eleve': eleve,
                     })
                 # Vérifier uniquement les sur-paiements (pas les paiements partiels)
-                elif ((t2_due + t3_due) > 0) and (((t2_payee + t3_payee) + montant_saisi) > (t2_due + t3_due)):
+                elif ((t2_due + t3_due) > 0) and (((t2_payee + t3_payee) + montant_saisi) > (t2_due + t3_due)) and not allow_sequential_overflow:
                     from django.utils.safestring import mark_safe
                     total_paye = t2_payee + t3_payee
                     total_du = t2_due + t3_due
@@ -1822,7 +1856,7 @@ def ajouter_paiement(request, eleve_id:int=None):
                         'eleve': eleve,
                     })
                 # Vérifier uniquement les sur-paiements (pas les paiements partiels)
-                elif ((t1_due + t2_due + t3_due) > 0) and (((t1_payee + t2_payee + t3_payee) + montant_saisi) > (t1_due + t2_due + t3_due)):
+                elif ((t1_due + t2_due + t3_due) > 0) and (((t1_payee + t2_payee + t3_payee) + montant_saisi) > (t1_due + t2_due + t3_due)) and not allow_sequential_overflow:
                     from django.utils.safestring import mark_safe
                     total_paye = t1_payee + t2_payee + t3_payee
                     total_du = t1_due + t2_due + t3_due
@@ -1861,7 +1895,7 @@ def ajouter_paiement(request, eleve_id:int=None):
                         'eleve': eleve,
                     })
                 # Gestion intelligente des sur-paiements avec proposition de paiement partiel
-                elif (t1_due > 0) and ((t1_payee + montant_saisi) > t1_due):
+                elif (t1_due > 0) and ((t1_payee + montant_saisi) > t1_due) and not allow_sequential_overflow:
                     # Autoriser un dépassement si celui-ci correspond exactement au reste d'inscription à payer
                     fi_remaining = max(0, fi_due - fi_payee)
                     sur_paiement_calcule = (t1_payee + montant_saisi) - t1_due
@@ -1934,7 +1968,7 @@ def ajouter_paiement(request, eleve_id:int=None):
                         'eleve': eleve,
                     })
                 # Gestion intelligente des sur-paiements T2 avec proposition vers T3
-                elif (t2_due > 0) and ((t2_payee + montant_saisi) > t2_due):
+                elif (t2_due > 0) and ((t2_payee + montant_saisi) > t2_due) and not allow_sequential_overflow:
                     # Vérifier si l'utilisateur a confirmé le paiement partiel pour la tranche suivante
                     confirmation_partiel_suivant = request.POST.get('confirmation_paiement_partiel_suivant')
                     
@@ -2011,7 +2045,7 @@ def ajouter_paiement(request, eleve_id:int=None):
                         'eleve': eleve,
                     })
                 # Bloquer strictement les sur-paiements pour T3 (dernière tranche)
-                elif (t3_due > 0) and ((t3_payee + montant_saisi) > t3_due):
+                elif (t3_due > 0) and ((t3_payee + montant_saisi) > t3_due) and not allow_sequential_overflow:
                     from django.utils.safestring import mark_safe
                     sur_paiement = (t3_payee + montant_saisi) - t3_due
                     montant_max = t3_due - t3_payee
@@ -2102,7 +2136,11 @@ def ajouter_paiement(request, eleve_id:int=None):
             except Exception:
                 logging.getLogger(__name__).exception("Erreur lors de l'envoi des notifications Twilio")
             messages.success(request, "Paiement enregistré avec succès.")
-            # Rediriger vers la page échéancier de l'élève
+            # Enchaînement inscription -> paiement -> nouvel élève : si la page
+            # appelante a fourni un "next" (formulaire d'ajout d'élève), on y
+            # retourne. Sinon, comportement inchangé : l'échéancier de l'élève.
+            if next_url:
+                return redirect(next_url)
             return redirect('paiements:echeancier_eleve', eleve_id=paiement.eleve_id)
         else:
             messages.error(request, "Veuillez corriger les erreurs du formulaire.")
@@ -2117,6 +2155,7 @@ def ajouter_paiement(request, eleve_id:int=None):
         'action': action,
         'form': form,
         'eleve': eleve,
+        'next_url': next_url,
     }
     return render(request, 'paiements/form_paiement.html', context)
 
@@ -2751,10 +2790,14 @@ def generer_recu_pdf(request, paiement_id:int):
 
     # Déterminer libellé Inscription/Réinscription pour l'affichage (structure inchangée)
     try:
-        _type_nom = (getattr(paiement.type_paiement, 'nom', '') or '').strip().lower()
+        _type_nom = getattr(paiement.type_paiement, 'nom', '') or ''
     except Exception:
         _type_nom = ''
-    label_insc = "Réinscription" if ('réinscription' in _type_nom or 'reinscription' in _type_nom) else "Inscription"
+    label_insc = (
+        "Réinscription"
+        if _enrollment_preference_for_eleve(paiement.eleve, _type_nom) is True
+        else "Inscription"
+    )
 
     # Mise en page simple
     left = 40
@@ -3020,56 +3063,24 @@ def generer_recu_pdf(request, paiement_id:int):
         echeancier_for_alloc = None
     if echeancier_for_alloc:
         try:
-            # Restants initiaux égaux aux dus de l'échéancier
-            rest_insc = int(echeancier_for_alloc.frais_inscription_du or 0)
-            rest_t1 = int(echeancier_for_alloc.tranche_1_due or 0)
-            rest_t2 = int(echeancier_for_alloc.tranche_2_due or 0)
-            rest_t3 = int(echeancier_for_alloc.tranche_3_due or 0)
-
             # Parcourir tous les paiements validés (y compris celui-ci) dans l'ordre
             paiements_valides = (
                 Paiement.objects
                 .filter(eleve=paiement.eleve, statut='VALIDE')
                 .order_by('date_paiement', 'date_creation', 'id')
             )
+            allocations, _ = build_payment_allocation_history(
+                echeancier_for_alloc, paiements_valides.iterator()
+            )
 
-            allocations = {}
-            for p in paiements_valides.iterator():
-                # Couverture de ce paiement = montant + remises sur CE paiement
-                try:
-                    rem_p = p.remises.aggregate(total=Sum('montant_remise')).get('total') or 0
-                except Exception:
-                    rem_p = 0
-                reste_a_repartir = max(0, int(p.montant) + int(rem_p))
-
-                a_insc = a_t1 = a_t2 = a_t3 = 0
-                if reste_a_repartir and rest_insc > 0:
-                    a = min(rest_insc, reste_a_repartir)
-                    a_insc = a
-                    rest_insc -= a
-                    reste_a_repartir -= a
-                if reste_a_repartir and rest_t1 > 0:
-                    a = min(rest_t1, reste_a_repartir)
-                    a_t1 = a
-                    rest_t1 -= a
-                    reste_a_repartir -= a
-                if reste_a_repartir and rest_t2 > 0:
-                    a = min(rest_t2, reste_a_repartir)
-                    a_t2 = a
-                    rest_t2 -= a
-                    reste_a_repartir -= a
-                if reste_a_repartir and rest_t3 > 0:
-                    a = min(rest_t3, reste_a_repartir)
-                    a_t3 = a
-                    rest_t3 -= a
-                    reste_a_repartir -= a
-
-                allocations[p.id] = (a_insc, a_t1, a_t2, a_t3)
-
-            if allocations.get(paiement.id):
+            current_allocation = allocations.get(paiement.id)
+            if current_allocation:
                 top -= 6
                 draw_line("Affectation du paiement", bold=True)
-                a_insc, a_t1, a_t2, a_t3 = allocations[paiement.id]
+                a_insc = current_allocation["inscription"]
+                a_t1 = current_allocation["tranche_1"]
+                a_t2 = current_allocation["tranche_2"]
+                a_t3 = current_allocation["tranche_3"]
                 draw_line(f"{label_insc}: {str(f'{int(a_insc):,}').replace(',', ' ')} GNF")
                 draw_line(f"1ère tranche: {str(f'{int(a_t1):,}').replace(',', ' ')} GNF")
                 draw_line(f"2ème tranche: {str(f'{int(a_t2):,}').replace(',', ' ')} GNF")
@@ -3386,7 +3397,12 @@ def rapport_remises(request):
 
     total_global = 0
     try:
-        total_global = int(rem_qs.aggregate(s=Coalesce(Sum('montant_remise'), Value(0)))['s'] or 0)
+        # Value(0) est un IntegerField : sans output_field, Coalesce lève une
+        # FieldError (types mixtes) que le except avalait, laissant le total à 0.
+        total_global = int(rem_qs.aggregate(
+            s=Coalesce(Sum('montant_remise'),
+                       Value(0, output_field=DecimalField(max_digits=10, decimal_places=0)))
+        )['s'] or 0)
     except Exception:
         total_global = 0
 
@@ -4254,7 +4270,15 @@ def rapport_encaissements(request):
     except Exception:
         pass
     total = int(qs.aggregate(total=Sum('montant'))['total'] or 0)
-    par_statut = list(qs.values('statut').annotate(count=Count('id'), somme=Coalesce(Sum('montant'), Value(0))).order_by('statut'))
+    # montant est un DecimalField : Value(0) doit l'être aussi, sinon Coalesce
+    # lève « Expression contains mixed types » et la page renvoie une erreur 500.
+    par_statut = list(
+        qs.values('statut')
+          .annotate(count=Count('id'),
+                    somme=Coalesce(Sum('montant'),
+                                   Value(0, output_field=DecimalField(max_digits=10, decimal_places=0))))
+          .order_by('statut')
+    )
     context = {'titre_page': 'Rapport des encaissements', 'total': total, 'par_statut': par_statut}
     if _template_exists('rapports/tableau_bord.html'):
         return render(request, 'rapports/tableau_bord.html', context)

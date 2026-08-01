@@ -9,6 +9,7 @@ from django.db.models import Q, Count, Case, When, IntegerField
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_http_methods
 from django.urls import reverse
+from urllib.parse import urlencode
 from django.utils import timezone
 from django.utils.text import slugify
 from django.db import transaction
@@ -692,13 +693,16 @@ def ajouter_eleve(request):
                         f'classes_ecole_{user_school_obj.id if user_school_obj else "admin"}'
                     ])
                     
-                messages.success(request, f"L'eleve {eleve.prenom} {eleve.nom} a ete ajoute avec succes (Matricule: {eleve.matricule}). Vous pouvez ajouter un autre eleve.")
-                # Rediriger vers le formulaire d'ajout en preservant la classe selectionnee
-                url = reverse('eleves:ajouter_eleve')
+                messages.success(request, f"L'eleve {eleve.prenom} {eleve.nom} a ete ajoute avec succes (Matricule: {eleve.matricule}). Enregistrez maintenant son paiement.")
+                # Enchaînement inscription -> paiement -> nouvel élève.
+                # Le formulaire d'ajout (classe préservée) est passé en "next" :
+                # la vue de paiement y revient une fois le règlement enregistré.
+                retour = reverse('eleves:ajouter_eleve')
                 classe_id = form.cleaned_data.get('classe')
                 if classe_id:
-                    url += f'?classe_id={classe_id.id if hasattr(classe_id, "id") else classe_id}'
-                return redirect(url)
+                    retour += f'?classe_id={classe_id.id if hasattr(classe_id, "id") else classe_id}'
+                url_paiement = reverse('paiements:ajouter_paiement_eleve', args=[eleve.id])
+                return redirect(f'{url_paiement}?{urlencode({"next": retour})}')
                 
             except Exception as e:
                 logger.exception("Erreur lors de l'enregistrement d'un élève")

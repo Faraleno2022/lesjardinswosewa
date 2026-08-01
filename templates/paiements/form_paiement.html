@@ -140,7 +140,8 @@
         <div class="col-lg-8">
             <form method="post" id="paiementForm">
                 {% csrf_token %}
-                
+                {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+
                 <!-- Informations de l'élève -->
                 {% if eleve %}
                 <div class="eleve-info">
