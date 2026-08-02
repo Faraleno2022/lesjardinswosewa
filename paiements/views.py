@@ -3688,9 +3688,33 @@ def eleves_soldes_simple(request):
     from django.contrib import messages as django_messages
     today = _tz.localdate() if hasattr(_tz, 'localdate') else date.today()
 
-    # Année scolaire par défaut: Septembre→Août
+    # Utiliser d'abord une année réellement présente dans les échéanciers de
+    # l'établissement. Un calcul basé uniquement sur la date peut sélectionner
+    # une année vide dès qu'une nouvelle rentrée est préparée.
     annee_dyn = f"{today.year}-{today.year+1}" if today.month >= 9 else f"{today.year-1}-{today.year}"
-    annee = (request.GET.get('annee') or annee_dyn).strip()
+    ecole_resume = user_school(request.user)
+    annee_active = get_annee_active(request, ecole_resume) if ecole_resume else None
+    try:
+        echeanciers_visibles = filter_by_user_school(
+            EcheancierPaiement.objects.all(),
+            request.user,
+            'eleve__classe__ecole',
+        )
+        annees_disponibles = list(
+            echeanciers_visibles.values_list('annee_scolaire', flat=True)
+            .distinct().order_by('-annee_scolaire')
+        )
+    except Exception:
+        annees_disponibles = []
+    annee_demandee = (request.GET.get('annee') or '').strip()
+    if annee_demandee:
+        annee = annee_demandee
+    elif annee_active and annee_active in annees_disponibles:
+        annee = annee_active
+    elif annees_disponibles:
+        annee = annees_disponibles[0]
+    else:
+        annee = annee_active or annee_dyn
     ecole_id = (request.GET.get('ecole_id') or '').strip()
     classe_id = (request.GET.get('classe_id') or '').strip()
     q = (request.GET.get('q') or '').strip()
@@ -3722,17 +3746,15 @@ def eleves_soldes_simple(request):
         ecoles_qs = []
     
     try:
-        ecole_resume = user_school(request.user)
-        annee_active_r = get_annee_active(request, ecole_resume) if ecole_resume else None
         classes = Classe.objects.select_related('ecole').all().order_by('ecole__nom', 'nom')
         classes = filter_by_user_school(classes, request.user, 'ecole')
-        if annee_active_r:
-            classes = classes.filter(annee_scolaire=annee_active_r)
+        if annee:
+            classes = classes.filter(annee_scolaire=annee)
     except Exception:
         classes = []
 
     try:
-        annees_options = [
+        annees_options = annees_disponibles or [
             f"{annee_debut - 1}-{annee_debut}",
             f"{annee_debut}-{annee_debut + 1}",
             f"{annee_debut + 1}-{annee_debut + 2}",
@@ -4401,6 +4423,54 @@ def generer_note_rappel_pdf(request, eleve_id):
     return response
 
 
+def _echeanciers_impayes_utilisateur(user, classe=None, limite=None):
+    """Échéanciers non soldés visibles par l'utilisateur, remises incluses."""
+    echeanciers = (
+        EcheancierPaiement.objects
+        .select_related(
+            'eleve', 'eleve__classe', 'eleve__classe__ecole',
+            'eleve__responsable_principal',
+        )
+        .filter(eleve__statut='ACTIF')
+        .annotate(
+            remises_valides=Coalesce(
+                Sum(
+                    'eleve__paiements__remises__montant_remise',
+                    filter=Q(eleve__paiements__statut='VALIDE'),
+                    output_field=DecimalField(max_digits=12, decimal_places=0),
+                ),
+                Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
+            )
+        )
+    )
+    echeanciers = filter_by_user_school(
+        echeanciers, user, 'eleve__classe__ecole'
+    )
+    if classe is not None:
+        echeanciers = echeanciers.filter(eleve__classe=classe)
+    echeanciers = echeanciers.order_by(
+        'eleve__classe__nom', 'eleve__nom', 'eleve__prenom'
+    )
+    resultat = []
+    for echeancier in echeanciers:
+        total_du = Decimal(echeancier.total_du or 0)
+        couverture = min(
+            total_du,
+            Decimal(echeancier.total_paye or 0)
+            + Decimal(getattr(echeancier, 'remises_valides', 0) or 0),
+        )
+        reste = max(Decimal('0'), total_du - couverture)
+        if total_du <= 0 or reste <= 0:
+            continue
+        echeancier.couverture_calculee = couverture
+        echeancier.reste_calcule = reste
+        echeancier.pourcentage_calcule = int(couverture * 100 / total_du)
+        resultat.append(echeancier)
+        if limite and len(resultat) >= limite:
+            break
+    return resultat
+
+
 @login_required
 def generer_notes_rappel_classe_pdf(request, classe_id):
     """Génère les notes de rappel pour tous les élèves ayant des impayés dans une classe"""
@@ -4419,37 +4489,12 @@ def generer_notes_rappel_classe_pdf(request, classe_id):
             messages.error(request, "Vous n'avez pas accès à cette classe.")
             return redirect('eleves:classe_detail', classe_id=classe_id)
     
-    # Récupérer les élèves avec des impayés (optimisé: 1 requête au lieu de N+1)
-    from .models import ConfigurationPaiement
-    eleves_avec_impayes = []
-
-    try:
-        config = ConfigurationPaiement.objects.get(classe=classe)
-        montant_total = config.montant_inscription + config.montant_scolarite
-
-        # Annoter les paiements validés pour éviter N+1 requêtes
-        eleves_qs = (
-            Eleve.objects.filter(classe=classe, statut='ACTIF')
-            .select_related('classe', 'classe__ecole')
-            .annotate(
-                _total_paye=Coalesce(
-                    Sum('paiements__montant', filter=Q(paiements__statut='VALIDE')),
-                    Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
-                    output_field=DecimalField(max_digits=12, decimal_places=0),
-                ),
-            )
+    eleves_avec_impayes = [
+        echeancier.eleve
+        for echeancier in _echeanciers_impayes_utilisateur(
+            request.user, classe=classe
         )
-        for eleve in eleves_qs:
-            reste = montant_total - eleve._total_paye
-            if reste > 0:
-                eleves_avec_impayes.append(eleve)
-
-    except ConfigurationPaiement.DoesNotExist:
-        messages.warning(request, "Configuration de paiement non définie pour cette classe.")
-        eleves_avec_impayes = list(
-            Eleve.objects.filter(classe=classe, statut='ACTIF')
-            .select_related('classe', 'classe__ecole')
-        )
+    ]
     
     if not eleves_avec_impayes:
         messages.info(request, "Aucun élève avec des impayés dans cette classe.")
@@ -4492,53 +4537,19 @@ def generer_notes_rappel_classe_pdf(request, classe_id):
 def generer_toutes_notes_rappel_pdf(request):
     """Génère les notes de rappel PDF pour TOUS les élèves avec impayés (toutes classes)."""
     from .note_rappel_generator import generer_note_rappel_eleve
-    from .models import ConfigurationPaiement
 
     # Permissions
-    if not user_is_admin(request.user) and not can_view_reports(request.user):
+    if not user_is_admin(request.user) and not has_permission(
+        request.user, 'peut_consulter_rapports'
+    ):
         return HttpResponse(status=403)
 
-    # Élèves selon école de l'utilisateur
-    if user_is_superadmin(request.user):
-        eleves_qs = Eleve.objects.filter(statut='ACTIF')
-    else:
-        ecole_user = user_school(request.user)
-        if ecole_user is None:
-            messages.warning(request, "Aucune école associée à votre compte.")
-            return redirect('paiements:liste_eleves_impayes')
-        eleves_qs = Eleve.objects.filter(classe__ecole=ecole_user, statut='ACTIF')
-
-    # Construire un dictionnaire classe_id -> montant total (évite Subquery incompatible MySQL $)
-    config_map = {}
-    for conf in ConfigurationPaiement.objects.all():
-        config_map[conf.classe_id] = (conf.montant_inscription or 0) + (conf.montant_scolarite or 0)
-
-    eleves_qs = (
-        eleves_qs
-        .select_related('classe', 'classe__ecole', 'responsable_principal')
-        .annotate(
-            _total_paye=Coalesce(
-                Sum('paiements__montant', filter=Q(paiements__statut='VALIDE')),
-                Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
-                output_field=DecimalField(max_digits=12, decimal_places=0),
-            ),
+    eleves_avec_impayes = [
+        echeancier.eleve
+        for echeancier in _echeanciers_impayes_utilisateur(
+            request.user, limite=500
         )
-        .order_by('classe__nom', 'nom', 'prenom')
-    )
-
-    eleves_avec_impayes = []
-    for eleve in eleves_qs[:500]:
-        config_total = config_map.get(eleve.classe_id, 0)
-        if config_total <= 0:
-            continue
-        total_paye = int(eleve._total_paye)
-        reste = config_total - total_paye
-        if reste <= 0:
-            continue
-        eleve._config_total = config_total
-        eleve._total_paye_val = total_paye
-        eleve._reste_a_payer = reste
-        eleves_avec_impayes.append(eleve)
+    ]
 
     if not eleves_avec_impayes:
         messages.info(request, "Aucun élève avec des impayés.")
@@ -4580,57 +4591,20 @@ def generer_toutes_notes_rappel_pdf(request):
 def liste_eleves_impayes(request):
     """Affiche la liste des élèves avec des impayés.
 
-    Optimisé: utilise des annotations DB au lieu de boucler avec N+1 requêtes.
-
-    L'accès exige une authentification : la page expose des noms d'élèves et
-    des montants dus. Sans ce décorateur, elle ne restait vide pour un visiteur
-    anonyme que parce que user_school() renvoie None — une protection fortuite.
+    Source de vérité : EcheancierPaiement, remises validées incluses.
     """
-    from .models import ConfigurationPaiement
-
-    # IMPORTANT: Seul le superuser peut voir toutes les écoles
-    if user_is_superadmin(request.user):
-        eleves = Eleve.objects.filter(statut='ACTIF')
-    else:
-        ecole_user = user_school(request.user)
-        if ecole_user is None:
-            eleves = Eleve.objects.none()
-        else:
-            eleves = Eleve.objects.filter(classe__ecole=ecole_user, statut='ACTIF')
-
-    # Construire un dictionnaire classe_id -> montant total (évite Subquery incompatible MySQL $)
-    config_map = {}
-    for conf in ConfigurationPaiement.objects.all():
-        config_map[conf.classe_id] = (conf.montant_inscription or 0) + (conf.montant_scolarite or 0)
-
-    eleves = (
-        eleves
-        .select_related('classe', 'classe__ecole')
-        .annotate(
-            _total_paye=Coalesce(
-                Sum('paiements__montant', filter=Q(paiements__statut='VALIDE')),
-                Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
-                output_field=DecimalField(max_digits=12, decimal_places=0),
-            ),
-        )
-        .order_by('classe__nom', 'nom', 'prenom')
-    )
 
     eleves_avec_soldes = []
-    for eleve in eleves:
-        montant_total = config_map.get(eleve.classe_id, 0)
-        if montant_total <= 0:
-            continue
-        montant_paye = int(eleve._total_paye)
-        reste = montant_total - montant_paye
-        if reste <= 0:
-            continue
+    for echeancier in _echeanciers_impayes_utilisateur(request.user):
+        montant_total = int(echeancier.total_du)
+        montant_paye = int(echeancier.couverture_calculee)
+        reste = int(echeancier.reste_calcule)
         eleves_avec_soldes.append({
-            'eleve': eleve,
+            'eleve': echeancier.eleve,
             'montant_total': montant_total,
             'montant_paye': montant_paye,
             'reste_a_payer': reste,
-            'pourcentage_paye': int((montant_paye / montant_total * 100)) if montant_total > 0 else 0,
+            'pourcentage_paye': echeancier.pourcentage_calcule,
         })
 
     # Trier par reste à payer décroissant

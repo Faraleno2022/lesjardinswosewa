@@ -93,6 +93,9 @@
                         </div>
                     </div>
                     <div class="modal-footer">
+                        <button type="button" class="btn btn-primary" onclick="ouvrirRapportComptable('web')">
+                            <i class="fas fa-eye me-1"></i>Voir à l'écran
+                        </button>
                         <button type="button" class="btn btn-danger" onclick="ouvrirRapportComptable('pdf')">
                             <i class="fas fa-file-pdf me-1"></i>PDF
                         </button>
@@ -115,11 +118,9 @@
             <a href="{% url 'paiements:liste_relances' %}" class="btn btn-outline-warning">
                 <i class="fas fa-bell me-1"></i>Relances
             </a>
-            {% if perms.utilisateurs.peut_consulter_rapports %}
             <a href="{% url 'paiements:rapport_remises' %}" class="btn btn-outline-success">
                 <i class="fas fa-percent me-1"></i>Rapport des remises
             </a>
-            {% endif %}
             <a href="{% url 'paiements:tableau_bord' %}" class="btn btn-secondary">
                 <i class="fas fa-chart-line me-1"></i>Tableau de bord
             </a>
@@ -489,16 +490,18 @@ function exportFiltresPdf() {
 
 // Rapport comptable complet (paiements + retards + relances + rapprochement par mode)
 function ouvrirRapportComptable(format) {
-    const base = format === 'pdf'
-        ? '{% url "paiements:export_comptabilite_pdf" %}'
-        : '{% url "paiements:export_comptabilite_excel" %}';
+    const base = format === 'web'
+        ? '{% url "paiements:rapport_comptable" %}'
+        : (format === 'pdf'
+            ? '{% url "paiements:export_comptabilite_pdf" %}'
+            : '{% url "paiements:export_comptabilite_excel" %}');
     const out = new URL(base, window.location.origin);
     const classe = document.getElementById('rcClasse').value;
     const du = document.getElementById('rcDu').value;
     const au = document.getElementById('rcAu').value;
-    if (classe) out.searchParams.set('classe_id', classe);
-    if (du) out.searchParams.set('du', du);
-    if (au) out.searchParams.set('au', au);
+    if (classe) out.searchParams.set(format === 'web' ? 'classe' : 'classe_id', classe);
+    if (du) out.searchParams.set(format === 'web' ? 'date_debut' : 'du', du);
+    if (au) out.searchParams.set(format === 'web' ? 'date_fin' : 'au', au);
     window.open(out.toString(), '_blank');
 }
 
