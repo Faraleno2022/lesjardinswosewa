@@ -269,6 +269,78 @@
             </div>
         </div>
     </div>
+
+    <div class="card shadow-sm mt-4">
+        <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div>
+                <h5 class="mb-1">
+                    <i class="fas fa-history me-2 text-primary"></i>Historique des paiements de l'élève
+                </h5>
+                <small class="text-muted">{{ paiement.eleve.nom_complet }}</small>
+            </div>
+            <span class="badge bg-primary rounded-pill">
+                {{ paiements_eleve|length }} paiement{{ paiements_eleve|length|pluralize }}
+            </span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Date</th>
+                            <th>Reçu</th>
+                            <th>Type</th>
+                            <th>Mode</th>
+                            <th class="text-end">Montant</th>
+                            <th>Statut</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for paiement_eleve in paiements_eleve %}
+                            <tr{% if paiement_eleve.id == paiement.id %} class="table-primary"{% endif %}>
+                                <td class="text-nowrap">{{ paiement_eleve.date_paiement|date:"d/m/Y" }}</td>
+                                <td>
+                                    <span class="fw-semibold">{{ paiement_eleve.numero_recu }}</span>
+                                    {% if paiement_eleve.id == paiement.id %}
+                                        <span class="badge bg-primary ms-1">Affiché</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ paiement_eleve.type_paiement.nom|default:"-" }}</td>
+                                <td>{{ paiement_eleve.mode_paiement.nom|default:"-" }}</td>
+                                <td class="text-end text-nowrap fw-semibold">
+                                    {{ paiement_eleve.montant|floatformat:0|intcomma }} GNF
+                                </td>
+                                <td>
+                                    <span class="badge badge-status-{{ paiement_eleve.statut|lower }}">
+                                        {{ paiement_eleve.get_statut_display }}
+                                    </span>
+                                </td>
+                                <td class="text-end text-nowrap">
+                                    <a href="{% url 'paiements:detail_paiement' paiement_eleve.id %}"
+                                       class="btn btn-sm btn-outline-primary" title="Voir le détail">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% if paiement_eleve.statut == 'VALIDE' %}
+                                        <a href="{% url 'paiements:generer_recu_pdf' paiement_eleve.id %}"
+                                           class="btn btn-sm btn-outline-success ms-1" title="Télécharger le reçu">
+                                            <i class="fas fa-file-pdf"></i>
+                                        </a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-4">
+                                    Aucun paiement trouvé pour cet élève.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 {% endblock %}
 
 {% block extra_css %}

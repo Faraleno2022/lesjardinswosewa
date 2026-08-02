@@ -1508,6 +1508,14 @@ def detail_paiement(request, paiement_id:int):
     paiement_qs = filter_by_user_school(paiement_qs, request.user, 'eleve__classe__ecole')
     paiement = get_object_or_404(paiement_qs, pk=paiement_id)
 
+    # Reutiliser le queryset deja filtre par ecole garantit que l'historique
+    # n'expose que les paiements auxquels l'utilisateur a acces.
+    paiements_eleve = list(
+        paiement_qs.filter(eleve=paiement.eleve).order_by(
+            '-date_paiement', '-date_creation', '-id'
+        )
+    )
+
     # Préparer les informations de permissions utilisées dans le template
     try:
         perms_ctx = get_user_permissions(request.user)
@@ -1532,6 +1540,7 @@ def detail_paiement(request, paiement_id:int):
     context = {
         'titre_page': f"Détail du paiement #{paiement.id}",
         'paiement': paiement,
+        'paiements_eleve': paiements_eleve,
         'is_admin': user_is_admin(request.user) if request.user.is_authenticated else False,
         'user_permissions': perms_ctx,
         'is_comptable': is_comptable_flag,
