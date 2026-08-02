@@ -4576,10 +4576,15 @@ def generer_toutes_notes_rappel_pdf(request):
     return response
 
 
+@login_required
 def liste_eleves_impayes(request):
     """Affiche la liste des élèves avec des impayés.
 
     Optimisé: utilise des annotations DB au lieu de boucler avec N+1 requêtes.
+
+    L'accès exige une authentification : la page expose des noms d'élèves et
+    des montants dus. Sans ce décorateur, elle ne restait vide pour un visiteur
+    anonyme que parce que user_school() renvoie None — une protection fortuite.
     """
     from .models import ConfigurationPaiement
 
