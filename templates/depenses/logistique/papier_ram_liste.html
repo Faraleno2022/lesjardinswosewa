@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4"><div><h2><i class="fas fa-copy text-success me-2"></i>{{ titre_page }}</h2><p class="text-muted mb-0">Paquets remis ou montant payé à la place.</p></div><div><a href="{% url 'depenses:dashboard_logistique' %}" class="btn btn-outline-secondary">Tableau de bord</a> <a href="{% url 'depenses:ajouter_papier_ram' %}?annee={{ annee_active }}" class="btn btn-success"><i class="fas fa-plus me-1"></i>Nouvel enregistrement</a></div></div>
+    <div class="row g-3 mb-4 text-center">
+        <div class="col-6 col-lg"><div class="card h-100"><div class="card-body"><small class="text-muted">Élèves</small><h3>{{ resume_ram.total_eleves }}</h3></div></div></div>
+        <div class="col-6 col-lg"><div class="card h-100"><div class="card-body"><small class="text-muted">Enregistrés</small><h3 class="text-success">{{ resume_ram.total_enregistres }}</h3></div></div></div>
+        <div class="col-6 col-lg"><div class="card h-100"><div class="card-body"><small class="text-muted">En attente</small><h3 class="text-warning">{{ resume_ram.total_en_attente }}</h3></div></div></div>
+        <div class="col-6 col-lg"><div class="card h-100"><div class="card-body"><small class="text-muted">Paquets reçus</small><h3>{{ resume_ram.paquets_recus }}</h3></div></div></div>
+        <div class="col-12 col-lg"><div class="card h-100"><div class="card-body"><small class="text-muted">Montant reçu</small><h5>{{ resume_ram.montant_recu|intcomma }} GNF</h5></div></div></div>
+    </div>
+    <div class="card mb-4"><div class="card-body"><form method="get" class="row g-2">
+        <div class="col-md-5"><input type="search" name="q" class="form-control" value="{{ q }}" placeholder="Matricule, nom, prénom ou classe"></div>
+        <div class="col-md-3"><select name="annee" class="form-select">{% for annee in annees %}<option value="{{ annee }}" {% if annee_active == annee %}selected{% endif %}>{{ annee }}</option>{% endfor %}</select></div>
+        <div class="col-md-2"><select name="mode" class="form-select"><option value="">Tous</option><option value="PAPIER" {% if mode == 'PAPIER' %}selected{% endif %}>Papier</option><option value="ARGENT" {% if mode == 'ARGENT' %}selected{% endif %}>Argent</option></select></div>
+        <div class="col-md-2"><button class="btn btn-primary w-100"><i class="fas fa-search me-1"></i>Rechercher</button></div>
+    </form></div></div>
+    <div class="card border-0 shadow-sm"><div class="table-responsive"><table class="table table-hover align-middle mb-0">
+        <thead class="table-light"><tr><th>Élève</th><th>Classe</th><th>Année</th><th>Mode</th><th class="text-end">Paquets</th><th class="text-end">Montant</th><th>Date</th><th></th></tr></thead>
+        <tbody>{% for item in contributions %}<tr>
+            <td><strong>{{ item.eleve.nom_complet }}</strong><br><small class="text-muted">{{ item.eleve.matricule }}</small></td><td>{{ item.eleve.classe.nom }}</td><td>{{ item.annee_scolaire }}</td>
+            <td>{% if item.mode_contribution == 'PAPIER' %}<span class="badge bg-success">Papier remis</span>{% else %}<span class="badge bg-primary">Argent payé</span>{% endif %}</td><td class="text-end">{{ item.nombre_paquets|default:'—' }}</td><td class="text-end">{{ item.montant_paye|intcomma }} GNF</td><td>{{ item.date_contribution|date:'d/m/Y' }}</td>
+            <td class="text-nowrap text-end"><a href="{% url 'depenses:modifier_papier_ram' item.pk %}" class="btn btn-sm btn-outline-primary"><i class="fas fa-edit"></i></a> <form method="post" action="{% url 'depenses:supprimer_papier_ram' item.pk %}" class="d-inline" onsubmit="return confirm('Supprimer cet enregistrement ?');">{% csrf_token %}<button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button></form></td>
+        </tr>{% empty %}<tr><td colspan="8" class="text-center text-muted py-5">Aucune contribution trouvée.</td></tr>{% endfor %}</tbody>
+    </table></div></div>
+</div>
+{% endblock %}

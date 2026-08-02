@@ -4,219 +4,81 @@
 {% block title %}{{ titre_page }}{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <!-- En-tête -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h2><i class="fas fa-boxes text-primary"></i> {{ titre_page }}</h2>
-                    <p class="text-muted">Gestion du stock et des biens de l'établissement</p>
-                </div>
-                <div>
-                    <a href="{% url 'depenses:liste_articles' %}" class="btn btn-primary">
-                        <i class="fas fa-boxes"></i> Stock & Articles
-                    </a>
-                    <a href="{% url 'depenses:creer_mouvement' %}" class="btn btn-success">
-                        <i class="fas fa-plus"></i> Nouveau Mouvement
-                    </a>
-                </div>
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <div>
+            <h2 class="mb-1"><i class="fas fa-school text-primary me-2"></i>{{ titre_page }}</h2>
+            <p class="text-muted mb-0">Biens de l'établissement et contributions papier RAM{% if annee_active %} — {{ annee_active }}{% endif %}</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'depenses:creer_bien' %}" class="btn btn-primary"><i class="fas fa-plus me-1"></i>Ajouter un bien</a>
+            <a href="{% url 'depenses:ajouter_papier_ram' %}" class="btn btn-success"><i class="fas fa-file-alt me-1"></i>Enregistrer RAM</a>
+        </div>
+    </div>
+
+    <div class="card mb-4 border-0 shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="fas fa-chair text-primary me-2"></i>Biens de l'établissement</h5>
+            <a href="{% url 'depenses:liste_biens' %}" class="btn btn-sm btn-outline-primary">Voir tous</a>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 text-center">
+                <div class="col-6 col-lg"><div class="p-3 bg-light rounded"><small class="text-muted">Désignations</small><h3>{{ resume_biens.total_biens }}</h3></div></div>
+                <div class="col-6 col-lg"><div class="p-3 bg-light rounded"><small class="text-muted">Achetés</small><h3>{{ resume_biens.quantite_achetee }}</h3></div></div>
+                <div class="col-6 col-lg"><div class="p-3 bg-primary-subtle rounded"><small class="text-muted">Utilisés</small><h3 class="text-primary">{{ resume_biens.quantite_utilisee }}</h3></div></div>
+                <div class="col-6 col-lg"><div class="p-3 bg-danger-subtle rounded"><small class="text-muted">Gâtés</small><h3 class="text-danger">{{ resume_biens.quantite_gatee }}</h3></div></div>
+                <div class="col-6 col-lg"><div class="p-3 bg-success-subtle rounded"><small class="text-muted">Disponibles</small><h3 class="text-success">{{ resume_biens.quantite_disponible }}</h3></div></div>
+            </div>
+            <div class="alert alert-info mt-3 mb-0"><strong>Valeur totale des achats :</strong> {{ resume_biens.valeur_totale|intcomma }} GNF</div>
+        </div>
+    </div>
+
+    <div class="card mb-4 border-0 shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="fas fa-copy text-success me-2"></i>Papier RAM{% if annee_active %} — {{ annee_active }}{% endif %}</h5>
+            <a href="{% url 'depenses:gestion_papier_ram' %}" class="btn btn-sm btn-outline-success">Ouvrir le suivi</a>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 text-center">
+                <div class="col-6 col-lg-2"><div class="p-3 bg-light rounded"><small class="text-muted">Élèves</small><h3>{{ resume_ram.total_eleves }}</h3></div></div>
+                <div class="col-6 col-lg-2"><div class="p-3 bg-success-subtle rounded"><small class="text-muted">Enregistrés</small><h3 class="text-success">{{ resume_ram.total_enregistres }}</h3></div></div>
+                <div class="col-6 col-lg-2"><div class="p-3 bg-warning-subtle rounded"><small class="text-muted">En attente</small><h3 class="text-warning">{{ resume_ram.total_en_attente }}</h3></div></div>
+                <div class="col-6 col-lg-2"><div class="p-3 bg-light rounded"><small class="text-muted">Paquets reçus</small><h3>{{ resume_ram.paquets_recus }}</h3></div></div>
+                <div class="col-6 col-lg-2"><div class="p-3 bg-light rounded"><small class="text-muted">Paiements</small><h3>{{ resume_ram.eleves_argent }}</h3></div></div>
+                <div class="col-6 col-lg-2"><div class="p-3 bg-light rounded"><small class="text-muted">Montant</small><h5>{{ resume_ram.montant_recu|intcomma }} GNF</h5></div></div>
             </div>
         </div>
     </div>
 
-    <!-- Statistiques -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card card-stats">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between">
-                        <div>
-                            <p class="text-muted mb-1">Total Articles</p>
-                            <h3 class="mb-0">{{ total_articles }}</h3>
-                        </div>
-                        <div class="text-primary">
-                            <i class="fas fa-boxes fa-2x"></i>
-                        </div>
-                    </div>
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-header bg-white"><h5 class="mb-0">Dernières contributions RAM</h5></div>
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead><tr><th>Élève</th><th>Classe</th><th>Contribution</th><th>Date</th></tr></thead>
+                        <tbody>
+                        {% for item in dernieres_contributions %}
+                            <tr>
+                                <td>{{ item.eleve.nom_complet }}<br><small class="text-muted">{{ item.eleve.matricule }}</small></td>
+                                <td>{{ item.eleve.classe.nom }}</td>
+                                <td>{% if item.mode_contribution == 'PAPIER' %}<span class="badge bg-success">{{ item.nombre_paquets }} paquet{{ item.nombre_paquets|pluralize }}</span>{% else %}<span class="badge bg-primary">{{ item.montant_paye|intcomma }} GNF</span>{% endif %}</td>
+                                <td>{{ item.date_contribution|date:'d/m/Y' }}</td>
+                            </tr>
+                        {% empty %}<tr><td colspan="4" class="text-center text-muted py-4">Aucune contribution enregistrée.</td></tr>{% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card card-stats success">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between">
-                        <div>
-                            <p class="text-muted mb-1">Valeur Stock</p>
-                            <h3 class="mb-0">{{ valeur_stock|intcomma }} GNF</h3>
-                        </div>
-                        <div class="text-success">
-                            <i class="fas fa-coins fa-2x"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card card-stats warning">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between">
-                        <div>
-                            <p class="text-muted mb-1">Alertes Stock</p>
-                            <h3 class="mb-0">{{ articles_alerte }}</h3>
-                        </div>
-                        <div class="text-warning">
-                            <i class="fas fa-exclamation-triangle fa-2x"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card card-stats">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between">
-                        <div>
-                            <p class="text-muted mb-1">Total Biens</p>
-                            <h3 class="mb-0">{{ total_biens }}</h3>
-                        </div>
-                        <div class="text-info">
-                            <i class="fas fa-building fa-2x"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row">
-        <!-- Derniers mouvements -->
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0"><i class="fas fa-exchange-alt"></i> Derniers Mouvements</h5>
-                </div>
-                <div class="card-body">
-                    {% if derniers_mouvements %}
-                    <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
-                                <tr>
-                                    <th>N° Mouvement</th>
-                                    <th>Article</th>
-                                    <th>Type</th>
-                                    <th>Quantité</th>
-                                    <th>Date</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for mvt in derniers_mouvements %}
-                                <tr>
-                                    <td><strong>{{ mvt.numero_mouvement }}</strong></td>
-                                    <td>{{ mvt.article.nom }}</td>
-                                    <td>
-                                        <span class="badge 
-                                            {% if mvt.type_mouvement == 'ENTREE' %}bg-success
-                                            {% elif mvt.type_mouvement == 'SORTIE' %}bg-danger
-                                            {% else %}bg-info{% endif %}">
-                                            {{ mvt.get_type_mouvement_display }}
-                                        </span>
-                                    </td>
-                                    <td>{{ mvt.quantite }} {{ mvt.article.unite_mesure }}</td>
-                                    <td>{{ mvt.date_mouvement|date:"d/m/Y H:i" }}</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="text-center mt-3">
-                        <a href="{% url 'depenses:liste_mouvements' %}" class="btn btn-sm btn-outline-primary">
-                            Voir tous les mouvements
-                        </a>
-                    </div>
-                    {% else %}
-                    <div class="text-center py-4">
-                        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                        <p class="text-muted">Aucun mouvement enregistré</p>
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-
-        <!-- Répartition par catégorie -->
-        <div class="col-md-4">
-            <div class="card">
-                <div class="card-header bg-success text-white">
-                    <h5 class="mb-0"><i class="fas fa-chart-pie"></i> Par Catégorie</h5>
-                </div>
-                <div class="card-body">
-                    {% if repartition_categories %}
-                    <ul class="list-group list-group-flush">
-                        {% for cat in repartition_categories %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            {{ cat.nom }}
-                            <span class="badge bg-primary rounded-pill">{{ cat.nb_articles|default:0 }}</span>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                    {% else %}
-                    <div class="text-center py-4">
-                        <i class="fas fa-folder-open fa-3x text-muted mb-3"></i>
-                        <p class="text-muted">Aucune catégorie</p>
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-
-            {% if biens_maintenance > 0 %}
-            <div class="card mt-3">
-                <div class="card-header bg-warning text-dark">
-                    <h5 class="mb-0"><i class="fas fa-wrench"></i> Maintenance</h5>
-                </div>
-                <div class="card-body">
-                    <div class="alert alert-warning mb-0">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <strong>{{ biens_maintenance }}</strong> bien(s) nécessitent une maintenance
-                        <a href="{% url 'depenses:liste_biens' %}" class="alert-link">Voir</a>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- Liens rapides -->
-    <div class="row mt-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-link"></i> Accès Rapides</h5>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-3">
-                            <a href="{% url 'depenses:liste_articles' %}" class="btn btn-outline-primary btn-block w-100 mb-2">
-                                <i class="fas fa-boxes"></i> Stock & Articles
-                            </a>
-                        </div>
-                        <div class="col-md-3">
-                            <a href="{% url 'depenses:liste_biens' %}" class="btn btn-outline-info btn-block w-100 mb-2">
-                                <i class="fas fa-building"></i> Biens Établissement
-                            </a>
-                        </div>
-                        <div class="col-md-3">
-                            <a href="{% url 'depenses:liste_mouvements' %}" class="btn btn-outline-warning btn-block w-100 mb-2">
-                                <i class="fas fa-exchange-alt"></i> Mouvements
-                            </a>
-                        </div>
-                        <div class="col-md-3">
-                            <a href="{% url 'depenses:liste_inventaires' %}" class="btn btn-outline-success btn-block w-100 mb-2">
-                                <i class="fas fa-clipboard-list"></i> Inventaires
-                            </a>
-                        </div>
-                    </div>
-                </div>
+        <div class="col-lg-5">
+            <div class="card h-100 border-0 shadow-sm">
+                <div class="card-header bg-white"><h5 class="mb-0">Élèves en attente</h5></div>
+                <ul class="list-group list-group-flush">
+                    {% for eleve in eleves_en_attente %}
+                    <li class="list-group-item d-flex justify-content-between"><span>{{ eleve.nom_complet }}</span><small class="text-muted">{{ eleve.classe.nom }}</small></li>
+                    {% empty %}<li class="list-group-item text-center text-muted py-4">Aucun élève en attente.</li>{% endfor %}
+                </ul>
             </div>
         </div>
     </div>
