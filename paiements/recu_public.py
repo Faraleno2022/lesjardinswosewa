@@ -12,6 +12,7 @@ from django.shortcuts import get_object_or_404
 import logging
 
 from .models import Paiement
+from .allocation import build_payment_allocation_history
 from eleves.models import Eleve
 
 logger = logging.getLogger(__name__)
@@ -154,6 +155,13 @@ def recu_public_pdf(request, paiement_id):
             id=paiement_id,
             statut='VALIDE'
         )
+
+        # Réappliquer les règles courantes avant de présenter un ancien reçu.
+        from .views import (
+            _auto_validate_echeancier_for_eleve,
+            _enrollment_preference_for_eleve,
+        )
+        _auto_validate_echeancier_for_eleve(paiement.eleve)
         
         # Calcul total remises
         remises_total = paiement.remises.aggregate(total=Sum('montant_remise')).get('total') or 0
@@ -167,9 +175,27 @@ def recu_public_pdf(request, paiement_id):
             ech = paiement.eleve.echeancier
         except EcheancierPaiement.DoesNotExist:
             ech = None
+        if ech:
+            ech.refresh_from_db()
         total_du = ech.total_du if ech else Decimal('0')
         total_paye = ech.total_paye if ech else Decimal('0')
-        solde_restant = ech.solde_restant if ech else Decimal('0')
+        remises_valides = (
+            Paiement.objects.filter(eleve=paiement.eleve, statut='VALIDE')
+            .aggregate(total=Sum('remises__montant_remise'))
+            .get('total') or Decimal('0')
+        )
+        solde_restant = max(Decimal('0'), total_du - total_paye - remises_valides)
+
+        current_allocation = None
+        if ech:
+            paiements_valides = (
+                Paiement.objects.filter(eleve=paiement.eleve, statut='VALIDE')
+                .order_by('date_paiement', 'date_creation', 'id')
+            )
+            allocations, _ = build_payment_allocation_history(
+                ech, paiements_valides.iterator()
+            )
+            current_allocation = allocations.get(paiement.id)
 
         # Préparer le buffer et le canvas
         buffer = BytesIO()
@@ -248,6 +274,28 @@ def recu_public_pdf(request, paiement_id):
             c.drawString(left, top, f"Net payé: {montant_net:,.0f} GNF".replace(",", " "))
             c.setFont('Helvetica', 11)
             top -= line_h
+
+        if current_allocation:
+            enrollment_label = (
+                "Réinscription"
+                if _enrollment_preference_for_eleve(
+                    paiement.eleve, paiement.type_paiement.nom
+                ) is True
+                else "Inscription"
+            )
+            c.setFont('Helvetica-Bold', 11)
+            c.drawString(left, top, "AFFECTATION DU PAIEMENT")
+            top -= line_h
+            c.setFont('Helvetica', 10)
+            allocation_lines = (
+                (enrollment_label, current_allocation['inscription']),
+                ("1ère tranche", current_allocation['tranche_1']),
+                ("2ème tranche", current_allocation['tranche_2']),
+                ("3ème tranche", current_allocation['tranche_3']),
+            )
+            for label, amount in allocation_lines:
+                c.drawString(left, top, f"{label}: {amount:,.0f} GNF".replace(",", " "))
+                top -= line_h
 
         top -= 10
 

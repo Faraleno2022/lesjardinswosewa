@@ -78,8 +78,24 @@ class SchoolFilteringTests(TestCase):
         User = get_user_model()
         self.user1 = User.objects.create_user(username="u1", password="pass12345")
         self.user2 = User.objects.create_user(username="u2", password="pass12345")
-        Profil.objects.create(user=self.user1, role='COMPTABLE', ecole=self.ecole1, telephone="+224620000021", peut_consulter_rapports=True)
-        Profil.objects.create(user=self.user2, role='COMPTABLE', ecole=self.ecole2, telephone="+224620000022", peut_consulter_rapports=True)
+        Profil.objects.update_or_create(
+            user=self.user1,
+            defaults={
+                'role': 'COMPTABLE',
+                'ecole': self.ecole1,
+                'telephone': "+224620000021",
+                'peut_consulter_rapports': True,
+            },
+        )
+        Profil.objects.update_or_create(
+            user=self.user2,
+            defaults={
+                'role': 'COMPTABLE',
+                'ecole': self.ecole2,
+                'telephone': "+224620000022",
+                'peut_consulter_rapports': True,
+            },
+        )
 
     def login1(self):
         self.client.logout()
@@ -142,6 +158,46 @@ class SchoolFilteringTests(TestCase):
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 404)
 
+    def test_detail_paiement_lists_only_same_student_payments(self):
+        paiement_recent = Paiement.objects.create(
+            eleve=self.eleve1,
+            type_paiement=self.type_insc,
+            mode_paiement=self.mode_espece,
+            montant=45000,
+            statut='EN_ATTENTE',
+            date_paiement=date(2024, 10, 10),
+        )
+        autre_eleve = Eleve.objects.create(
+            nom="Charlie",
+            prenom="C",
+            matricule="C-001",
+            classe=self.classe1,
+            sexe='M',
+            date_naissance=date(2015, 3, 3),
+            lieu_naissance="Conakry",
+            date_inscription=date(2024, 9, 1),
+            responsable_principal=self.resp1,
+        )
+        paiement_autre_eleve = Paiement.objects.create(
+            eleve=autre_eleve,
+            type_paiement=self.type_insc,
+            mode_paiement=self.mode_espece,
+            montant=25000,
+            statut='VALIDE',
+            date_paiement=date(2024, 10, 11),
+        )
+
+        self.login1()
+        url = reverse("paiements:detail_paiement", kwargs={"paiement_id": self.paiement1.id})
+        resp = self.client.get(url)
+
+        self.assertEqual(resp.status_code, 200)
+        ids = [paiement.id for paiement in resp.context["paiements_eleve"]]
+        self.assertEqual(ids, [paiement_recent.id, self.paiement1.id])
+        self.assertContains(resp, paiement_recent.numero_recu)
+        self.assertNotContains(resp, paiement_autre_eleve.numero_recu)
+        self.assertNotContains(resp, self.paiement2.numero_recu)
+
     def test_generer_recu_pdf_other_school_is_404(self):
         self.login1()
         url = reverse("paiements:generer_recu_pdf", kwargs={"paiement_id": self.paiement2.id})
@@ -158,5 +214,5 @@ class SchoolFilteringTests(TestCase):
         self.login1()
         url = reverse("paiements:relancer_eleve", kwargs={"eleve_id": self.eleve2.id})
         # GET simple, on ne vérifie que la protection d'accès (pas les side-effects)
-        resp = self.client.get(url)
+        resp = self.client.post(url)
         self.assertEqual(resp.status_code, 404)

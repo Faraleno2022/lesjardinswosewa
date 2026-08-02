@@ -18,6 +18,7 @@ from reportlab.lib.units import inch
 from .models import Rapport, TypeRapport, ExportProgramme
 from .utils import collecter_donnees_periode, generer_pdf_periode, _draw_header_and_watermark
 from eleves.models import Eleve, Ecole
+from eleves.utils_annee import get_debut_periode_reporting
 from paiements.models import Paiement, PaiementRemise, EcheancierPaiement, TypePaiement
 from bus.models import AbonnementBus
 from depenses.models import Depense
@@ -981,19 +982,24 @@ def generer_pdf_journalier(donnees, date_rapport):
 @user_passes_test(can_access_rapports)
 def rapport_remises_detaille(request):
     """Rapport détaillé des remises appliquées"""
-    date_debut = request.GET.get('date_debut')
-    date_fin = request.GET.get('date_fin')
-    
-    # Dates par défaut (mois en cours)
-    if not date_debut:
-        date_debut = date.today().replace(day=1)
-    else:
-        date_debut = datetime.strptime(date_debut, '%Y-%m-%d').date()
-    
-    if not date_fin:
-        date_fin = date.today()
-    else:
-        date_fin = datetime.strptime(date_fin, '%Y-%m-%d').date()
+    aujourd_hui = django_timezone.localdate()
+    debut_defaut = get_debut_periode_reporting(
+        request, user_school(request.user), today=aujourd_hui
+    )
+    try:
+        date_debut = datetime.strptime(
+            request.GET.get('date_debut'), '%Y-%m-%d'
+        ).date() if request.GET.get('date_debut') else debut_defaut
+    except (TypeError, ValueError):
+        date_debut = debut_defaut
+    try:
+        date_fin = datetime.strptime(
+            request.GET.get('date_fin'), '%Y-%m-%d'
+        ).date() if request.GET.get('date_fin') else aujourd_hui
+    except (TypeError, ValueError):
+        date_fin = aujourd_hui
+    if date_debut > date_fin:
+        date_debut, date_fin = date_fin, date_debut
     
     # Récupérer toutes les remises appliquées dans la période
     remises_appliquees = PaiementRemise.objects.filter(
@@ -1019,8 +1025,15 @@ def rapport_remises_detaille(request):
         total=Sum('montant_remise')
     )['total'] or Decimal('0')
     
-    total_montants_finals = remises_appliquees.aggregate(
-        total=Sum('paiement__montant')
+    # Un paiement peut avoir plusieurs remises : sommer via les paiements
+    # distincts évite de compter son montant plusieurs fois.
+    paiement_ids = remises_appliquees.values_list(
+        'paiement_id', flat=True
+    ).distinct()
+    total_montants_finals = Paiement.objects.filter(
+        id__in=paiement_ids
+    ).aggregate(
+        total=Sum('montant')
     )['total'] or Decimal('0')
     
     difference_totale = total_montants_finals - total_remises

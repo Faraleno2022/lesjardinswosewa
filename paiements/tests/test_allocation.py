@@ -4,7 +4,7 @@ from datetime import date
 from django.test import TestCase
 from django.utils import timezone
 
-from eleves.models import Ecole, Classe, Eleve, Responsable
+from eleves.models import Ecole, Classe, Eleve, Responsable, GrilleTarifaire
 from paiements.models import (
     EcheancierPaiement,  
     TypePaiement,
@@ -12,6 +12,7 @@ from paiements.models import (
     Paiement,
 )
 from paiements.views import _allocate_combined_payment
+from paiements.allocation import build_payment_allocation_history
 
 
 class TestAllocationPaiements(TestCase):
@@ -60,6 +61,8 @@ class TestAllocationPaiements(TestCase):
         self.type_t2 = TypePaiement.objects.create(nom="Scolarité - 2ème tranche")
         self.type_t3 = TypePaiement.objects.create(nom="Scolarité - 3ème tranche")
         self.type_insc_annuel = TypePaiement.objects.create(nom="Frais d'inscription + Annuel")
+        self.type_inscription = TypePaiement.objects.create(nom="Frais d'inscription")
+        self.type_reinscription = TypePaiement.objects.create(nom="Réinscription")
         self.mode_especes = ModePaiement.objects.create(nom="Espèces")
 
         # Echéancier
@@ -185,6 +188,109 @@ class TestAllocationPaiements(TestCase):
         self.assertEqual(self.echeancier.tranche_3_payee, Decimal("500000"))
         self.assertEqual(self.echeancier.solde_restant, Decimal("0"))
         self.assertEqual(self.echeancier.statut, "PAYE_COMPLET")
+
+    def test_excedent_inscription_est_reporte_sur_tranche_1(self):
+        paiement = Paiement.objects.create(
+            eleve=self.eleve,
+            type_paiement=self.type_inscription,
+            mode_paiement=self.mode_especes,
+            numero_recu="REC_OVER_INSC",
+            montant=Decimal("180000"),
+            date_paiement=date(2024, 9, 30),
+            statut="VALIDE",
+        )
+
+        _allocate_combined_payment(paiement, self.echeancier)
+        self._refresh()
+
+        self.assertEqual(self.echeancier.frais_inscription_paye, Decimal("30000"))
+        self.assertEqual(self.echeancier.tranche_1_payee, Decimal("150000"))
+        self.assertEqual(self.echeancier.tranche_2_payee, Decimal("0"))
+
+    def test_excedent_tranche_1_continue_jusqua_tranche_3(self):
+        type_t1_overflow = TypePaiement.objects.create(
+            nom="Scolarité - 1ère tranche (dépassement)"
+        )
+        paiement = Paiement.objects.create(
+            eleve=self.eleve,
+            type_paiement=type_t1_overflow,
+            mode_paiement=self.mode_especes,
+            numero_recu="REC_OVER_T1",
+            montant=Decimal("1230000"),
+            date_paiement=date(2024, 9, 30),
+            statut="VALIDE",
+        )
+
+        _allocate_combined_payment(paiement, self.echeancier)
+        self._refresh()
+
+        self.assertEqual(self.echeancier.frais_inscription_paye, Decimal("30000"))
+        self.assertEqual(self.echeancier.tranche_1_payee, Decimal("500000"))
+        self.assertEqual(self.echeancier.tranche_2_payee, Decimal("500000"))
+        self.assertEqual(self.echeancier.tranche_3_payee, Decimal("200000"))
+
+        allocations, _ = build_payment_allocation_history(
+            self.echeancier,
+            Paiement.objects.filter(eleve=self.eleve, statut="VALIDE").order_by(
+                "date_paiement", "date_creation", "id"
+            ),
+        )
+        self.assertEqual(
+            allocations[paiement.id],
+            {
+                "inscription": Decimal("30000"),
+                "tranche_1": Decimal("500000"),
+                "tranche_2": Decimal("500000"),
+                "tranche_3": Decimal("200000"),
+            },
+        )
+
+    def test_annuel_partiel_est_aussi_affecte_sequentiellement(self):
+        paiement = Paiement.objects.create(
+            eleve=self.eleve,
+            type_paiement=self.type_insc_annuel,
+            mode_paiement=self.mode_especes,
+            numero_recu="REC_ANNUEL_SEQ",
+            montant=Decimal("630000"),
+            date_paiement=date(2024, 9, 30),
+            statut="VALIDE",
+        )
+
+        _allocate_combined_payment(paiement, self.echeancier)
+        self._refresh()
+
+        self.assertEqual(self.echeancier.frais_inscription_paye, Decimal("30000"))
+        self.assertEqual(self.echeancier.tranche_1_payee, Decimal("500000"))
+        self.assertEqual(self.echeancier.tranche_2_payee, Decimal("100000"))
+        self.assertEqual(self.echeancier.tranche_3_payee, Decimal("0"))
+
+    def test_reinscription_utilise_son_tarif_et_reporte_excedent_sur_t1(self):
+        GrilleTarifaire.objects.create(
+            ecole=self.ecole,
+            niveau=self.classe.niveau,
+            annee_scolaire=self.classe.annee_scolaire,
+            frais_inscription=Decimal("30000"),
+            frais_reinscription=Decimal("20000"),
+            tranche_1=Decimal("500000"),
+            tranche_2=Decimal("500000"),
+            tranche_3=Decimal("500000"),
+        )
+        paiement = Paiement.objects.create(
+            eleve=self.eleve,
+            type_paiement=self.type_reinscription,
+            mode_paiement=self.mode_especes,
+            numero_recu="REC_REINSC",
+            montant=Decimal("70000"),
+            date_paiement=date(2024, 9, 30),
+            statut="VALIDE",
+        )
+
+        _allocate_combined_payment(paiement, self.echeancier)
+        self._refresh()
+
+        self.assertEqual(self.echeancier.frais_inscription_du, Decimal("20000"))
+        self.assertEqual(self.echeancier.frais_inscription_paye, Decimal("20000"))
+        self.assertEqual(self.echeancier.tranche_1_payee, Decimal("50000"))
 
     def test_pas_retard_le_jour_echeance_si_partiel(self):
         """Un paiement partiel le jour exact de l'échéance ne doit pas être considéré en retard (strict >)."""
