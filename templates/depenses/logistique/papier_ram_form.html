@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4"><div><h2><i class="fas fa-copy text-success me-2"></i>{{ titre_page }}</h2><p class="text-muted mb-0">Recherchez l'élève puis indiquez papier ou argent.</p></div><a href="{% url 'depenses:gestion_papier_ram' %}" class="btn btn-outline-secondary">Retour</a></div>
+    <div class="card border-0 shadow-sm"><div class="card-body p-4"><form method="post" novalidate>{% csrf_token %}
+        {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+        <div class="mb-3"><label class="form-label">Rechercher un élève</label><input id="recherche-eleve" type="search" class="form-control" placeholder="Saisir un matricule, un nom ou une classe"><small class="text-muted">La liste ci-dessous sera filtrée automatiquement.</small></div>
+        <div class="mb-3"><label class="form-label">Élève *</label>{{ form.eleve }}<div class="text-danger small">{{ form.eleve.errors }}</div></div>
+        <div class="row g-3">
+            <div class="col-md-4"><label class="form-label">Année scolaire *</label>{{ form.annee_scolaire }}<div class="text-danger small">{{ form.annee_scolaire.errors }}</div></div>
+            <div class="col-md-4"><label class="form-label">Mode de contribution *</label>{{ form.mode_contribution }}<div class="text-danger small">{{ form.mode_contribution.errors }}</div></div>
+            <div class="col-md-4"><label class="form-label">Date *</label>{{ form.date_contribution }}<div class="text-danger small">{{ form.date_contribution.errors }}</div></div>
+            <div class="col-md-6" id="bloc-paquets"><label class="form-label">Nombre de paquets remis *</label>{{ form.nombre_paquets }}<div class="text-danger small">{{ form.nombre_paquets.errors }}</div></div>
+            <div class="col-md-6" id="bloc-montant"><label class="form-label">Montant payé (GNF) *</label>{{ form.montant_paye }}<div class="text-danger small">{{ form.montant_paye.errors }}</div></div>
+            <div class="col-12"><label class="form-label">Observations</label>{{ form.observations }}<div class="text-danger small">{{ form.observations.errors }}</div></div>
+        </div>
+        <div class="d-flex justify-content-end gap-2 mt-4"><a href="{% url 'depenses:gestion_papier_ram' %}" class="btn btn-outline-secondary">Annuler</a><button class="btn btn-success px-4"><i class="fas fa-save me-1"></i>Enregistrer</button></div>
+    </form></div></div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const recherche = document.getElementById('recherche-eleve');
+    const select = document.getElementById('id_eleve');
+    const options = Array.from(select.options).map(option => ({ value: option.value, text: option.text, selected: option.selected }));
+    recherche.addEventListener('input', function () {
+        const terme = this.value.toLowerCase().trim();
+        const valeur = select.value;
+        select.innerHTML = '';
+        options.forEach(item => {
+            if (!item.value || item.text.toLowerCase().includes(terme)) {
+                const option = new Option(item.text, item.value, false, item.value === valeur);
+                select.add(option);
+            }
+        });
+    });
+    const mode = document.getElementById('id_mode_contribution');
+    const paquets = document.getElementById('bloc-paquets');
+    const montant = document.getElementById('bloc-montant');
+    function actualiserMode() {
+        const papier = mode.value === 'PAPIER';
+        paquets.style.display = papier ? '' : 'none';
+        montant.style.display = papier ? 'none' : '';
+    }
+    mode.addEventListener('change', actualiserMode);
+    actualiserMode();
+});
+</script>
+{% endblock %}

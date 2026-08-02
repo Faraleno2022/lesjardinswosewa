@@ -1,13 +1,15 @@
 from django import forms
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from decimal import Decimal
+from eleves.models import Eleve, Ecole
 from .models import (
     Depense, CategorieDepense, Fournisseur, 
     PieceJustificative, BudgetAnnuel
 )
 from .models_logistique import (
     CategorieArticle, Article, BienEtablissement, MouvementStock,
-    Inventaire, LigneInventaire
+    Inventaire, LigneInventaire, ContributionPapierRam
 )
 from .models_bibliotheque import Livre, Emprunt, Reservation
 
@@ -418,26 +420,99 @@ class BienEtablissementForm(forms.ModelForm):
     class Meta:
         model = BienEtablissement
         fields = [
-            'code_bien', 'nom', 'type_bien', 'description', 'localisation',
-            'superficie', 'capacite', 'etat', 'valeur_acquisition', 'date_acquisition',
-            'date_derniere_maintenance', 'date_prochaine_maintenance', 'photo', 'observations'
+            'ecole', 'code_bien', 'nom', 'type_bien', 'marque',
+            'quantite_achetee', 'prix_achat_unitaire', 'quantite_utilisee',
+            'quantite_gatee', 'localisation', 'date_acquisition',
+            'description', 'observations'
         ]
         widgets = {
+            'ecole': forms.Select(attrs={'class': 'form-select'}),
             'code_bien': forms.TextInput(attrs={'class': 'form-control'}),
-            'nom': forms.TextInput(attrs={'class': 'form-control'}),
-            'type_bien': forms.Select(attrs={'class': 'form-control'}),
+            'nom': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex. Tables, marqueurs, ordinateurs'}),
+            'type_bien': forms.Select(attrs={'class': 'form-select'}),
+            'marque': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Marque (facultatif)'}),
+            'quantite_achetee': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+            'prix_achat_unitaire': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'step': 1}),
+            'quantite_utilisee': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+            'quantite_gatee': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'localisation': forms.TextInput(attrs={'class': 'form-control'}),
-            'superficie': forms.NumberInput(attrs={'class': 'form-control'}),
-            'capacite': forms.NumberInput(attrs={'class': 'form-control'}),
-            'etat': forms.Select(attrs={'class': 'form-control'}),
-            'valeur_acquisition': forms.NumberInput(attrs={'class': 'form-control'}),
             'date_acquisition': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'date_derniere_maintenance': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'date_prochaine_maintenance': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
-            'photo': forms.FileInput(attrs={'class': 'form-control'}),
             'observations': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
         }
+
+    def __init__(self, *args, ecole=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.ecole_utilisateur = ecole
+        self.fields['code_bien'].required = False
+        self.fields['code_bien'].widget.attrs['placeholder'] = 'Généré automatiquement si vide'
+        self.fields['ecole'].queryset = Ecole.objects.order_by('nom')
+        if ecole:
+            self.fields['ecole'].queryset = Ecole.objects.filter(pk=ecole.pk)
+            self.fields['ecole'].initial = ecole
+            self.fields['ecole'].widget = forms.HiddenInput()
+
+    def clean_ecole(self):
+        if self.ecole_utilisateur:
+            return self.ecole_utilisateur
+        return self.cleaned_data.get('ecole')
+
+    def clean(self):
+        cleaned = super().clean()
+        achetee = cleaned.get('quantite_achetee') or 0
+        utilisee = cleaned.get('quantite_utilisee') or 0
+        gatee = cleaned.get('quantite_gatee') or 0
+        if utilisee + gatee > achetee:
+            raise ValidationError(
+                "La quantité utilisée et la quantité gâtée ne peuvent pas dépasser la quantité achetée."
+            )
+        return cleaned
+
+
+class ContributionPapierRamForm(forms.ModelForm):
+    class Meta:
+        model = ContributionPapierRam
+        fields = [
+            'eleve', 'annee_scolaire', 'mode_contribution', 'nombre_paquets',
+            'montant_paye', 'date_contribution', 'observations'
+        ]
+        widgets = {
+            'eleve': forms.Select(attrs={'class': 'form-select', 'id': 'id_eleve'}),
+            'annee_scolaire': forms.TextInput(attrs={'class': 'form-control', 'readonly': True}),
+            'mode_contribution': forms.Select(attrs={'class': 'form-select', 'id': 'id_mode_contribution'}),
+            'nombre_paquets': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'id': 'id_nombre_paquets'}),
+            'montant_paye': forms.NumberInput(attrs={'class': 'form-control', 'min': 0, 'step': 1, 'id': 'id_montant_paye'}),
+            'date_contribution': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'observations': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+
+    def __init__(self, *args, ecole=None, annee_scolaire=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        eleves = Eleve.objects.select_related('classe', 'classe__ecole').filter(statut='ACTIF')
+        if ecole:
+            eleves = eleves.filter(classe__ecole=ecole)
+        if annee_scolaire:
+            eleves = eleves.filter(classe__annee_scolaire=annee_scolaire)
+            self.fields['annee_scolaire'].initial = annee_scolaire
+        if self.instance.pk:
+            eleves = Eleve.objects.filter(Q(pk=self.instance.eleve_id) | Q(pk__in=eleves.values('pk')))
+        self.fields['eleve'].queryset = eleves.order_by('classe__nom', 'nom', 'prenom')
+        self.fields['eleve'].label_from_instance = (
+            lambda eleve: f"{eleve.matricule} — {eleve.prenom} {eleve.nom} ({eleve.classe.nom})"
+        )
+
+    def clean(self):
+        cleaned = super().clean()
+        mode = cleaned.get('mode_contribution')
+        if mode == 'PAPIER':
+            if (cleaned.get('nombre_paquets') or 0) < 1:
+                self.add_error('nombre_paquets', "Indiquez au moins un paquet remis.")
+            cleaned['montant_paye'] = Decimal('0')
+        elif mode == 'ARGENT':
+            if (cleaned.get('montant_paye') or Decimal('0')) <= 0:
+                self.add_error('montant_paye', "Indiquez le montant payé.")
+            cleaned['nombre_paquets'] = 0
+        return cleaned
 
 
 class MouvementStockForm(forms.ModelForm):
