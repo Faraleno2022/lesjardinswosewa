@@ -693,16 +693,12 @@ def ajouter_eleve(request):
                         f'classes_ecole_{user_school_obj.id if user_school_obj else "admin"}'
                     ])
                     
-                messages.success(request, f"L'eleve {eleve.prenom} {eleve.nom} a ete ajoute avec succes (Matricule: {eleve.matricule}). Enregistrez maintenant son paiement.")
-                # Enchaînement inscription -> paiement -> nouvel élève.
-                # Le formulaire d'ajout (classe préservée) est passé en "next" :
-                # la vue de paiement y revient une fois le règlement enregistré.
-                retour = reverse('eleves:ajouter_eleve')
-                classe_id = form.cleaned_data.get('classe')
-                if classe_id:
-                    retour += f'?classe_id={classe_id.id if hasattr(classe_id, "id") else classe_id}'
-                url_paiement = reverse('paiements:ajouter_paiement_eleve', args=[eleve.id])
-                return redirect(f'{url_paiement}?{urlencode({"next": retour})}')
+                messages.success(
+                    request,
+                    f"L'élève {eleve.prenom} {eleve.nom} a été ajouté avec succès "
+                    f"(Matricule : {eleve.matricule}). Choisissez l'étape suivante."
+                )
+                return redirect('eleves:choix_apres_ajout_eleve', eleve_id=eleve.id)
                 
             except Exception as e:
                 logger.exception("Erreur lors de l'enregistrement d'un élève")
@@ -775,6 +771,36 @@ def ajouter_eleve(request):
     }
     
     return render(request, 'eleves/ajouter_eleve.html', context)
+
+
+@login_required
+def choix_apres_ajout_eleve(request, eleve_id):
+    """Propose le paiement ou la poursuite des inscriptions après un ajout."""
+    eleves_qs = Eleve.objects.select_related('classe', 'classe__ecole')
+    if not user_is_admin(request.user):
+        eleves_qs = filter_by_user_school(
+            eleves_qs, request.user, 'classe__ecole'
+        )
+
+    eleve = get_object_or_404(eleves_qs, id=eleve_id)
+
+    url_continuer = reverse('eleves:ajouter_eleve')
+    if eleve.classe_id:
+        url_continuer = f'{url_continuer}?{urlencode({"classe_id": eleve.classe_id})}'
+
+    url_paiement = reverse(
+        'paiements:ajouter_paiement_eleve', args=[eleve.id]
+    )
+    url_paiement = f'{url_paiement}?{urlencode({"next": url_continuer})}'
+
+    context = {
+        'eleve': eleve,
+        'url_continuer': url_continuer,
+        'url_paiement': url_paiement,
+        'titre_page': 'Élève ajouté',
+    }
+    return render(request, 'eleves/choix_apres_ajout.html', context)
+
 
 @login_required
 def modifier_eleve(request, eleve_id):
