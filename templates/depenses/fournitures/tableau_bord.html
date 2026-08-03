@@ -1,0 +1,125 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <div>
+            <h2 class="mb-1"><i class="fas fa-store text-success me-2"></i>{{ titre_page }}</h2>
+            <p class="text-muted mb-0">Suivi du stock, des ventes et de la marge des fournitures.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'depenses:tableau_bord' %}" class="btn btn-outline-secondary">Dépenses</a>
+            <a href="{% url 'depenses:creer_produit_fourniture' %}" class="btn btn-success">
+                <i class="fas fa-plus me-1"></i>Nouveau produit
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-2"><div class="card border-0 shadow-sm h-100"><div class="card-body"><small class="text-muted">Produits</small><h3 class="mb-0">{{ resume.nombre_produits|intcomma }}</h3></div></div></div>
+        <div class="col-6 col-xl-2"><div class="card border-0 shadow-sm h-100"><div class="card-body"><small class="text-muted">Quantité en stock</small><h3 class="mb-0">{{ resume.quantite_stock|intcomma }}</h3></div></div></div>
+        <div class="col-6 col-xl-2"><div class="card border-0 shadow-sm h-100"><div class="card-body"><small class="text-muted">Vendu</small><h3 class="text-primary mb-0">{{ resume.quantite_vendue|intcomma }}</h3></div></div></div>
+        <div class="col-6 col-xl-2"><div class="card border-0 shadow-sm h-100"><div class="card-body"><small class="text-muted">Reste</small><h3 class="text-success mb-0">{{ resume.quantite_restante|intcomma }}</h3></div></div></div>
+        <div class="col-6 col-xl-2"><div class="card border-0 shadow-sm h-100"><div class="card-body"><small class="text-muted">Ventes</small><h5 class="mb-0">{{ resume.chiffre_affaires|intcomma }} GNF</h5></div></div></div>
+        <div class="col-6 col-xl-2"><div class="card border-0 shadow-sm h-100"><div class="card-body"><small class="text-muted">Solde / marge</small><h5 class="text-success mb-0">{{ resume.solde|intcomma }} GNF</h5></div></div></div>
+    </div>
+
+    {% if produits_alerte %}
+    <div class="alert alert-warning d-flex align-items-start gap-2">
+        <i class="fas fa-exclamation-triangle mt-1"></i>
+        <div><strong>Stock faible :</strong> {% for produit in produits_alerte %}{{ produit.nom }} ({{ produit.quantite_restante }}){% if not forloop.last %}, {% endif %}{% endfor %}</div>
+    </div>
+    {% endif %}
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-2 align-items-end">
+                <div class="col-md-6">
+                    <label class="form-label">Rechercher</label>
+                    <input type="search" name="q" value="{{ recherche }}" class="form-control" placeholder="Produit, code ou description">
+                </div>
+                {% if ecoles %}
+                <div class="col-md-4">
+                    <label class="form-label">École</label>
+                    <select name="ecole" class="form-select">
+                        <option value="">Toutes les écoles</option>
+                        {% for ecole in ecoles %}<option value="{{ ecole.id }}" {% if ecole_filtre == ecole.id|stringformat:'s' %}selected{% endif %}>{{ ecole.nom }}</option>{% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+                <div class="col-md-2"><button class="btn btn-outline-success w-100"><i class="fas fa-search me-1"></i>Filtrer</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="fas fa-boxes me-2 text-success"></i>Produits et stock</h5>
+            <span class="text-muted small">Valeur du stock restant : {{ resume.valeur_stock|intcomma }} GNF</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Produit</th>
+                        <th class="text-center">Quantité en stock</th>
+                        <th class="text-center">Vendu</th>
+                        <th class="text-center">Reste</th>
+                        <th class="text-end">Prix d'achat unitaire</th>
+                        <th class="text-end">Prix de vente unitaire</th>
+                        <th class="text-end">Ventes</th>
+                        <th class="text-end">Solde</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for produit in produits %}
+                    <tr {% if not produit.actif %}class="table-secondary"{% endif %}>
+                        <td>
+                            <strong>{{ produit.nom }}</strong>
+                            {% if not produit.actif %}<span class="badge bg-secondary ms-1">Inactif</span>{% endif %}
+                            <br><small class="text-muted">{{ produit.code_produit }}{% if ecoles %} · {{ produit.ecole.nom }}{% endif %}</small>
+                        </td>
+                        <td class="text-center">{{ produit.quantite_stock|intcomma }}</td>
+                        <td class="text-center text-primary fw-semibold">{{ produit.quantite_vendue|intcomma }}</td>
+                        <td class="text-center"><span class="badge {% if produit.stock_en_alerte %}bg-warning text-dark{% else %}bg-success{% endif %}">{{ produit.quantite_restante|intcomma }}</span></td>
+                        <td class="text-end">{{ produit.prix_achat_unitaire|intcomma }} GNF</td>
+                        <td class="text-end">{{ produit.prix_vente_unitaire|intcomma }} GNF</td>
+                        <td class="text-end">{{ produit.chiffre_affaires|intcomma }} GNF</td>
+                        <td class="text-end fw-bold {% if produit.solde < 0 %}text-danger{% else %}text-success{% endif %}">{{ produit.solde|intcomma }} GNF</td>
+                        <td class="text-end text-nowrap">
+                            {% if produit.actif and produit.quantite_restante > 0 %}<a href="{% url 'depenses:enregistrer_vente_fourniture' produit.id %}" class="btn btn-sm btn-success" title="Vendre"><i class="fas fa-cash-register"></i></a>{% endif %}
+                            <a href="{% url 'depenses:modifier_produit_fourniture' produit.id %}" class="btn btn-sm btn-outline-primary" title="Modifier"><i class="fas fa-edit"></i></a>
+                            {% if not produit.ventes.exists %}<form method="post" action="{% url 'depenses:supprimer_produit_fourniture' produit.id %}" class="d-inline" onsubmit="return confirm('Supprimer ce produit ?');">{% csrf_token %}<button class="btn btn-sm btn-outline-danger" title="Supprimer"><i class="fas fa-trash"></i></button></form>{% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="9" class="text-center text-muted py-5"><i class="fas fa-box-open fa-2x mb-2 d-block"></i>Aucun produit enregistré.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white"><h5 class="mb-0"><i class="fas fa-receipt me-2 text-primary"></i>Dernières ventes</h5></div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light"><tr><th>Référence</th><th>Date</th><th>Produit</th><th>Acheteur</th><th class="text-center">Quantité</th><th class="text-end">Montant</th><th class="text-end">Solde</th><th></th></tr></thead>
+                <tbody>
+                {% for vente in ventes_recentes %}
+                    <tr>
+                        <td>{{ vente.reference }}</td><td>{{ vente.date_vente|date:'d/m/Y' }}</td><td>{{ vente.produit.nom }}</td><td>{{ vente.acheteur|default:'—' }}</td>
+                        <td class="text-center">{{ vente.quantite }}</td><td class="text-end">{{ vente.montant_total|intcomma }} GNF</td><td class="text-end text-success">{{ vente.solde|intcomma }} GNF</td>
+                        <td class="text-end"><form method="post" action="{% url 'depenses:annuler_vente_fourniture' vente.id %}" onsubmit="return confirm('Annuler cette vente ? Le stock sera recalculé.');">{% csrf_token %}<button class="btn btn-sm btn-outline-danger"><i class="fas fa-undo"></i></button></form></td>
+                    </tr>
+                {% empty %}<tr><td colspan="8" class="text-center text-muted py-4">Aucune vente enregistrée.</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

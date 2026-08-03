@@ -2,6 +2,10 @@
 Test de la récupération des notes pour saisir_notes avec les données locales
 """
 import os
+import sys
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ecole_moderne.settings')
 import django
 django.setup()

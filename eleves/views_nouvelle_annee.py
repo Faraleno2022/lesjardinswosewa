@@ -887,6 +887,7 @@ def nouvelle_annee_creer(request):
                         EcheancierPaiement.objects.create(
                             eleve=eleve,
                             annee_scolaire=annee_nouvelle,
+                            nature_frais='REINSCRIPTION',
                             frais_inscription_du=fi,
                             tranche_1_due=t1,
                             tranche_2_due=t2,

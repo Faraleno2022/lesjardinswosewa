@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 from . import views_logistique
 from . import views_bibliotheque
+from . import views_fournitures
 
 app_name = 'depenses'
 
@@ -22,6 +23,14 @@ urlpatterns = [
     path('categories/', views.gestion_categories, name='gestion_categories'),
     path('categories/<int:categorie_id>/modifier/', views.modifier_categorie, name='modifier_categorie'),
     path('categories/<int:categorie_id>/supprimer/', views.supprimer_categorie, name='supprimer_categorie'),
+
+    # ===== FOURNITURES SCOLAIRES ET VENTES =====
+    path('fournitures/', views_fournitures.tableau_bord_fournitures, name='tableau_bord_fournitures'),
+    path('fournitures/produits/nouveau/', views_fournitures.creer_produit_fourniture, name='creer_produit_fourniture'),
+    path('fournitures/produits/<int:produit_id>/modifier/', views_fournitures.modifier_produit_fourniture, name='modifier_produit_fourniture'),
+    path('fournitures/produits/<int:produit_id>/vendre/', views_fournitures.enregistrer_vente_fourniture, name='enregistrer_vente_fourniture'),
+    path('fournitures/produits/<int:produit_id>/supprimer/', views_fournitures.supprimer_produit_fourniture, name='supprimer_produit_fourniture'),
+    path('fournitures/ventes/<int:vente_id>/annuler/', views_fournitures.annuler_vente_fourniture, name='annuler_vente_fourniture'),
     
     # ===== LOGISTIQUE =====
     path('logistique/', views_logistique.dashboard_logistique, name='dashboard_logistique'),

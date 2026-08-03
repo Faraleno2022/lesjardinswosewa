@@ -103,7 +103,7 @@ class EcheancierForm(forms.ModelForm):
     class Meta:
         model = EcheancierPaiement
         fields = [
-            'annee_scolaire', 'frais_inscription_du', 'tranche_1_due', 
+            'annee_scolaire', 'nature_frais', 'frais_inscription_du', 'tranche_1_due',
             'tranche_2_due', 'tranche_3_due', 'date_echeance_inscription',
             'date_echeance_tranche_1', 'date_echeance_tranche_2', 
             'date_echeance_tranche_3'
@@ -113,6 +113,7 @@ class EcheancierForm(forms.ModelForm):
                 'class': 'form-control',
                 'placeholder': '2024-2025'
             }),
+            'nature_frais': forms.Select(attrs={'class': 'form-select'}),
             'frais_inscription_du': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'Montant en GNF',

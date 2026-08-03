@@ -317,12 +317,12 @@
     <div class="echeancier-card">
         <h5><i class="fas fa-calendar-check me-2"></i>Détail des échéances</h5>
         
-        <!-- Frais d'inscription -->
+        <!-- Frais d'admission : inscription ou réinscription -->
         <div class="tranche-item {% if echeancier.frais_inscription_paye >= echeancier.frais_inscription_du %}paye{% elif echeancier.frais_inscription_paye > 0 %}partiel{% elif echeancier.date_echeance_inscription < today %}en-retard{% else %}impaye{% endif %}">
             <div class="row align-items-center">
                 <div class="col-md-4">
                     <h6 class="mb-1">
-                        <i class="fas fa-clipboard-list me-2"></i>Frais d'inscription
+                        <i class="fas fa-clipboard-list me-2"></i>{{ echeancier.libelle_frais_admission }}
                     </h6>
                     <small class="text-muted">Échéance : {{ echeancier.date_echeance_inscription|date:"d/m/Y" }}</small>
                 </div>

@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from datetime import date
@@ -6,8 +6,10 @@ from datetime import date
 from eleves.models import Ecole, Classe, Eleve, Responsable
 from paiements.models import Paiement, TypePaiement, ModePaiement
 from utilisateurs.models import Profil
+from .support import TEST_MIDDLEWARE
 
 
+@override_settings(MIDDLEWARE=TEST_MIDDLEWARE)
 class SchoolFilteringTests(TestCase):
     def setUp(self):
         # Schools (provide required fields)
@@ -99,11 +101,11 @@ class SchoolFilteringTests(TestCase):
 
     def login1(self):
         self.client.logout()
-        self.client.login(username="u1", password="pass12345")
+        self.client.force_login(self.user1)
 
     def login2(self):
         self.client.logout()
-        self.client.login(username="u2", password="pass12345")
+        self.client.force_login(self.user2)
 
     def test_api_paiements_list_filtered_by_school(self):
         self.login1()
