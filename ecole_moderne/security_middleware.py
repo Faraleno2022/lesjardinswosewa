@@ -49,12 +49,12 @@ class SecurityMiddleware(MiddlewareMixin):
     
     # Patterns de Path Traversal
     PATH_TRAVERSAL_PATTERNS = [
-        r"\.\./",
-        r"\.\.\\",
-        r"%2e%2e%2f",
-        r"%2e%2e\\",
-        r"..%2f",
-        r"..%5c",
+        # Deux points littéraux suivis d'un séparateur brut.
+        r"\.\.[/\\]",
+        # Points encodés suivis d'un séparateur brut ou encodé.
+        r"%2e%2e(?:%2f|%5c|[/\\])",
+        # Points bruts suivis d'un séparateur encodé.
+        r"\.\.(?:%2f|%5c)",
     ]
     
     # User agents suspects

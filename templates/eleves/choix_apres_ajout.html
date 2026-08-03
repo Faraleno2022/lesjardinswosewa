@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+
+{% block title %}Élève ajouté{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8 col-xl-7">
+            <div class="card border-0 shadow-sm overflow-hidden">
+                <div class="card-body p-4 p-md-5 text-center">
+                    <div class="d-inline-flex align-items-center justify-content-center bg-success-subtle text-success rounded-circle mb-3"
+                         style="width: 72px; height: 72px;">
+                        <i class="fas fa-check fa-2x" aria-hidden="true"></i>
+                    </div>
+
+                    <h1 class="h3 mb-2">Élève ajouté avec succès</h1>
+                    <p class="text-muted mb-4">
+                        <strong class="text-dark">{{ eleve.prenom }} {{ eleve.nom }}</strong>
+                        a été enregistré avec le matricule
+                        <span class="badge bg-primary">{{ eleve.matricule }}</span>.
+                    </p>
+
+                    <div class="bg-light rounded-3 p-3 mb-4 text-start">
+                        <div class="row g-2">
+                            <div class="col-sm-6">
+                                <span class="text-muted d-block small">Élève</span>
+                                <strong>{{ eleve.prenom }} {{ eleve.nom }}</strong>
+                            </div>
+                            <div class="col-sm-6">
+                                <span class="text-muted d-block small">Classe</span>
+                                <strong>{{ eleve.classe.nom }}</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="fw-semibold mb-3">Que souhaitez-vous faire maintenant ?</p>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <a href="{{ url_paiement }}" class="btn btn-success btn-lg w-100 h-100 py-3">
+                                <i class="fas fa-money-bill-wave me-2" aria-hidden="true"></i>
+                                Ajouter un paiement
+                            </a>
+                        </div>
+                        <div class="col-md-6">
+                            <a href="{{ url_continuer }}" class="btn btn-primary btn-lg w-100 h-100 py-3">
+                                <i class="fas fa-user-plus me-2" aria-hidden="true"></i>
+                                Continuer l’ajout des élèves
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
