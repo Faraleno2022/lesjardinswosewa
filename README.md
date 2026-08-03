@@ -203,6 +203,7 @@ Voir [docs/INSTALLATION.md](docs/INSTALLATION.md) pour le guide de deploiement c
 - Hote : `gshadjakanfingdiane.pythonanywhere.com`
 - Domaine personnalise : `myschoolgn.space`
 - Base de donnees : MySQL distant
+- Procedure de mise a jour : [docs/PYTHONANYWHERE_DEPLOY.md](docs/PYTHONANYWHERE_DEPLOY.md)
 
 ### Desktop (Windows .exe)
 ```bash

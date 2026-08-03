@@ -1,15 +1,12 @@
 import os
+import sys
 from pathlib import Path
 
-# Charge le fichier .env
-env_file = Path('/home/myschoolgn/.env')
-if env_file.exists():
-    with open(env_file) as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith('#'):
-                key, value = line.split('=', 1)
-                os.environ[key] = value
+# Le chemin est dérivé du projet au lieu de dépendre d'un compte
+# PythonAnywhere particulier. settings.py charge ensuite BASE_DIR/.env.
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 from django.core.wsgi import get_wsgi_application
 
