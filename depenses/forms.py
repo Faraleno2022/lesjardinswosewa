@@ -604,11 +604,38 @@ class EmpruntForm(forms.ModelForm):
 
 
 class ReservationForm(forms.ModelForm):
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        livres = Livre.objects.filter(actif=True).order_by('titre')
+        eleves = Eleve.objects.filter(statut='ACTIF').select_related(
+            'classe', 'classe__ecole'
+        ).order_by('nom', 'prenom')
+
+        if user is not None:
+            from utilisateurs.utils import user_is_superadmin, user_school
+
+            if not user_is_superadmin(user):
+                ecole = user_school(user)
+                if ecole is None:
+                    livres = livres.none()
+                    eleves = eleves.none()
+                else:
+                    livres = livres.filter(cree_par__profil__ecole=ecole)
+                    eleves = eleves.filter(classe__ecole=ecole)
+
+        self.fields['livre'].queryset = livres
+        self.fields['eleve'].queryset = eleves
+
     class Meta:
         model = Reservation
         fields = ['livre', 'eleve', 'observations']
         widgets = {
-            'livre': forms.Select(attrs={'class': 'form-control'}),
-            'eleve': forms.Select(attrs={'class': 'form-control'}),
-            'observations': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'livre': forms.Select(attrs={'class': 'form-select'}),
+            'eleve': forms.Select(attrs={'class': 'form-select'}),
+            'observations': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': 'Précisions éventuelles sur la réservation',
+            }),
         }

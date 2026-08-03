@@ -24,6 +24,13 @@
                 <div class="card-body">
                     <form method="post">
                         {% csrf_token %}
+                        {% if reservation_id %}
+                        <input type="hidden" name="reservation" value="{{ reservation_id }}">
+                        <div class="alert alert-warning">
+                            <i class="fas fa-bookmark me-2"></i>
+                            Cet emprunt traite une réservation prioritaire.
+                        </div>
+                        {% endif %}
                         
                         <div class="row">
                             <div class="col-md-6 mb-3">
@@ -31,7 +38,7 @@
                                 <select name="livre" class="form-control" required>
                                     <option value="">Sélectionnez un livre</option>
                                     {% for livre in livres %}
-                                    <option value="{{ livre.id }}">
+                                    <option value="{{ livre.id }}" {% if selected_livre_id == livre.id|stringformat:"s" %}selected{% endif %}>
                                         {{ livre.titre }} ({{ livre.exemplaires_disponibles }} dispo)
                                     </option>
                                     {% endfor %}
@@ -42,7 +49,7 @@
                                 <select name="eleve" id="id_eleve" class="form-control" required>
                                     <option value="">Sélectionnez un élève</option>
                                     {% for eleve in eleves %}
-                                    <option value="{{ eleve.id }}">
+                                    <option value="{{ eleve.id }}" {% if selected_eleve_id == eleve.id|stringformat:"s" %}selected{% endif %}>
                                         {{ eleve.matricule }} - {{ eleve.nom }} {{ eleve.prenom }}
                                     </option>
                                     {% endfor %}

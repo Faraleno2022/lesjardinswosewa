@@ -1,77 +1,135 @@
 {% extends 'base.html' %}
-{% load humanize %}
 
 {% block title %}{{ titre_page }}{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <!-- En-tête -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h2><i class="fas fa-bookmark text-warning"></i> {{ titre_page }}</h2>
-                    <p class="text-muted">Gestion des réservations de livres</p>
-                </div>
-                <div>
-                    <a href="{% url 'depenses:dashboard_bibliotheque' %}" class="btn btn-secondary">
-                        <i class="fas fa-arrow-left"></i> Dashboard
-                    </a>
-                </div>
-            </div>
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h2 class="mb-1"><i class="fas fa-bookmark text-warning me-2"></i>{{ titre_page }}</h2>
+            <p class="text-muted mb-0">Création, suivi et traitement des réservations de livres.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'depenses:creer_reservation' %}" class="btn btn-warning">
+                <i class="fas fa-plus me-1"></i> Nouvelle réservation
+            </a>
+            <a href="{% url 'depenses:dashboard_bibliotheque' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i> Dashboard
+            </a>
         </div>
     </div>
 
-    <!-- Liste des réservations -->
-    <div class="card">
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-3">
+            <div class="card border-0 shadow-sm h-100"><div class="card-body">
+                <div class="text-muted small">Total</div><div class="h3 mb-0">{{ stats.total }}</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card border-0 shadow-sm h-100"><div class="card-body">
+                <div class="text-muted small">En attente</div><div class="h3 text-warning mb-0">{{ stats.en_attente }}</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card border-0 shadow-sm h-100"><div class="card-body">
+                <div class="text-muted small">Disponibles</div><div class="h3 text-success mb-0">{{ stats.disponibles }}</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card border-0 shadow-sm h-100"><div class="card-body">
+                <div class="text-muted small">Terminées</div><div class="h3 text-secondary mb-0">{{ stats.terminees }}</div>
+            </div></div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
         <div class="card-body">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-lg-6">
+                    <label for="id_q" class="form-label">Recherche</label>
+                    <input id="id_q" type="search" name="q" value="{{ q }}" class="form-control"
+                           placeholder="N° réservation, livre, élève ou matricule">
+                </div>
+                <div class="col-lg-3">
+                    <label for="id_statut" class="form-label">Statut</label>
+                    <select id="id_statut" name="statut" class="form-select">
+                        <option value="">Tous les statuts</option>
+                        {% for code, libelle in statuts_reservation %}
+                        <option value="{{ code }}" {% if statut == code %}selected{% endif %}>{{ libelle }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-lg-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary flex-grow-1">
+                        <i class="fas fa-search me-1"></i> Filtrer
+                    </button>
+                    <a href="{% url 'depenses:liste_reservations' %}" class="btn btn-outline-secondary" title="Réinitialiser">
+                        <i class="fas fa-rotate-left"></i>
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="table table-hover align-middle mb-0">
                     <thead class="table-dark">
                         <tr>
                             <th>N° Réservation</th>
                             <th>Livre</th>
                             <th>Élève</th>
                             <th>Classe</th>
-                            <th>Date Réservation</th>
-                            <th>Date Expiration</th>
+                            <th>Réservée le</th>
+                            <th>Expiration</th>
                             <th>Statut</th>
-                            <th>Actions</th>
+                            <th class="text-end">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for res in reservations %}
                         <tr>
                             <td><strong>{{ res.numero_reservation }}</strong></td>
-                            <td>{{ res.livre.titre|truncatewords:5 }}</td>
-                            <td>{{ res.eleve.nom }} {{ res.eleve.prenom }}</td>
+                            <td>{{ res.livre.titre|truncatewords:6 }}</td>
+                            <td>
+                                {{ res.eleve.prenom }} {{ res.eleve.nom }}
+                                <div class="small text-muted">{{ res.eleve.matricule }}</div>
+                            </td>
                             <td>{{ res.eleve.classe.nom|default:"-" }}</td>
                             <td>{{ res.date_reservation|date:"d/m/Y H:i" }}</td>
                             <td>{{ res.date_expiration|date:"d/m/Y H:i" }}</td>
                             <td>
-                                <span class="badge 
-                                    {% if res.statut == 'EN_ATTENTE' %}bg-warning
-                                    {% elif res.statut == 'DISPONIBLE' %}bg-success
-                                    {% elif res.statut == 'EMPRUNTEE' %}bg-primary
-                                    {% elif res.statut == 'ANNULEE' %}bg-danger
-                                    {% else %}bg-secondary{% endif %}">
+                                <span class="badge {% if res.statut == 'EN_ATTENTE' %}bg-warning text-dark{% elif res.statut == 'DISPONIBLE' %}bg-success{% elif res.statut == 'EMPRUNTEE' %}bg-primary{% elif res.statut == 'ANNULEE' %}bg-danger{% else %}bg-secondary{% endif %}">
                                     {{ res.get_statut_display }}
                                 </span>
                             </td>
-                            <td>
+                            <td class="text-end text-nowrap">
                                 {% if res.statut == 'DISPONIBLE' %}
-                                <a href="{% url 'depenses:creer_emprunt' %}?livre={{ res.livre.id }}&eleve={{ res.eleve.id }}" 
-                                   class="btn btn-sm btn-success">
-                                    <i class="fas fa-hand-holding-heart"></i> Emprunter
+                                <a href="{% url 'depenses:creer_emprunt' %}?livre={{ res.livre.id }}&eleve={{ res.eleve.id }}&reservation={{ res.id }}"
+                                   class="btn btn-sm btn-success" title="Transformer en emprunt">
+                                    <i class="fas fa-hand-holding-heart me-1"></i> Emprunter
                                 </a>
+                                {% endif %}
+                                {% if res.statut == 'EN_ATTENTE' or res.statut == 'DISPONIBLE' %}
+                                <form method="post" action="{% url 'depenses:annuler_reservation' res.id %}" class="d-inline"
+                                      onsubmit="return confirm('Annuler cette réservation ?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Annuler">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </form>
                                 {% endif %}
                             </td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="8" class="text-center py-4">
-                                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                                <p class="text-muted">Aucune réservation trouvée</p>
+                            <td colspan="8" class="text-center py-5">
+                                <i class="fas fa-bookmark fa-3x text-muted mb-3"></i>
+                                <p class="text-muted mb-3">Aucune réservation trouvée.</p>
+                                <a href="{% url 'depenses:creer_reservation' %}" class="btn btn-warning">
+                                    Créer la première réservation
+                                </a>
                             </td>
                         </tr>
                         {% endfor %}
