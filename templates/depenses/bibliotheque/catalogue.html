@@ -126,6 +126,9 @@
                                 <i class="fas fa-hand-holding-heart"></i> Emprunter
                             </a>
                             {% endif %}
+                            <a href="{% url 'depenses:creer_reservation' %}?livre={{ livre.id }}" class="btn btn-sm btn-warning" title="Réserver">
+                                <i class="fas fa-bookmark"></i>
+                            </a>
                         </div>
                     </div>
                 </div>
