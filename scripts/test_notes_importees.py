@@ -6,6 +6,8 @@ import sys
 import django
 
 # Configuration Django
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, PROJECT_ROOT)
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ecole_moderne.settings')
 django.setup()
 

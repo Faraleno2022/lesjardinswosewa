@@ -223,7 +223,7 @@ class WhatsAppNoteRappelSender:
             }
 
         postes = [
-            ("Frais d'inscription", echeancier.frais_inscription_du, echeancier.frais_inscription_paye, echeancier.date_echeance_inscription),
+            (echeancier.libelle_frais_admission, echeancier.frais_inscription_du, echeancier.frais_inscription_paye, echeancier.date_echeance_inscription),
             ("1ère tranche", echeancier.tranche_1_due, echeancier.tranche_1_payee, echeancier.date_echeance_tranche_1),
             ("2ème tranche", echeancier.tranche_2_due, echeancier.tranche_2_payee, echeancier.date_echeance_tranche_2),
             ("3ème tranche", echeancier.tranche_3_due, echeancier.tranche_3_payee, echeancier.date_echeance_tranche_3),
@@ -237,7 +237,7 @@ class WhatsAppNoteRappelSender:
 
         montant_couvert = min(montant_total, montant_paye + remises_total)
         reste_a_payer = max(montant_total - montant_couvert, Decimal('0'))
-        exigible = sum((du or Decimal('0')) for _libelle, du, _paye, echeance in postes if echeance and echeance <= today)
+        exigible = sum((du or Decimal('0')) for _libelle, du, _paye, echeance in postes if echeance and echeance < today)
         retard_reel = max(exigible - montant_couvert, Decimal('0'))
 
         prochains = []

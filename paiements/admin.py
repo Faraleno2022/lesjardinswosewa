@@ -33,8 +33,9 @@ class RemiseReductionAdmin(admin.ModelAdmin):
 
 @admin.register(EcheancierPaiement)
 class EcheancierPaiementAdmin(admin.ModelAdmin):
-    list_display = ("eleve", "annee_scolaire", "statut", "total_du", "total_paye")
+    list_display = ("eleve", "annee_scolaire", "nature_frais", "statut", "total_du", "total_paye")
     search_fields = ("eleve__nom", "eleve__prenom", "eleve__matricule")
+    list_filter = ("nature_frais", "statut", "annee_scolaire")
 
 
 @admin.register(TwilioInboundMessage)

@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div><h2 class="mb-1"><i class="fas fa-box text-success me-2"></i>{{ titre_page }}</h2><p class="text-muted mb-0">Définissez le stock et les prix unitaires du produit.</p></div>
+        <a href="{% url 'depenses:tableau_bord_fournitures' %}" class="btn btn-outline-secondary">Retour</a>
+    </div>
+    <div class="card border-0 shadow-sm"><div class="card-body p-4">
+        <form method="post" novalidate>{% csrf_token %}
+            {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+            {% if form.ecole.is_hidden %}{{ form.ecole }}{% else %}<div class="mb-3"><label class="form-label">École *</label>{{ form.ecole }}<div class="text-danger small">{{ form.ecole.errors }}</div></div>{% endif %}
+            <div class="row g-3">
+                <div class="col-md-4"><label class="form-label">Code produit</label>{{ form.code_produit }}<div class="text-danger small">{{ form.code_produit.errors }}</div></div>
+                <div class="col-md-8"><label class="form-label">Produit *</label>{{ form.nom }}<div class="text-danger small">{{ form.nom.errors }}</div></div>
+                <div class="col-12"><label class="form-label">Description</label>{{ form.description }}<div class="text-danger small">{{ form.description.errors }}</div></div>
+                <div class="col-md-3"><label class="form-label">Quantité en stock *</label>{{ form.quantite_stock }}<div class="text-danger small">{{ form.quantite_stock.errors }}</div></div>
+                <div class="col-md-3"><label class="form-label">Prix d'achat unitaire *</label>{{ form.prix_achat_unitaire }}<div class="text-danger small">{{ form.prix_achat_unitaire.errors }}</div></div>
+                <div class="col-md-3"><label class="form-label">Prix de vente unitaire *</label>{{ form.prix_vente_unitaire }}<div class="text-danger small">{{ form.prix_vente_unitaire.errors }}</div></div>
+                <div class="col-md-3"><label class="form-label">Seuil d'alerte</label>{{ form.seuil_alerte }}<div class="text-danger small">{{ form.seuil_alerte.errors }}</div></div>
+                <div class="col-12"><div class="form-check">{{ form.actif }}<label class="form-check-label" for="{{ form.actif.id_for_label }}">Produit actif et disponible à la vente</label></div></div>
+            </div>
+            <div class="d-flex justify-content-end gap-2 mt-4"><a href="{% url 'depenses:tableau_bord_fournitures' %}" class="btn btn-outline-secondary">Annuler</a><button class="btn btn-success px-4"><i class="fas fa-save me-1"></i>Enregistrer</button></div>
+        </form>
+    </div></div>
+</div>
+{% endblock %}

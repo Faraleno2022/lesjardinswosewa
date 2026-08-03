@@ -6,6 +6,7 @@ from .models import (
 from .models_logistique import (
     BienEtablissement, ContributionPapierRam
 )
+from .models_fournitures import ProduitFourniture, VenteFourniture
 from .models_bibliotheque import (
     CategorieLivre, Livre, Emprunt, Reservation,
     HistoriqueLivre, ParametreBibliotheque
@@ -56,6 +57,29 @@ class ContributionPapierRamAdmin(admin.ModelAdmin):
     list_filter = ['ecole', 'annee_scolaire', 'mode_contribution']
     search_fields = ['eleve__matricule', 'eleve__nom', 'eleve__prenom']
     date_hierarchy = 'date_contribution'
+
+
+@admin.register(ProduitFourniture)
+class ProduitFournitureAdmin(admin.ModelAdmin):
+    list_display = [
+        'code_produit', 'nom', 'ecole', 'quantite_stock',
+        'quantite_vendue', 'quantite_restante',
+        'prix_achat_unitaire', 'prix_vente_unitaire', 'actif',
+    ]
+    list_filter = ['ecole', 'actif']
+    search_fields = ['code_produit', 'nom', 'description']
+    readonly_fields = ['quantite_vendue', 'quantite_restante', 'chiffre_affaires', 'solde']
+
+
+@admin.register(VenteFourniture)
+class VenteFournitureAdmin(admin.ModelAdmin):
+    list_display = [
+        'reference', 'produit', 'date_vente', 'quantite',
+        'prix_vente_unitaire', 'montant_total', 'solde',
+    ]
+    list_filter = ['produit__ecole', 'date_vente']
+    search_fields = ['reference', 'produit__nom', 'acheteur']
+    date_hierarchy = 'date_vente'
 
 
 # ===== BIBLIOTHÈQUE =====

@@ -6,7 +6,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_POST
 from django.contrib import messages
 from django.db import transaction, IntegrityError
-from django.db.models import Q, F, Sum, Count, Value, DecimalField, ExpressionWrapper, Case, When, OuterRef, Subquery
+from django.db.models import Q, F, Sum, Count, Value, DecimalField, ExpressionWrapper, Case, When
 from django.db.models.functions import Coalesce, Greatest, Least
 from django.http import JsonResponse, HttpResponse, Http404
 from django.utils import timezone
@@ -117,8 +117,16 @@ def _align_enrollment_fee(eleve, echeancier, preferred_type_name=None):
     if preference is None:
         return echeancier
 
+    expected_nature = 'REINSCRIPTION' if preference else 'INSCRIPTION'
+    update_fields = []
+    if getattr(echeancier, 'nature_frais', 'INSCRIPTION') != expected_nature:
+        echeancier.nature_frais = expected_nature
+        update_fields.append('nature_frais')
+
     grille = _applicable_grille_for_eleve(eleve, echeancier.annee_scolaire)
     if not grille:
+        if update_fields:
+            echeancier.save(update_fields=update_fields + ["date_modification"])
         return echeancier
 
     expected_fee = (
@@ -133,11 +141,11 @@ def _align_enrollment_fee(eleve, echeancier, preferred_type_name=None):
         Decimal("0"),
     }
     # Ne pas écraser un montant personnalisé saisi manuellement dans l'échéancier.
-    if current_fee not in configured_fees:
-        return echeancier
-    if current_fee != expected_fee:
+    if current_fee in configured_fees and current_fee != expected_fee:
         echeancier.frais_inscription_du = expected_fee
-        echeancier.save(update_fields=["frais_inscription_du", "date_modification"])
+        update_fields.append("frais_inscription_du")
+    if update_fields:
+        echeancier.save(update_fields=update_fields + ["date_modification"])
     return echeancier
 
 
@@ -209,6 +217,7 @@ def ensure_echeancier_for_eleve(eleve: "Eleve", *, created_by=None, prefer_reins
         t1 = 0
         t2 = 0
         t3 = 0
+    nature_frais = 'REINSCRIPTION' if prefer_reinscription else 'INSCRIPTION'
 
     # Dates d'échéance par défaut (priorité aux valeurs de la grille si présentes)
     try:
@@ -244,6 +253,7 @@ def ensure_echeancier_for_eleve(eleve: "Eleve", *, created_by=None, prefer_reins
     if ech is not None:
         try:
             ech.annee_scolaire = annee_scol
+            ech.nature_frais = nature_frais
             ech.frais_inscription_du = fi
             ech.tranche_1_due = t1
             ech.tranche_2_due = t2
@@ -269,6 +279,7 @@ def ensure_echeancier_for_eleve(eleve: "Eleve", *, created_by=None, prefer_reins
                 ech = EcheancierPaiement.objects.create(
                     eleve=eleve,
                     annee_scolaire=annee_scol,
+                    nature_frais=nature_frais,
                     frais_inscription_du=fi,
                     tranche_1_due=t1,
                     tranche_2_due=t2,
@@ -531,17 +542,17 @@ def _auto_validate_echeancier_for_eleve(eleve: "Eleve") -> None:
         couverture = max(0, cash_to_allocate + sum_remises)
 
         # Déterminer le nouveau statut avec gestion du retard
-        # Calcul de l'exigible (sommes dont la date d'échéance est passée ou aujourd'hui)
+        # Un retard commence le lendemain de l'échéance, jamais le jour même.
         from django.utils import timezone as _tz
         today = _tz.localdate() if hasattr(_tz, 'localdate') else date.today()
         exigible = 0
-        if echeancier.date_echeance_inscription and echeancier.date_echeance_inscription <= today:
+        if echeancier.date_echeance_inscription and echeancier.date_echeance_inscription < today:
             exigible += int(echeancier.frais_inscription_du or 0)
-        if echeancier.date_echeance_tranche_1 and echeancier.date_echeance_tranche_1 <= today:
+        if echeancier.date_echeance_tranche_1 and echeancier.date_echeance_tranche_1 < today:
             exigible += int(echeancier.tranche_1_due or 0)
-        if echeancier.date_echeance_tranche_2 and echeancier.date_echeance_tranche_2 <= today:
+        if echeancier.date_echeance_tranche_2 and echeancier.date_echeance_tranche_2 < today:
             exigible += int(echeancier.tranche_2_due or 0)
-        if echeancier.date_echeance_tranche_3 and echeancier.date_echeance_tranche_3 <= today:
+        if echeancier.date_echeance_tranche_3 and echeancier.date_echeance_tranche_3 < today:
             exigible += int(echeancier.tranche_3_due or 0)
 
         # Les champs *_paye représentent uniquement les encaissements réels.
@@ -800,25 +811,25 @@ def tableau_bord_paiements(request):
         paiements_recents_qs = filter_by_user_school(paiements_recents_qs, request.user, 'eleve__classe__ecole')
     paiements_recents = list(paiements_recents_qs[:20])
 
-    # Top élèves en retard (montant de retard décroissant)
+    # Top élèves en retard (l'échéance doit être strictement dépassée)
     exigible_expr = (
         Case(
-            When(date_echeance_inscription__lte=today, then=F('frais_inscription_du')),
+            When(date_echeance_inscription__lt=today, then=F('frais_inscription_du')),
             default=Value(0),
             output_field=DecimalField(max_digits=10, decimal_places=0),
         )
         + Case(
-            When(date_echeance_tranche_1__lte=today, then=F('tranche_1_due')),
+            When(date_echeance_tranche_1__lt=today, then=F('tranche_1_due')),
             default=Value(0),
             output_field=DecimalField(max_digits=10, decimal_places=0),
         )
         + Case(
-            When(date_echeance_tranche_2__lte=today, then=F('tranche_2_due')),
+            When(date_echeance_tranche_2__lt=today, then=F('tranche_2_due')),
             default=Value(0),
             output_field=DecimalField(max_digits=10, decimal_places=0),
         )
         + Case(
-            When(date_echeance_tranche_3__lte=today, then=F('tranche_3_due')),
+            When(date_echeance_tranche_3__lt=today, then=F('tranche_3_due')),
             default=Value(0),
             output_field=DecimalField(max_digits=10, decimal_places=0),
         )
@@ -908,7 +919,7 @@ def tableau_bord_paiements(request):
         total_paye = min(total_du, total_paye_brut)
         reste = max(total_du - total_paye, 0)
 
-        exigible = sum(due for due, _paye, echeance in components if echeance and echeance <= today)
+        exigible = sum(due for due, _paye, echeance in components if echeance and echeance < today)
         retard = max(exigible - total_paye, 0)
         prevision = sum(
             max(due - paye, 0)
@@ -1067,13 +1078,13 @@ def liste_paiements(request):
         from django.utils import timezone as _tz2
         _today = _tz2.localdate() if hasattr(_tz2, 'localdate') else date.today()
         exig = (
-            Case(When(date_echeance_inscription__lte=_today, then=F('frais_inscription_du')),
+            Case(When(date_echeance_inscription__lt=_today, then=F('frais_inscription_du')),
                  default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
-            + Case(When(date_echeance_tranche_1__lte=_today, then=F('tranche_1_due')),
+            + Case(When(date_echeance_tranche_1__lt=_today, then=F('tranche_1_due')),
                    default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
-            + Case(When(date_echeance_tranche_2__lte=_today, then=F('tranche_2_due')),
+            + Case(When(date_echeance_tranche_2__lt=_today, then=F('tranche_2_due')),
                    default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
-            + Case(When(date_echeance_tranche_3__lte=_today, then=F('tranche_3_due')),
+            + Case(When(date_echeance_tranche_3__lt=_today, then=F('tranche_3_due')),
                    default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
         )
         paye_eche = (F('frais_inscription_paye') + F('tranche_1_payee')
@@ -1199,23 +1210,21 @@ def liste_paiements(request):
         Value(0),
         output_field=DecimalField(max_digits=12, decimal_places=0),
     )
-    # Annoter montant de réinscription dû par échéancier (en comparant à la grille tarifaire)
-    try:
-        reinsc_subq = GrilleTarifaire.objects.filter(
-            ecole=OuterRef('eleve__classe__ecole'),
-            niveau=OuterRef('eleve__classe__niveau'),
-            annee_scolaire=OuterRef('annee_scolaire'),
-        ).values('frais_reinscription')[:1]
-        eche_qs = eche_qs.annotate(
-            reinsc_due=Case(
-                When(frais_inscription_du=Subquery(reinsc_subq), then=F('frais_inscription_du')),
-                default=Value(0),
-                output_field=DecimalField(max_digits=12, decimal_places=0),
-            )
-        )
-    except Exception:
-        # En cas d'erreur d'annotation, fallback sans champ dédié
-        pass
+    # Les deux postes sont strictement disjoints. La nature enregistrée sur
+    # l'échéancier reste fiable même lorsque les deux tarifs sont identiques.
+    money_field = DecimalField(max_digits=12, decimal_places=0)
+    eche_qs = eche_qs.annotate(
+        insc_due=Case(
+            When(nature_frais='INSCRIPTION', then=F('frais_inscription_du')),
+            default=Value(0),
+            output_field=money_field,
+        ),
+        reinsc_due=Case(
+            When(nature_frais='REINSCRIPTION', then=F('frais_inscription_du')),
+            default=Value(0),
+            output_field=money_field,
+        ),
+    )
 
     aggr_du = eche_qs.aggregate(
         dues_sco=Coalesce(
@@ -1231,33 +1240,28 @@ def liste_paiements(request):
     frais_inscription_total = int(
         eche_qs.aggregate(
             total=Coalesce(
-                Sum(F('frais_inscription_du'), output_field=DecimalField(max_digits=12, decimal_places=0)),
+                Sum(F('insc_due'), output_field=DecimalField(max_digits=12, decimal_places=0)),
                 Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
                 output_field=DecimalField(max_digits=12, decimal_places=0),
             )
         ).get('total')
         or 0
     )
-    du_global_net = du_sco_net + frais_inscription_total
-
-    # Total global de réinscription (échéanciers dont le poste inscription correspond à la réinscription de la grille)
-    try:
-        reinsc_total = int(
-            eche_qs.aggregate(
-                total=Coalesce(
-                    Sum(F('reinsc_due'), output_field=DecimalField(max_digits=12, decimal_places=0)),
-                    Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
-                    output_field=DecimalField(max_digits=12, decimal_places=0),
-                )
-            ).get('total') or 0
-        )
-    except Exception:
-        reinsc_total = 0
-    # Ratio global (éviter division par 0)
-    try:
-        reinsc_ratio = float(reinsc_total) / float(frais_inscription_total) * 100.0 if int(frais_inscription_total) > 0 else 0.0
-    except Exception:
-        reinsc_ratio = 0.0
+    reinsc_total = int(
+        eche_qs.aggregate(
+            total=Coalesce(
+                Sum(F('reinsc_due'), output_field=DecimalField(max_digits=12, decimal_places=0)),
+                Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
+                output_field=DecimalField(max_digits=12, decimal_places=0),
+            )
+        ).get('total') or 0
+    )
+    admission_total = frais_inscription_total + reinsc_total
+    du_global_net = du_sco_net + admission_total
+    reinsc_ratio = (
+        float(reinsc_total) / float(admission_total) * 100.0
+        if admission_total > 0 else 0.0
+    )
 
     # Détail par école/classe (filtre libre appliqué aux élèves)
     detail_qs = (
@@ -1275,7 +1279,7 @@ def liste_paiements(request):
             ),
             remises_sum=remises_expr,
             frais_insc_sum=Coalesce(
-                Sum(F('frais_inscription_du'), output_field=DecimalField(max_digits=12, decimal_places=0)),
+                Sum(F('insc_due'), output_field=DecimalField(max_digits=12, decimal_places=0)),
                 Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
                 output_field=DecimalField(max_digits=12, decimal_places=0),
             ),
@@ -1295,12 +1299,10 @@ def liste_paiements(request):
         cnt = int(row.get('eleves_count') or 0)
         insc = int(row.get('frais_insc_sum') or 0)
         reinsc = int(row.get('reinsc_sum') or 0)
-        tot = net_sco + insc
-        # Ratio par classe (réinscription / inscription)
-        try:
-            reinsc_pct = float(reinsc) / float(insc) * 100.0 if insc > 0 else 0.0
-        except Exception:
-            reinsc_pct = 0.0
+        admission = insc + reinsc
+        tot = net_sco + admission
+        # Part des réinscriptions dans l'ensemble des frais d'admission.
+        reinsc_pct = float(reinsc) / float(admission) * 100.0 if admission > 0 else 0.0
         totaux_du_detail_classes.append({
             'ecole_id': row.get('eleve__classe__ecole__id'),
             'ecole_nom': row.get('eleve__classe__ecole__nom'),
@@ -1403,13 +1405,6 @@ def export_recap_par_classe_excel(request):
     echeanciers = list(eche_qs)
     eleve_ids = [echeancier.eleve_id for echeancier in echeanciers]
 
-    grille_map = {
-        (grille.ecole_id, grille.niveau, grille.annee_scolaire): grille.frais_reinscription or Decimal('0')
-        for grille in GrilleTarifaire.objects.filter(
-            ecole_id__in={e.eleve.classe.ecole_id for e in echeanciers}
-        )
-    } if echeanciers else {}
-
     remises_qs = PaiementRemise.objects.filter(
         paiement__statut='VALIDE', paiement__eleve_id__in=eleve_ids
     )
@@ -1439,12 +1434,10 @@ def export_recap_par_classe_excel(request):
             + (echeancier.tranche_3_due or 0)
         )
         frais_inscription = echeancier.frais_inscription_du or Decimal('0')
-        row['frais_insc_sum'] += frais_inscription
-        frais_reinscription = grille_map.get(
-            (classe.ecole_id, classe.niveau, echeancier.annee_scolaire), Decimal('0')
-        )
-        if frais_reinscription and frais_inscription == frais_reinscription:
+        if echeancier.nature_frais == 'REINSCRIPTION':
             row['reinsc_sum'] += frais_inscription
+        else:
+            row['frais_insc_sum'] += frais_inscription
 
     detail_rows = sorted(details.items(), key=lambda item: (item[1]['ecole'], item[1]['classe']))
 
@@ -1464,8 +1457,9 @@ def export_recap_par_classe_excel(request):
         net_sco = max(dues - rem, 0)
         insc = int(row.get('frais_insc_sum') or 0)
         reinsc = int(row.get('reinsc_sum') or 0)
-        tot = net_sco + insc
-        pct = (reinsc / insc * 100.0) if insc > 0 else 0.0
+        admission = insc + reinsc
+        tot = net_sco + admission
+        pct = (reinsc / admission * 100.0) if admission > 0 else 0.0
         ws.append([
             row.get('ecole'),
             row.get('classe'),
@@ -2307,24 +2301,25 @@ def envoyer_notifs_retards(request):
     except Exception:
         today = date.today()
 
+    # Une échéance du jour ne devient un retard que le lendemain.
     exigible_expr = (
         Case(
-            When(date_echeance_inscription__lte=today, then=F('frais_inscription_du')),
+            When(date_echeance_inscription__lt=today, then=F('frais_inscription_du')),
             default=Value(0),
             output_field=DecimalField(max_digits=10, decimal_places=0),
         )
         + Case(
-            When(date_echeance_tranche_1__lte=today, then=F('tranche_1_due')),
+            When(date_echeance_tranche_1__lt=today, then=F('tranche_1_due')),
             default=Value(0),
             output_field=DecimalField(max_digits=10, decimal_places=0),
         )
         + Case(
-            When(date_echeance_tranche_2__lte=today, then=F('tranche_2_due')),
+            When(date_echeance_tranche_2__lt=today, then=F('tranche_2_due')),
             default=Value(0),
             output_field=DecimalField(max_digits=10, decimal_places=0),
         )
         + Case(
-            When(date_echeance_tranche_3__lte=today, then=F('tranche_3_due')),
+            When(date_echeance_tranche_3__lt=today, then=F('tranche_3_due')),
             default=Value(0),
             output_field=DecimalField(max_digits=10, decimal_places=0),
         )
@@ -2462,7 +2457,7 @@ def echeancier_eleve(request, eleve_id:int):
         postes = [
             {
                 'code': 'INSCRIPTION',
-                'libelle': "Frais d'inscription",
+                'libelle': echeancier.libelle_frais_admission,
                 'du': int(echeancier.frais_inscription_du or 0),
                 'paye': int(echeancier.frais_inscription_paye or 0),
                 'echeance': echeancier.date_echeance_inscription,
@@ -2493,7 +2488,7 @@ def echeancier_eleve(request, eleve_id:int):
         total_paye_brut = sum(poste['paye'] for poste in postes)
         total_couvert = min(total_du, total_paye_brut + remises_total)
         reste_a_payer = max(total_du - total_couvert, 0)
-        exigible = sum(poste['du'] for poste in postes if poste['echeance'] and poste['echeance'] <= today)
+        exigible = sum(poste['du'] for poste in postes if poste['echeance'] and poste['echeance'] < today)
         retard_reel = max(exigible - total_couvert, 0)
         taux_paye = round((total_couvert / total_du * 100), 1) if total_du > 0 else 0
 
@@ -2625,6 +2620,7 @@ def creer_echeancier(request, eleve_id:int):
         if grille:
             initial.update({
                 'annee_scolaire': grille.annee_scolaire,
+                'nature_frais': 'INSCRIPTION',
                 'frais_inscription_du': grille.frais_inscription,
                 'tranche_1_due': grille.tranche_1,
                 'tranche_2_due': grille.tranche_2,
@@ -2797,16 +2793,24 @@ def generer_recu_pdf(request, paiement_id:int):
     except Exception:
         pass
 
-    # Déterminer libellé Inscription/Réinscription pour l'affichage (structure inchangée)
+    # Déterminer le libellé depuis la nature persistée sur l'échéancier.
     try:
         _type_nom = getattr(paiement.type_paiement, 'nom', '') or ''
     except Exception:
         _type_nom = ''
-    label_insc = (
-        "Réinscription"
-        if _enrollment_preference_for_eleve(paiement.eleve, _type_nom) is True
-        else "Inscription"
-    )
+    _echeancier_label = getattr(paiement.eleve, 'echeancier', None)
+    if _echeancier_label:
+        label_insc = (
+            "Réinscription"
+            if _echeancier_label.nature_frais == 'REINSCRIPTION'
+            else "Inscription"
+        )
+    else:
+        label_insc = (
+            "Réinscription"
+            if _enrollment_preference_for_eleve(paiement.eleve, _type_nom) is True
+            else "Inscription"
+        )
 
     # Mise en page simple
     left = 40
@@ -3818,28 +3822,13 @@ def eleves_soldes_simple(request):
         ),
         Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
     )
-    # Calcul du montant de réinscription dû (basé sur la grille tarifaire)
-    try:
-        from eleves.models import GrilleTarifaire
-        reinsc_subq = GrilleTarifaire.objects.filter(
-            ecole=OuterRef('eleve__classe__ecole'),
-            niveau=OuterRef('eleve__classe__niveau'),
-            annee_scolaire=OuterRef('annee_scolaire'),
-        ).values('frais_reinscription')[:1]
-        
-        # Annotation pour identifier les frais de réinscription
-        qs = qs.annotate(
-            reinsc_due=Case(
-                When(frais_inscription_du=Subquery(reinsc_subq), then=F('frais_inscription_du')),
-                default=Value(0),
-                output_field=DecimalField(max_digits=12, decimal_places=0),
-            )
+    qs = qs.annotate(
+        reinsc_due=Case(
+            When(nature_frais='REINSCRIPTION', then=F('frais_inscription_du')),
+            default=Value(0),
+            output_field=DecimalField(max_digits=12, decimal_places=0),
         )
-    except Exception:
-        # Fallback si pas de grille tarifaire
-        qs = qs.annotate(
-            reinsc_due=Value(0, output_field=DecimalField(max_digits=12, decimal_places=0))
-        )
+    )
 
     paye_effectif = ExpressionWrapper(
         Coalesce(F('frais_inscription_paye'), Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)))
@@ -3947,6 +3936,8 @@ def ajax_eleve_info(request):
 
     if echeancier:
         data['echeancier'] = {
+            'nature_frais': echeancier.nature_frais,
+            'libelle_frais_admission': echeancier.libelle_frais_admission,
             'inscription_du': int(echeancier.frais_inscription_du or 0),
             'inscription_paye': int(echeancier.frais_inscription_paye or 0),
             'tranche_1_du': int(echeancier.tranche_1_due or 0),
@@ -4245,21 +4236,22 @@ def rapport_retards(request):
     from django.utils import timezone as _tz
     today = _tz.localdate() if hasattr(_tz, 'localdate') else date.today()
 
+    # Une échéance du jour ne devient un retard que le lendemain.
     exigible_expr = (
         Case(
-            When(date_echeance_inscription__lte=today, then=F('frais_inscription_du')),
+            When(date_echeance_inscription__lt=today, then=F('frais_inscription_du')),
             default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0),
         )
         + Case(
-            When(date_echeance_tranche_1__lte=today, then=F('tranche_1_due')),
+            When(date_echeance_tranche_1__lt=today, then=F('tranche_1_due')),
             default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0),
         )
         + Case(
-            When(date_echeance_tranche_2__lte=today, then=F('tranche_2_due')),
+            When(date_echeance_tranche_2__lt=today, then=F('tranche_2_due')),
             default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0),
         )
         + Case(
-            When(date_echeance_tranche_3__lte=today, then=F('tranche_3_due')),
+            When(date_echeance_tranche_3__lt=today, then=F('tranche_3_due')),
             default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0),
         )
     )

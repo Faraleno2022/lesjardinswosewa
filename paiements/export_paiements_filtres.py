@@ -77,13 +77,13 @@ def filtrer_paiements(request):
     if situation in ('retard', 'reste', 'solde'):
         today = date.today()
         exig = (
-            Case(When(date_echeance_inscription__lte=today, then=F('frais_inscription_du')),
+            Case(When(date_echeance_inscription__lt=today, then=F('frais_inscription_du')),
                  default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
-            + Case(When(date_echeance_tranche_1__lte=today, then=F('tranche_1_due')),
+            + Case(When(date_echeance_tranche_1__lt=today, then=F('tranche_1_due')),
                    default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
-            + Case(When(date_echeance_tranche_2__lte=today, then=F('tranche_2_due')),
+            + Case(When(date_echeance_tranche_2__lt=today, then=F('tranche_2_due')),
                    default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
-            + Case(When(date_echeance_tranche_3__lte=today, then=F('tranche_3_due')),
+            + Case(When(date_echeance_tranche_3__lt=today, then=F('tranche_3_due')),
                    default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
         )
         paye = (F('frais_inscription_paye') + F('tranche_1_payee')

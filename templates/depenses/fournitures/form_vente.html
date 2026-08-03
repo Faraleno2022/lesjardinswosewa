@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4"><div><h2 class="mb-1"><i class="fas fa-cash-register text-success me-2"></i>{{ titre_page }}</h2><p class="text-muted mb-0">{{ produit.nom }} · {{ produit.code_produit }}</p></div><a href="{% url 'depenses:tableau_bord_fournitures' %}" class="btn btn-outline-secondary">Retour</a></div>
+    <div class="row g-4">
+        <div class="col-lg-4"><div class="card border-0 shadow-sm h-100"><div class="card-body">
+            <h5 class="mb-3">État du stock</h5>
+            <dl class="row mb-0"><dt class="col-7">Stock total</dt><dd class="col-5 text-end">{{ produit.quantite_stock }}</dd><dt class="col-7">Déjà vendu</dt><dd class="col-5 text-end">{{ produit.quantite_vendue }}</dd><dt class="col-7">Disponible</dt><dd class="col-5 text-end"><span class="badge bg-success fs-6">{{ produit.quantite_restante }}</span></dd><dt class="col-7 mt-3">Prix conseillé</dt><dd class="col-5 text-end mt-3">{{ produit.prix_vente_unitaire|intcomma }} GNF</dd></dl>
+        </div></div></div>
+        <div class="col-lg-8"><div class="card border-0 shadow-sm"><div class="card-body p-4">
+            <form method="post" novalidate>{% csrf_token %}
+                {% if form.non_field_errors %}<div class="alert alert-danger">{{ form.non_field_errors }}</div>{% endif %}
+                <div class="row g-3">
+                    <div class="col-md-4"><label class="form-label">Quantité vendue *</label>{{ form.quantite }}<div class="text-danger small">{{ form.quantite.errors }}</div></div>
+                    <div class="col-md-4"><label class="form-label">Prix de vente unitaire *</label>{{ form.prix_vente_unitaire }}<div class="text-danger small">{{ form.prix_vente_unitaire.errors }}</div></div>
+                    <div class="col-md-4"><label class="form-label">Date de vente *</label>{{ form.date_vente }}<div class="text-danger small">{{ form.date_vente.errors }}</div></div>
+                    <div class="col-12"><label class="form-label">Acheteur</label>{{ form.acheteur }}<div class="text-danger small">{{ form.acheteur.errors }}</div></div>
+                    <div class="col-12"><label class="form-label">Observations</label>{{ form.observations }}<div class="text-danger small">{{ form.observations.errors }}</div></div>
+                </div>
+                <div class="d-flex justify-content-end gap-2 mt-4"><a href="{% url 'depenses:tableau_bord_fournitures' %}" class="btn btn-outline-secondary">Annuler</a><button class="btn btn-success px-4"><i class="fas fa-check me-1"></i>Valider la vente</button></div>
+            </form>
+        </div></div></div>
+    </div>
+</div>
+{% endblock %}

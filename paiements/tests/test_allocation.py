@@ -1,5 +1,6 @@
 from decimal import Decimal
 from datetime import date
+from unittest.mock import patch
 
 from django.test import TestCase
 from django.utils import timezone
@@ -83,6 +84,14 @@ class TestAllocationPaiements(TestCase):
     def _refresh(self):
         self.echeancier.refresh_from_db()
 
+    def _allocate_at_payment_date(self, paiement):
+        """Exécute le scénario historique à la date portée par le paiement."""
+        with patch(
+            "django.utils.timezone.localdate",
+            return_value=paiement.date_paiement,
+        ):
+            _allocate_combined_payment(paiement, self.echeancier)
+
     def test_inscription_plus_t1_puis_t2_puis_t3(self):
         # 1) Inscription + T1
         paiement1 = Paiement.objects.create(
@@ -94,7 +103,7 @@ class TestAllocationPaiements(TestCase):
             date_paiement=date(2024, 9, 30),
             statut="VALIDE",
         )
-        _allocate_combined_payment(paiement1, self.echeancier)
+        self._allocate_at_payment_date(paiement1)
         self._refresh()
         self.assertEqual(self.echeancier.frais_inscription_paye, Decimal("30000"))
         self.assertEqual(self.echeancier.tranche_1_payee, Decimal("500000"))
@@ -112,7 +121,7 @@ class TestAllocationPaiements(TestCase):
             date_paiement=date(2025, 1, 15),
             statut="VALIDE",
         )
-        _allocate_combined_payment(paiement2, self.echeancier)
+        self._allocate_at_payment_date(paiement2)
         self._refresh()
         self.assertEqual(self.echeancier.tranche_2_payee, Decimal("500000"))
         self.assertEqual(self.echeancier.statut, "PAYE_PARTIEL")
@@ -127,7 +136,7 @@ class TestAllocationPaiements(TestCase):
             date_paiement=date(2025, 3, 10),
             statut="VALIDE",
         )
-        _allocate_combined_payment(paiement3, self.echeancier)
+        self._allocate_at_payment_date(paiement3)
         self._refresh()
         self.assertEqual(self.echeancier.tranche_3_payee, Decimal("500000"))
         self.assertEqual(self.echeancier.solde_restant, Decimal("0"))
@@ -144,7 +153,7 @@ class TestAllocationPaiements(TestCase):
             date_paiement=date(2024, 9, 30),
             statut="VALIDE",
         )
-        _allocate_combined_payment(paiement1, self.echeancier)
+        self._allocate_at_payment_date(paiement1)
         self._refresh()
         self.assertEqual(self.echeancier.frais_inscription_paye, Decimal("30000"))
         self.assertEqual(self.echeancier.tranche_1_payee, Decimal("500000"))
@@ -162,7 +171,7 @@ class TestAllocationPaiements(TestCase):
             date_paiement=date(2025, 3, 10),
             statut="VALIDE",
         )
-        _allocate_combined_payment(paiement2, self.echeancier)
+        self._allocate_at_payment_date(paiement2)
         self._refresh()
         self.assertEqual(self.echeancier.tranche_3_payee, Decimal("500000"))
         self.assertEqual(self.echeancier.solde_restant, Decimal("0"))
@@ -179,7 +188,7 @@ class TestAllocationPaiements(TestCase):
             date_paiement=date(2024, 9, 30),
             statut="VALIDE",
         )
-        _allocate_combined_payment(paiement1, self.echeancier)
+        self._allocate_at_payment_date(paiement1)
         self._refresh()
         # Dans ce cas, toutes les tranches doivent être soldées
         self.assertEqual(self.echeancier.frais_inscription_paye, Decimal("30000"))
@@ -200,7 +209,7 @@ class TestAllocationPaiements(TestCase):
             statut="VALIDE",
         )
 
-        _allocate_combined_payment(paiement, self.echeancier)
+        self._allocate_at_payment_date(paiement)
         self._refresh()
 
         self.assertEqual(self.echeancier.frais_inscription_paye, Decimal("30000"))
@@ -221,7 +230,7 @@ class TestAllocationPaiements(TestCase):
             statut="VALIDE",
         )
 
-        _allocate_combined_payment(paiement, self.echeancier)
+        self._allocate_at_payment_date(paiement)
         self._refresh()
 
         self.assertEqual(self.echeancier.frais_inscription_paye, Decimal("30000"))
@@ -256,7 +265,7 @@ class TestAllocationPaiements(TestCase):
             statut="VALIDE",
         )
 
-        _allocate_combined_payment(paiement, self.echeancier)
+        self._allocate_at_payment_date(paiement)
         self._refresh()
 
         self.assertEqual(self.echeancier.frais_inscription_paye, Decimal("30000"))
@@ -285,7 +294,7 @@ class TestAllocationPaiements(TestCase):
             statut="VALIDE",
         )
 
-        _allocate_combined_payment(paiement, self.echeancier)
+        self._allocate_at_payment_date(paiement)
         self._refresh()
 
         self.assertEqual(self.echeancier.frais_inscription_du, Decimal("20000"))
@@ -304,7 +313,7 @@ class TestAllocationPaiements(TestCase):
             date_paiement=self.echeancier.date_echeance_inscription,  # 2024-09-30
             statut="VALIDE",
         )
-        _allocate_combined_payment(paiement_insc, self.echeancier)
+        self._allocate_at_payment_date(paiement_insc)
         self._refresh()
         self.assertEqual(self.echeancier.frais_inscription_paye, Decimal("30000"))
 
@@ -319,7 +328,7 @@ class TestAllocationPaiements(TestCase):
             date_paiement=self.echeancier.date_echeance_tranche_1,  # 2025-01-10
             statut="VALIDE",
         )
-        _allocate_combined_payment(paiement_t1_partiel, self.echeancier)
+        self._allocate_at_payment_date(paiement_t1_partiel)
         self._refresh()
         self.assertEqual(self.echeancier.tranche_1_payee, Decimal("200000"))
         # Le jour J n'est pas > échéance, donc pas de retard
@@ -337,7 +346,7 @@ class TestAllocationPaiements(TestCase):
             date_paiement=self.echeancier.date_echeance_inscription,
             statut="VALIDE",
         )
-        _allocate_combined_payment(paiement_insc, self.echeancier)
+        self._allocate_at_payment_date(paiement_insc)
         self._refresh()
 
         # Paiement partiel sur T1 le lendemain de l'échéance
@@ -351,7 +360,7 @@ class TestAllocationPaiements(TestCase):
             date_paiement=date(2025, 1, 11),  # lendemain de 2025-01-10
             statut="VALIDE",
         )
-        _allocate_combined_payment(paiement_t1_partiel, self.echeancier)
+        self._allocate_at_payment_date(paiement_t1_partiel)
         self._refresh()
         self.assertEqual(self.echeancier.tranche_1_payee, Decimal("200000"))
         self.assertEqual(self.echeancier.statut, "EN_RETARD")
@@ -364,10 +373,10 @@ class TestAllocationPaiements(TestCase):
             mode_paiement=self.mode_especes,
             numero_recu="REC_EDGE_5",
             montant=Decimal("1030000"),  # 30k + 1,000,000 (insuffisant pour 1.5M tranches)
-            date_paiement=date(2025, 3, 6),  # après échéance T2 (2025-03-05)
+            date_paiement=date(2025, 4, 7),  # lendemain de l'échéance T3 (2025-04-06)
             statut="VALIDE",
         )
-        _allocate_combined_payment(paiement_annuel_partiel, self.echeancier)
+        self._allocate_at_payment_date(paiement_annuel_partiel)
         self._refresh()
         self.assertGreater(self.echeancier.solde_restant, 0)
         self.assertEqual(self.echeancier.statut, "EN_RETARD")
@@ -383,7 +392,7 @@ class TestAllocationPaiements(TestCase):
             date_paiement=date(2025, 4, 10),  # après toutes les échéances
             statut="VALIDE",
         )
-        _allocate_combined_payment(paiement_total_tard, self.echeancier)
+        self._allocate_at_payment_date(paiement_total_tard)
         self._refresh()
         self.assertEqual(self.echeancier.solde_restant, Decimal("0"))
         self.assertEqual(self.echeancier.statut, "PAYE_COMPLET")

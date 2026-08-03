@@ -138,6 +138,10 @@ class Paiement(SyncTrackedModel):
 
 class EcheancierPaiement(SyncTrackedModel):
     """Modèle pour l'échéancier des paiements d'un élève"""
+    NATURE_FRAIS_CHOICES = [
+        ('INSCRIPTION', 'Inscription'),
+        ('REINSCRIPTION', 'Réinscription'),
+    ]
     STATUT_CHOICES = [
         ('A_PAYER', 'À payer'),
         ('PAYE_PARTIEL', 'Payé partiellement'),
@@ -147,6 +151,13 @@ class EcheancierPaiement(SyncTrackedModel):
     
     eleve = models.OneToOneField(Eleve, on_delete=models.CASCADE, related_name='echeancier')
     annee_scolaire = models.CharField(max_length=9, verbose_name="Année scolaire")
+    nature_frais = models.CharField(
+        max_length=20,
+        choices=NATURE_FRAIS_CHOICES,
+        default='INSCRIPTION',
+        db_index=True,
+        verbose_name="Nature du frais d'admission",
+    )
     
     # Montants dus
     frais_inscription_du = models.DecimalField(
@@ -208,6 +219,10 @@ class EcheancierPaiement(SyncTrackedModel):
 
     def __str__(self):
         return f"Échéancier {self.eleve.nom_complet} - {self.annee_scolaire}"
+
+    @property
+    def libelle_frais_admission(self):
+        return "Frais de réinscription" if self.nature_frais == 'REINSCRIPTION' else "Frais d'inscription"
     
     @property
     def total_du(self):

@@ -8,7 +8,7 @@ import django
 
 # Configuration Django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ecole_moderne.settings')
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 django.setup()
 
 from chatbot.models import Matiere, DocumentCours
