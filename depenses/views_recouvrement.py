@@ -1,0 +1,617 @@
+"""Vues des modules de recouvrement.
+
+Cuisine, Documents et Versements partagent la même structure : une liste avec
+saisie intégrée, un tableau de bord et deux exports. Ils sont donc pilotés par
+une configuration commune (`MODULES`) plutôt que par trois jeux de vues
+identiques. L'informatique, plus riche, a ses propres vues.
+"""
+import io
+from datetime import date, timedelta
+
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.db.models import Count, Q, Sum
+from django.db.models.functions import TruncMonth
+from django.http import Http404, HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+
+from eleves.models import Eleve
+from utilisateurs.utils import filter_by_user_school, user_school
+
+from .forms_recouvrement import (
+    AbonnementInformatiqueForm, DepenseCuisineForm, DepenseDocumentForm, VersementForm,
+)
+from .models_recouvrement import (
+    AbonnementInformatique, DepenseCuisine, DepenseDocument, Versement,
+)
+
+# --------------------------------------------------------------------------
+# Configuration des modules simples
+# --------------------------------------------------------------------------
+
+MODULES = {
+    'cuisine': {
+        'modele': DepenseCuisine,
+        'formulaire': DepenseCuisineForm,
+        'titre': 'Dépenses de la cuisine',
+        'singulier': 'dépense de cuisine',
+        'icone': 'fas fa-utensils',
+        'couleur': 'warning',
+        'champ_libelle': 'designation',
+        'entete_libelle': 'Désignation',
+        'sens': 'sortie',
+    },
+    'document': {
+        'modele': DepenseDocument,
+        'formulaire': DepenseDocumentForm,
+        'titre': 'Dépenses de documents',
+        'singulier': 'dépense de document',
+        'icone': 'fas fa-file-invoice',
+        'couleur': 'info',
+        'champ_libelle': 'designation',
+        'entete_libelle': 'Désignation',
+        'sens': 'sortie',
+    },
+    'versement': {
+        'modele': Versement,
+        'formulaire': VersementForm,
+        'titre': 'Versements',
+        'singulier': 'versement',
+        'icone': 'fas fa-hand-holding-dollar',
+        'couleur': 'success',
+        'champ_libelle': 'lieu_versement',
+        'entete_libelle': 'Lieu de versement',
+        'sens': 'entree',
+    },
+}
+
+
+def _config(cle):
+    try:
+        return MODULES[cle]
+    except KeyError:
+        raise Http404(f"Module de recouvrement inconnu : {cle}")
+
+
+def _queryset(cle, user):
+    """Opérations du module, restreintes à l'école de l'utilisateur."""
+    modele = _config(cle)['modele']
+    return filter_by_user_school(modele.objects.all(), user, 'ecole')
+
+
+def _filtrer_periode(qs, request, cle):
+    """Applique les filtres de recherche et de période communs aux modules."""
+    recherche = (request.GET.get('q') or '').strip()
+    debut = (request.GET.get('date_debut') or '').strip()
+    fin = (request.GET.get('date_fin') or '').strip()
+
+    if recherche:
+        champ = _config(cle)['champ_libelle']
+        qs = qs.filter(Q(**{f'{champ}__icontains': recherche}) | Q(observation__icontains=recherche))
+    if debut:
+        qs = qs.filter(date__gte=debut)
+    if fin:
+        qs = qs.filter(date__lte=fin)
+    return qs, {'q': recherche, 'date_debut': debut, 'date_fin': fin}
+
+
+def _totaux(qs):
+    agg = qs.aggregate(total=Sum('montant'), nombre=Count('id'))
+    return int(agg['total'] or 0), agg['nombre'] or 0
+
+
+# --------------------------------------------------------------------------
+# Portail : tableau de bord général + cartes des modules
+# --------------------------------------------------------------------------
+
+@login_required
+def hub_recouvrement(request):
+    """Page d'entrée du menu Recouvrement.
+
+    Présente un tableau de bord consolidé puis une carte par module, chacune
+    affichant ses propres chiffres et menant à son tableau de bord détaillé.
+    """
+    aujourdhui = timezone.localdate()
+    debut_mois = aujourdhui.replace(day=1)
+
+    cartes = []
+    total_sorties = total_entrees = 0
+
+    for cle, cfg in MODULES.items():
+        qs = _queryset(cle, request.user)
+        total, nombre = _totaux(qs)
+        total_mois, nombre_mois = _totaux(qs.filter(date__gte=debut_mois))
+        if cfg['sens'] == 'sortie':
+            total_sorties += total
+        else:
+            total_entrees += total
+        cartes.append({
+            'cle': cle, 'titre': cfg['titre'], 'icone': cfg['icone'],
+            'couleur': cfg['couleur'], 'sens': cfg['sens'],
+            'total': total, 'nombre': nombre,
+            'total_mois': total_mois, 'nombre_mois': nombre_mois,
+        })
+
+    # Module informatique : compté à part, sa logique étant différente
+    abonnements = filter_by_user_school(
+        AbonnementInformatique.objects.all(), request.user, 'ecole')
+    total_abo, nombre_abo = _totaux(abonnements)
+    total_entrees += total_abo
+    expirant = abonnements.filter(
+        date_fin__gte=aujourdhui,
+        date_fin__lte=aujourdhui + timedelta(days=AbonnementInformatique.SEUIL_ALERTE_JOURS),
+    ).count()
+    expires = abonnements.filter(date_fin__lt=aujourdhui).count()
+
+    contexte = {
+        'titre_page': 'Recouvrement',
+        'cartes': cartes,
+        'carte_informatique': {
+            'total': total_abo, 'nombre': nombre_abo,
+            'expirant': expirant, 'expires': expires,
+            'actifs': abonnements.filter(date_fin__gte=aujourdhui).count(),
+        },
+        'total_sorties': total_sorties,
+        'total_entrees': total_entrees,
+        'solde': total_entrees - total_sorties,
+        'mois_courant': debut_mois,
+    }
+    return render(request, 'depenses/recouvrement/hub.html', contexte)
+
+
+# --------------------------------------------------------------------------
+# Modules simples : liste, saisie, modification, suppression
+# --------------------------------------------------------------------------
+
+@login_required
+def liste_operations(request, cle):
+    """Liste des opérations du module, avec le formulaire de saisie intégré."""
+    cfg = _config(cle)
+    ecole = user_school(request.user)
+
+    if request.method == 'POST':
+        form = cfg['formulaire'](request.POST)
+        if ecole is None:
+            messages.error(request, "Aucun établissement n'est rattaché à votre compte.")
+        elif form.is_valid():
+            operation = form.save(commit=False)
+            operation.ecole = ecole
+            operation.cree_par = request.user
+            operation.save()
+            messages.success(request, f"{cfg['singulier'].capitalize()} enregistrée.")
+            return redirect('depenses:recouvrement_liste', cle=cle)
+        else:
+            messages.error(request, "Veuillez corriger les erreurs du formulaire.")
+    else:
+        form = cfg['formulaire']()
+
+    qs, filtres = _filtrer_periode(_queryset(cle, request.user), request, cle)
+    total, nombre = _totaux(qs)
+
+    return render(request, 'depenses/recouvrement/liste.html', {
+        'titre_page': cfg['titre'],
+        'cle': cle, 'cfg': cfg, 'form': form,
+        'operations': qs.select_related('cree_par')[:300],
+        'total': total, 'nombre': nombre, 'filtres': filtres,
+    })
+
+
+@login_required
+def modifier_operation(request, cle, pk):
+    cfg = _config(cle)
+    operation = get_object_or_404(_queryset(cle, request.user), pk=pk)
+
+    if request.method == 'POST':
+        form = cfg['formulaire'](request.POST, instance=operation)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Modification enregistrée.")
+            return redirect('depenses:recouvrement_liste', cle=cle)
+        messages.error(request, "Veuillez corriger les erreurs du formulaire.")
+    else:
+        form = cfg['formulaire'](instance=operation)
+
+    return render(request, 'depenses/recouvrement/form.html', {
+        'titre_page': f"Modifier — {cfg['titre']}",
+        'cle': cle, 'cfg': cfg, 'form': form, 'operation': operation,
+    })
+
+
+@login_required
+def supprimer_operation(request, cle, pk):
+    cfg = _config(cle)
+    operation = get_object_or_404(_queryset(cle, request.user), pk=pk)
+    if request.method == 'POST':
+        operation.delete()
+        messages.success(request, f"{cfg['singulier'].capitalize()} supprimée.")
+        return redirect('depenses:recouvrement_liste', cle=cle)
+    return render(request, 'depenses/recouvrement/confirmer_suppression.html', {
+        'titre_page': "Confirmer la suppression",
+        'cle': cle, 'cfg': cfg, 'operation': operation,
+    })
+
+
+@login_required
+def tableau_bord_module(request, cle):
+    """Tableau de bord propre au module : totaux, évolution et derniers postes."""
+    cfg = _config(cle)
+    qs = _queryset(cle, request.user)
+    aujourdhui = timezone.localdate()
+    debut_mois = aujourdhui.replace(day=1)
+
+    total, nombre = _totaux(qs)
+    total_mois, nombre_mois = _totaux(qs.filter(date__gte=debut_mois))
+    total_annee, _ = _totaux(qs.filter(date__year=aujourdhui.year))
+
+    par_mois = list(
+        qs.annotate(mois=TruncMonth('date'))
+          .values('mois')
+          .annotate(total=Sum('montant'), nombre=Count('id'))
+          .order_by('-mois')[:12]
+    )
+    champ = cfg['champ_libelle']
+    par_poste = list(
+        qs.values(champ)
+          .annotate(total=Sum('montant'), nombre=Count('id'))
+          .order_by('-total')[:10]
+    )
+    for poste in par_poste:
+        poste['libelle'] = poste.pop(champ)
+
+    return render(request, 'depenses/recouvrement/tableau_bord.html', {
+        'titre_page': f"Tableau de bord — {cfg['titre']}",
+        'cle': cle, 'cfg': cfg,
+        'total': total, 'nombre': nombre,
+        'total_mois': total_mois, 'nombre_mois': nombre_mois,
+        'total_annee': total_annee,
+        'moyenne': int(total / nombre) if nombre else 0,
+        'par_mois': par_mois, 'par_poste': par_poste,
+        'dernieres': qs.select_related('cree_par')[:10],
+    })
+
+
+# --------------------------------------------------------------------------
+# Exports des modules simples
+# --------------------------------------------------------------------------
+
+def _lignes_export(cle, request):
+    cfg = _config(cle)
+    qs, filtres = _filtrer_periode(_queryset(cle, request.user), request, cle)
+    champ = cfg['champ_libelle']
+    lignes = [
+        [op.date.strftime('%d/%m/%Y'), getattr(op, champ), int(op.montant), op.observation or '']
+        for op in qs
+    ]
+    return cfg, lignes, filtres
+
+
+@login_required
+def export_excel_module(request, cle):
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    cfg, lignes, _ = _lignes_export(cle, request)
+    classeur = Workbook()
+    feuille = classeur.active
+    feuille.title = cfg['titre'][:31]
+
+    entetes = ['Date', cfg['entete_libelle'], 'Montant (GNF)', 'Observation']
+    feuille.append(entetes)
+    for cellule in feuille[1]:
+        cellule.font = Font(bold=True, color='FFFFFF')
+        cellule.fill = PatternFill('solid', fgColor='1657A8')
+        cellule.alignment = Alignment(horizontal='center')
+
+    for ligne in lignes:
+        feuille.append(ligne)
+
+    total = sum(l[2] for l in lignes)
+    feuille.append([])
+    feuille.append(['', 'TOTAL', total, ''])
+    feuille.cell(row=feuille.max_row, column=2).font = Font(bold=True)
+    feuille.cell(row=feuille.max_row, column=3).font = Font(bold=True)
+
+    for colonne, largeur in zip('ABCD', (14, 42, 18, 40)):
+        feuille.column_dimensions[colonne].width = largeur
+
+    flux = io.BytesIO()
+    classeur.save(flux)
+    reponse = HttpResponse(
+        flux.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    nom = f"{cle}_{date.today():%Y%m%d}.xlsx"
+    reponse['Content-Disposition'] = f'attachment; filename="{nom}"'
+    return reponse
+
+
+@login_required
+def export_pdf_module(request, cle):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import cm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    cfg, lignes, filtres = _lignes_export(cle, request)
+    ecole = user_school(request.user)
+
+    flux = io.BytesIO()
+    document = SimpleDocTemplate(
+        flux, pagesize=A4,
+        leftMargin=1.5 * cm, rightMargin=1.5 * cm,
+        topMargin=1.5 * cm, bottomMargin=1.5 * cm,
+    )
+    styles = getSampleStyleSheet()
+    elements = [
+        Paragraph(f"<b>{cfg['titre']}</b>", styles['Title']),
+        Paragraph(getattr(ecole, 'nom', '') or '', styles['Normal']),
+    ]
+    if filtres['date_debut'] or filtres['date_fin']:
+        elements.append(Paragraph(
+            f"Période : {filtres['date_debut'] or '—'} au {filtres['date_fin'] or '—'}",
+            styles['Normal']))
+    elements.append(Spacer(1, 0.6 * cm))
+
+    donnees = [['Date', cfg['entete_libelle'], 'Montant (GNF)', 'Observation']]
+    for ligne in lignes:
+        donnees.append([
+            ligne[0],
+            Paragraph(str(ligne[1]), styles['BodyText']),
+            f"{ligne[2]:,}".replace(',', ' '),
+            Paragraph(str(ligne[3]), styles['BodyText']),
+        ])
+    total = sum(l[2] for l in lignes)
+    donnees.append(['', 'TOTAL', f"{total:,}".replace(',', ' '), ''])
+
+    tableau = Table(donnees, colWidths=[2.4 * cm, 6.5 * cm, 3.2 * cm, 5.9 * cm], repeatRows=1)
+    tableau.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1657A8')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#EAF1FB')),
+        ('ALIGN', (2, 1), (2, -1), 'RIGHT'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#B9C7D9')),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+    ]))
+    elements.append(tableau)
+    document.build(elements)
+
+    reponse = HttpResponse(flux.getvalue(), content_type='application/pdf')
+    nom = f"{cle}_{date.today():%Y%m%d}.pdf"
+    reponse['Content-Disposition'] = f'attachment; filename="{nom}"'
+    return reponse
+
+
+# --------------------------------------------------------------------------
+# Module informatique
+# --------------------------------------------------------------------------
+
+def _abonnements(user):
+    return filter_by_user_school(
+        AbonnementInformatique.objects.select_related('eleve', 'eleve__classe'),
+        user, 'ecole')
+
+
+@login_required
+def informatique_liste(request):
+    """Élèves et abonnements, avec recherche par matricule ou par nom."""
+    recherche = (request.GET.get('q') or '').strip()
+    statut = (request.GET.get('statut') or '').strip()
+    aujourdhui = timezone.localdate()
+
+    qs = _abonnements(request.user)
+    if recherche:
+        qs = qs.filter(
+            Q(eleve__matricule__icontains=recherche)
+            | Q(eleve__nom__icontains=recherche)
+            | Q(eleve__prenom__icontains=recherche)
+        )
+    if statut == 'ACTIF':
+        qs = qs.filter(date_fin__gte=aujourdhui)
+    elif statut == 'EXPIRE':
+        qs = qs.filter(date_fin__lt=aujourdhui)
+    elif statut == 'BIENTOT':
+        qs = qs.filter(
+            date_fin__gte=aujourdhui,
+            date_fin__lte=aujourdhui + timedelta(days=AbonnementInformatique.SEUIL_ALERTE_JOURS),
+        )
+
+    # Élèves sans abonnement en cours : la liste depuis laquelle on en crée un
+    eleves = filter_by_user_school(
+        Eleve.objects.filter(statut='ACTIF').select_related('classe'),
+        request.user, 'classe__ecole')
+    if recherche:
+        eleves = eleves.filter(
+            Q(matricule__icontains=recherche)
+            | Q(nom__icontains=recherche)
+            | Q(prenom__icontains=recherche)
+        )
+    eleves = eleves.exclude(
+        abonnements_informatique__date_fin__gte=aujourdhui
+    ).order_by('nom', 'prenom')[:100]
+
+    return render(request, 'depenses/recouvrement/informatique_liste.html', {
+        'titre_page': 'Abonnements informatique',
+        'abonnements': qs[:300],
+        'eleves_sans_abonnement': eleves,
+        'q': recherche, 'statut': statut,
+        'alertes': _abonnements(request.user).filter(
+            date_fin__gte=aujourdhui,
+            date_fin__lte=aujourdhui + timedelta(days=AbonnementInformatique.SEUIL_ALERTE_JOURS),
+        ),
+    })
+
+
+@login_required
+def informatique_nouveau(request, eleve_id=None):
+    ecole = user_school(request.user)
+    initial = {}
+    if eleve_id:
+        eleves = filter_by_user_school(Eleve.objects.all(), request.user, 'classe__ecole')
+        initial['eleve'] = get_object_or_404(eleves, pk=eleve_id)
+
+    if request.method == 'POST':
+        form = AbonnementInformatiqueForm(request.POST, user=request.user)
+        if ecole is None:
+            messages.error(request, "Aucun établissement n'est rattaché à votre compte.")
+        elif form.is_valid():
+            abonnement = form.save(commit=False)
+            abonnement.ecole = ecole
+            abonnement.cree_par = request.user
+            abonnement.save()
+            messages.success(request, "Abonnement enregistré.")
+            return redirect('depenses:informatique_carte', pk=abonnement.pk)
+        else:
+            messages.error(request, "Veuillez corriger les erreurs du formulaire.")
+    else:
+        form = AbonnementInformatiqueForm(user=request.user, initial=initial)
+
+    return render(request, 'depenses/recouvrement/informatique_form.html', {
+        'titre_page': "Nouvel abonnement informatique",
+        'form': form,
+    })
+
+
+@login_required
+def informatique_carte(request, pk):
+    """Carte d'abonnement imprimable."""
+    abonnement = get_object_or_404(_abonnements(request.user), pk=pk)
+    return render(request, 'depenses/recouvrement/informatique_carte.html', {
+        'titre_page': "Carte d'abonnement",
+        'abonnement': abonnement,
+        'ecole': abonnement.ecole,
+    })
+
+
+@login_required
+def informatique_tableau_bord(request):
+    qs = _abonnements(request.user)
+    aujourdhui = timezone.localdate()
+    seuil = aujourdhui + timedelta(days=AbonnementInformatique.SEUIL_ALERTE_JOURS)
+
+    total, nombre = _totaux(qs)
+    actifs = qs.filter(date_fin__gte=aujourdhui)
+    par_mois = list(
+        qs.annotate(mois=TruncMonth('date'))
+          .values('mois').annotate(total=Sum('montant'), nombre=Count('id'))
+          .order_by('-mois')[:12]
+    )
+    return render(request, 'depenses/recouvrement/informatique_tableau_bord.html', {
+        'titre_page': "Tableau de bord — Informatique",
+        'total': total, 'nombre': nombre,
+        'nb_actifs': actifs.count(),
+        'nb_expires': qs.filter(date_fin__lt=aujourdhui).count(),
+        'nb_bientot': qs.filter(date_fin__gte=aujourdhui, date_fin__lte=seuil).count(),
+        'moyenne': int(total / nombre) if nombre else 0,
+        'par_mois': par_mois,
+        'expirations': qs.filter(date_fin__gte=aujourdhui, date_fin__lte=seuil)[:20],
+        'derniers': qs[:10],
+    })
+
+
+def _lignes_informatique(request):
+    qs = _abonnements(request.user)
+    recherche = (request.GET.get('q') or '').strip()
+    if recherche:
+        qs = qs.filter(
+            Q(eleve__matricule__icontains=recherche)
+            | Q(eleve__nom__icontains=recherche)
+            | Q(eleve__prenom__icontains=recherche)
+        )
+    return [
+        [
+            a.eleve.matricule or '',
+            f"{a.eleve.prenom} {a.eleve.nom}",
+            getattr(a.eleve.classe, 'nom', '') or '',
+            a.date_debut.strftime('%d/%m/%Y'),
+            a.date_fin.strftime('%d/%m/%Y'),
+            int(a.montant),
+            a.statut_libelle,
+        ]
+        for a in qs
+    ]
+
+
+@login_required
+def informatique_export_excel(request):
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    lignes = _lignes_informatique(request)
+    classeur = Workbook()
+    feuille = classeur.active
+    feuille.title = 'Abonnements'
+    feuille.append(['Matricule', 'Élève', 'Classe', 'Début', 'Fin', 'Montant (GNF)', 'Statut'])
+    for cellule in feuille[1]:
+        cellule.font = Font(bold=True, color='FFFFFF')
+        cellule.fill = PatternFill('solid', fgColor='1657A8')
+        cellule.alignment = Alignment(horizontal='center')
+    for ligne in lignes:
+        feuille.append(ligne)
+    feuille.append([])
+    feuille.append(['', '', '', '', 'TOTAL', sum(l[5] for l in lignes), ''])
+    for colonne, largeur in zip('ABCDEFG', (16, 30, 18, 13, 13, 16, 16)):
+        feuille.column_dimensions[colonne].width = largeur
+
+    flux = io.BytesIO()
+    classeur.save(flux)
+    reponse = HttpResponse(
+        flux.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    reponse['Content-Disposition'] = (
+        f'attachment; filename="abonnements_informatique_{date.today():%Y%m%d}.xlsx"')
+    return reponse
+
+
+@login_required
+def informatique_export_pdf(request):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib.units import cm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    lignes = _lignes_informatique(request)
+    ecole = user_school(request.user)
+
+    flux = io.BytesIO()
+    document = SimpleDocTemplate(flux, pagesize=landscape(A4),
+                                 leftMargin=1.2 * cm, rightMargin=1.2 * cm,
+                                 topMargin=1.2 * cm, bottomMargin=1.2 * cm)
+    styles = getSampleStyleSheet()
+    elements = [
+        Paragraph("<b>Abonnements informatique</b>", styles['Title']),
+        Paragraph(getattr(ecole, 'nom', '') or '', styles['Normal']),
+        Spacer(1, 0.5 * cm),
+    ]
+
+    donnees = [['Matricule', 'Élève', 'Classe', 'Début', 'Fin', 'Montant', 'Statut']]
+    for l in lignes:
+        donnees.append([l[0], Paragraph(l[1], styles['BodyText']), l[2], l[3], l[4],
+                        f"{l[5]:,}".replace(',', ' '), l[6]])
+    donnees.append(['', '', '', '', 'TOTAL',
+                    f"{sum(l[5] for l in lignes):,}".replace(',', ' '), ''])
+
+    tableau = Table(donnees, repeatRows=1,
+                    colWidths=[3 * cm, 6 * cm, 4 * cm, 2.8 * cm, 2.8 * cm, 3 * cm, 3 * cm])
+    tableau.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1657A8')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+        ('ALIGN', (5, 1), (5, -1), 'RIGHT'),
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#B9C7D9')),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+    ]))
+    elements.append(tableau)
+    document.build(elements)
+
+    reponse = HttpResponse(flux.getvalue(), content_type='application/pdf')
+    reponse['Content-Disposition'] = (
+        f'attachment; filename="abonnements_informatique_{date.today():%Y%m%d}.pdf"')
+    return reponse

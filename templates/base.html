@@ -264,9 +264,26 @@
                         {% if 'depenses' in allowed %}
                         <li class="nav-item dropdown">
                             <button class="nav-link dropdown-toggle btn btn-link" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fas fa-receipt me-1"></i>Dépenses
+                                <i class="fas fa-hand-holding-dollar me-1"></i>Recouvrement
                             </button>
                             <ul class="dropdown-menu">
+                                <li><a class="dropdown-item fw-semibold" href="{% url 'depenses:recouvrement_hub' %}">
+                                    <i class="fas fa-gauge-high text-primary me-1"></i>Tableau de bord général
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="{% url 'depenses:recouvrement_liste' cle='cuisine' %}">
+                                    <i class="fas fa-utensils text-warning me-1"></i>Dépenses de la cuisine
+                                </a></li>
+                                <li><a class="dropdown-item" href="{% url 'depenses:recouvrement_liste' cle='document' %}">
+                                    <i class="fas fa-file-invoice text-info me-1"></i>Documents
+                                </a></li>
+                                <li><a class="dropdown-item" href="{% url 'depenses:recouvrement_liste' cle='versement' %}">
+                                    <i class="fas fa-hand-holding-dollar text-success me-1"></i>Versements
+                                </a></li>
+                                <li><a class="dropdown-item" href="{% url 'depenses:informatique_liste' %}">
+                                    <i class="fas fa-laptop text-primary me-1"></i>Informatique
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="{% url 'depenses:tableau_bord' %}">
                                     <i class="fas fa-receipt me-1"></i>Dépenses
                                 </a></li>
@@ -390,9 +407,26 @@
                         </li>
                         <li class="nav-item dropdown">
                             <button class="nav-link dropdown-toggle btn btn-link" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fas fa-receipt me-1"></i>Dépenses
+                                <i class="fas fa-hand-holding-dollar me-1"></i>Recouvrement
                             </button>
                             <ul class="dropdown-menu">
+                                <li><a class="dropdown-item fw-semibold" href="{% url 'depenses:recouvrement_hub' %}">
+                                    <i class="fas fa-gauge-high text-primary me-1"></i>Tableau de bord général
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="{% url 'depenses:recouvrement_liste' cle='cuisine' %}">
+                                    <i class="fas fa-utensils text-warning me-1"></i>Dépenses de la cuisine
+                                </a></li>
+                                <li><a class="dropdown-item" href="{% url 'depenses:recouvrement_liste' cle='document' %}">
+                                    <i class="fas fa-file-invoice text-info me-1"></i>Documents
+                                </a></li>
+                                <li><a class="dropdown-item" href="{% url 'depenses:recouvrement_liste' cle='versement' %}">
+                                    <i class="fas fa-hand-holding-dollar text-success me-1"></i>Versements
+                                </a></li>
+                                <li><a class="dropdown-item" href="{% url 'depenses:informatique_liste' %}">
+                                    <i class="fas fa-laptop text-primary me-1"></i>Informatique
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="{% url 'depenses:tableau_bord' %}">
                                     <i class="fas fa-receipt me-1"></i>Dépenses
                                 </a></li>

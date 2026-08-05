@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}Recouvrement - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <h1 class="h3 mb-1"><i class="fas fa-hand-holding-dollar text-primary me-2"></i>Recouvrement</h1>
+  <p class="text-muted mb-0">Vue consolidée de tous les modules.</p>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm h-100 border-start border-4 border-success">
+      <div class="card-body">
+        <div class="text-muted small text-uppercase">Total des entrées</div>
+        <div class="h3 mb-0 text-success">{{ total_entrees|intcomma }} <small>GNF</small></div>
+        <div class="small text-muted">Versements et abonnements informatique</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm h-100 border-start border-4 border-danger">
+      <div class="card-body">
+        <div class="text-muted small text-uppercase">Total des sorties</div>
+        <div class="h3 mb-0 text-danger">{{ total_sorties|intcomma }} <small>GNF</small></div>
+        <div class="small text-muted">Cuisine et documents</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm h-100 border-start border-4 border-primary">
+      <div class="card-body">
+        <div class="text-muted small text-uppercase">Solde</div>
+        <div class="h3 mb-0 text-primary">{{ solde|intcomma }} <small>GNF</small></div>
+        <div class="small text-muted">Entrées moins sorties</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2 class="h5 text-muted mb-3">Modules</h2>
+<div class="row g-4">
+  {% for carte in cartes %}
+  <div class="col-md-6 col-xl-3">
+    <div class="card h-100 shadow-sm border-0">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+          <span class="badge bg-{{ carte.couleur }} bg-opacity-25 text-{{ carte.couleur }} p-3 me-3">
+            <i class="{{ carte.icone }} fa-lg"></i>
+          </span>
+          <div>
+            <h3 class="h6 mb-0">{{ carte.titre }}</h3>
+            <small class="text-muted">{{ carte.nombre }} opération{{ carte.nombre|pluralize }}</small>
+          </div>
+        </div>
+        <div class="row text-center g-2 mb-3">
+          <div class="col-6 border-end">
+            <div class="fw-bold">{{ carte.total|intcomma }}</div>
+            <div class="small text-muted">Total GNF</div>
+          </div>
+          <div class="col-6">
+            <div class="fw-bold">{{ carte.total_mois|intcomma }}</div>
+            <div class="small text-muted">Ce mois</div>
+          </div>
+        </div>
+        <div class="d-grid gap-2">
+          <a href="{% url 'depenses:recouvrement_tableau_bord' cle=carte.cle %}" class="btn btn-sm btn-primary">
+            <i class="fas fa-chart-line me-1"></i>Tableau de bord
+          </a>
+          <a href="{% url 'depenses:recouvrement_liste' cle=carte.cle %}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-list me-1"></i>Saisie et liste
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+
+  <div class="col-md-6 col-xl-3">
+    <div class="card h-100 shadow-sm border-0">
+      <div class="card-body">
+        <div class="d-flex align-items-center mb-3">
+          <span class="badge bg-primary bg-opacity-25 text-primary p-3 me-3">
+            <i class="fas fa-laptop fa-lg"></i>
+          </span>
+          <div>
+            <h3 class="h6 mb-0">Informatique</h3>
+            <small class="text-muted">{{ carte_informatique.nombre }} abonnement{{ carte_informatique.nombre|pluralize }}</small>
+          </div>
+        </div>
+        <div class="row text-center g-2 mb-3">
+          <div class="col-4 border-end">
+            <div class="fw-bold text-success">{{ carte_informatique.actifs }}</div>
+            <div class="small text-muted">Actifs</div>
+          </div>
+          <div class="col-4 border-end">
+            <div class="fw-bold text-warning">{{ carte_informatique.expirant }}</div>
+            <div class="small text-muted">Échéance</div>
+          </div>
+          <div class="col-4">
+            <div class="fw-bold text-danger">{{ carte_informatique.expires }}</div>
+            <div class="small text-muted">Expirés</div>
+          </div>
+        </div>
+        <div class="d-grid gap-2">
+          <a href="{% url 'depenses:informatique_tableau_bord' %}" class="btn btn-sm btn-primary">
+            <i class="fas fa-chart-line me-1"></i>Tableau de bord
+          </a>
+          <a href="{% url 'depenses:informatique_liste' %}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-list me-1"></i>Abonnements
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

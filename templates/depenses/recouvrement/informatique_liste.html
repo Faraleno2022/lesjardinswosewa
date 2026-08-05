@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+  <h1 class="h4 mb-0"><i class="fas fa-laptop text-primary me-2"></i>Abonnements informatique</h1>
+  <div class="d-flex flex-wrap gap-2">
+    <a href="{% url 'depenses:recouvrement_hub' %}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i>Recouvrement</a>
+    <a href="{% url 'depenses:informatique_tableau_bord' %}" class="btn btn-sm btn-primary"><i class="fas fa-chart-line me-1"></i>Tableau de bord</a>
+    <a href="{% url 'depenses:informatique_nouveau' %}" class="btn btn-sm btn-success"><i class="fas fa-plus me-1"></i>Nouvel abonnement</a>
+    <a href="{% url 'depenses:informatique_export_excel' %}?{{ request.GET.urlencode }}" class="btn btn-sm btn-outline-success"><i class="fas fa-file-excel me-1"></i>Excel</a>
+    <a href="{% url 'depenses:informatique_export_pdf' %}?{{ request.GET.urlencode }}" class="btn btn-sm btn-outline-danger"><i class="fas fa-file-pdf me-1"></i>PDF</a>
+  </div>
+</div>
+
+{% if alertes %}
+<div class="alert alert-warning">
+  <strong><i class="fas fa-triangle-exclamation me-1"></i>Fins d'abonnement proches</strong>
+  <ul class="mb-0 mt-2">
+    {% for a in alertes %}
+    <li>{{ a.eleve.prenom }} {{ a.eleve.nom }} ({{ a.eleve.matricule }}) &mdash; expire le {{ a.date_fin|date:"d/m/Y" }}, dans {{ a.jours_restants }} jour{{ a.jours_restants|pluralize }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<form method="get" class="row g-2 align-items-end mb-3">
+  <div class="col-sm-5">
+    <label class="form-label small mb-0">Recherche par matricule ou nom</label>
+    <input type="text" name="q" value="{{ q }}" class="form-control form-control-sm" placeholder="Matricule, nom ou prénom">
+  </div>
+  <div class="col-sm-3">
+    <label class="form-label small mb-0">Statut</label>
+    <select name="statut" class="form-select form-select-sm">
+      <option value="">Tous</option>
+      <option value="ACTIF" {% if statut == 'ACTIF' %}selected{% endif %}>Actifs</option>
+      <option value="BIENTOT" {% if statut == 'BIENTOT' %}selected{% endif %}>Expirent bientôt</option>
+      <option value="EXPIRE" {% if statut == 'EXPIRE' %}selected{% endif %}>Expirés</option>
+    </select>
+  </div>
+  <div class="col-sm-2 d-grid"><button class="btn btn-sm btn-outline-primary"><i class="fas fa-filter me-1"></i>Filtrer</button></div>
+</form>
+
+<div class="card shadow-sm border-0 mb-4">
+  <div class="card-header bg-white"><strong>Abonnements</strong></div>
+  <div class="table-responsive"><table class="table table-hover align-middle mb-0">
+    <thead class="table-light"><tr>
+      <th>Matricule</th><th>Élève</th><th>Classe</th><th>Début</th><th>Fin</th>
+      <th class="text-end">Montant</th><th>Statut</th><th class="text-end">Carte</th></tr></thead>
+    <tbody>
+      {% for a in abonnements %}
+      <tr>
+        <td class="text-nowrap">{{ a.eleve.matricule|default:"—" }}</td>
+        <td>{{ a.eleve.prenom }} {{ a.eleve.nom }}</td>
+        <td>{{ a.eleve.classe.nom|default:"—" }}</td>
+        <td class="text-nowrap">{{ a.date_debut|date:"d/m/Y" }}</td>
+        <td class="text-nowrap">{{ a.date_fin|date:"d/m/Y" }}</td>
+        <td class="text-end text-nowrap fw-semibold">{{ a.montant|floatformat:0|intcomma }} GNF</td>
+        <td><span class="badge bg-{{ a.statut_couleur }}">{{ a.statut_libelle }}</span></td>
+        <td class="text-end"><a href="{% url 'depenses:informatique_carte' pk=a.pk %}" class="btn btn-sm btn-outline-primary"><i class="fas fa-id-card"></i></a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8" class="text-center text-muted py-4">Aucun abonnement.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="card-header bg-white"><strong>Élèves sans abonnement en cours</strong></div>
+  <div class="table-responsive"><table class="table table-hover align-middle mb-0">
+    <thead class="table-light"><tr><th>Matricule</th><th>Élève</th><th>Classe</th><th class="text-end">Action</th></tr></thead>
+    <tbody>
+      {% for e in eleves_sans_abonnement %}
+      <tr>
+        <td class="text-nowrap">{{ e.matricule|default:"—" }}</td>
+        <td>{{ e.prenom }} {{ e.nom }}</td>
+        <td>{{ e.classe.nom|default:"—" }}</td>
+        <td class="text-end"><a href="{% url 'depenses:informatique_nouveau_eleve' eleve_id=e.pk %}" class="btn btn-sm btn-success"><i class="fas fa-plus me-1"></i>Abonner</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" class="text-center text-muted py-4">Aucun élève sans abonnement en cours.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}
