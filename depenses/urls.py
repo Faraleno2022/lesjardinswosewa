@@ -3,6 +3,7 @@ from . import views
 from . import views_logistique
 from . import views_bibliotheque
 from . import views_fournitures
+from . import views_recouvrement
 
 app_name = 'depenses'
 
@@ -59,4 +60,20 @@ urlpatterns = [
     path('bibliotheque/reservations/nouvelle/', views_bibliotheque.creer_reservation, name='creer_reservation'),
     path('bibliotheque/reservations/<int:reservation_id>/annuler/', views_bibliotheque.annuler_reservation, name='annuler_reservation'),
     path('bibliotheque/statistiques/', views_bibliotheque.statistiques_bibliotheque, name='statistiques_bibliotheque'),
+
+    # ---- Recouvrement : portail, modules simples et informatique ----
+    path('recouvrement/', views_recouvrement.hub_recouvrement, name='recouvrement_hub'),
+    path('recouvrement/informatique/', views_recouvrement.informatique_liste, name='informatique_liste'),
+    path('recouvrement/informatique/nouveau/', views_recouvrement.informatique_nouveau, name='informatique_nouveau'),
+    path('recouvrement/informatique/nouveau/<int:eleve_id>/', views_recouvrement.informatique_nouveau, name='informatique_nouveau_eleve'),
+    path('recouvrement/informatique/tableau-bord/', views_recouvrement.informatique_tableau_bord, name='informatique_tableau_bord'),
+    path('recouvrement/informatique/<int:pk>/carte/', views_recouvrement.informatique_carte, name='informatique_carte'),
+    path('recouvrement/informatique/export/excel/', views_recouvrement.informatique_export_excel, name='informatique_export_excel'),
+    path('recouvrement/informatique/export/pdf/', views_recouvrement.informatique_export_pdf, name='informatique_export_pdf'),
+    path('recouvrement/<str:cle>/', views_recouvrement.liste_operations, name='recouvrement_liste'),
+    path('recouvrement/<str:cle>/tableau-bord/', views_recouvrement.tableau_bord_module, name='recouvrement_tableau_bord'),
+    path('recouvrement/<str:cle>/export/excel/', views_recouvrement.export_excel_module, name='recouvrement_export_excel'),
+    path('recouvrement/<str:cle>/export/pdf/', views_recouvrement.export_pdf_module, name='recouvrement_export_pdf'),
+    path('recouvrement/<str:cle>/<int:pk>/modifier/', views_recouvrement.modifier_operation, name='recouvrement_modifier'),
+    path('recouvrement/<str:cle>/<int:pk>/supprimer/', views_recouvrement.supprimer_operation, name='recouvrement_supprimer'),
 ]

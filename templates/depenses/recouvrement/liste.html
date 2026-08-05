@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}{{ cfg.titre }} - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+  <h1 class="h4 mb-0"><i class="{{ cfg.icone }} me-2 text-{{ cfg.couleur }}"></i>{{ cfg.titre }}</h1>
+  <div class="d-flex flex-wrap gap-2">
+    <a href="{% url 'depenses:recouvrement_hub' %}" class="btn btn-sm btn-outline-secondary">
+      <i class="fas fa-arrow-left me-1"></i>Recouvrement
+    </a>
+    <a href="{% url 'depenses:recouvrement_tableau_bord' cle=cle %}" class="btn btn-sm btn-primary">
+      <i class="fas fa-chart-line me-1"></i>Tableau de bord
+    </a>
+    <a href="{% url 'depenses:recouvrement_export_excel' cle=cle %}?{{ request.GET.urlencode }}" class="btn btn-sm btn-success">
+      <i class="fas fa-file-excel me-1"></i>Excel
+    </a>
+    <a href="{% url 'depenses:recouvrement_export_pdf' cle=cle %}?{{ request.GET.urlencode }}" class="btn btn-sm btn-danger">
+      <i class="fas fa-file-pdf me-1"></i>PDF
+    </a>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-4">
+    <div class="card shadow-sm border-0">
+      <div class="card-header bg-white"><strong>Nouvelle saisie</strong></div>
+      <div class="card-body">
+        <p class="small text-muted">La date est enregistrée automatiquement.</p>
+        <form method="post" novalidate>
+          {% csrf_token %}
+          {% for champ in form %}
+            <div class="mb-3">
+              <label class="form-label" for="{{ champ.id_for_label }}">{{ champ.label }}</label>
+              {{ champ }}
+              {% if champ.errors %}<div class="text-danger small">{{ champ.errors|striptags }}</div>{% endif %}
+            </div>
+          {% endfor %}
+          <button type="submit" class="btn btn-{{ cfg.couleur }} w-100">
+            <i class="fas fa-save me-1"></i>Enregistrer
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card shadow-sm border-0">
+      <div class="card-header bg-white">
+        <form method="get" class="row g-2 align-items-end">
+          <div class="col-sm-4">
+            <label class="form-label small mb-0">Recherche</label>
+            <input type="text" name="q" value="{{ filtres.q }}" class="form-control form-control-sm">
+          </div>
+          <div class="col-sm-3">
+            <label class="form-label small mb-0">Du</label>
+            <input type="date" name="date_debut" value="{{ filtres.date_debut }}" class="form-control form-control-sm">
+          </div>
+          <div class="col-sm-3">
+            <label class="form-label small mb-0">Au</label>
+            <input type="date" name="date_fin" value="{{ filtres.date_fin }}" class="form-control form-control-sm">
+          </div>
+          <div class="col-sm-2 d-grid">
+            <button class="btn btn-sm btn-outline-primary"><i class="fas fa-filter"></i></button>
+          </div>
+        </form>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Date</th>
+                <th>{{ cfg.entete_libelle }}</th>
+                <th class="text-end">Montant</th>
+                <th>Observation</th>
+                <th class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for op in operations %}
+              <tr>
+                <td class="text-nowrap">{{ op.date|date:"d/m/Y" }}</td>
+                <td>{% if cle == 'versement' %}{{ op.lieu_versement }}{% else %}{{ op.designation }}{% endif %}</td>
+                <td class="text-end text-nowrap fw-semibold">{{ op.montant|floatformat:0|intcomma }} GNF</td>
+                <td class="small text-muted">{{ op.observation|default:"—"|truncatechars:60 }}</td>
+                <td class="text-end text-nowrap">
+                  <a href="{% url 'depenses:recouvrement_modifier' cle=cle pk=op.pk %}" class="btn btn-sm btn-outline-primary"><i class="fas fa-pen"></i></a>
+                  <a href="{% url 'depenses:recouvrement_supprimer' cle=cle pk=op.pk %}" class="btn btn-sm btn-outline-danger ms-1"><i class="fas fa-trash"></i></a>
+                </td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="5" class="text-center text-muted py-4">Aucune opération enregistrée.</td></tr>
+              {% endfor %}
+            </tbody>
+            {% if operations %}
+            <tfoot class="table-light">
+              <tr>
+                <th colspan="2">Total ({{ nombre }} opération{{ nombre|pluralize }})</th>
+                <th class="text-end">{{ total|intcomma }} GNF</th>
+                <th colspan="2"></th>
+              </tr>
+            </tfoot>
+            {% endif %}
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center"><div class="col-lg-6">
+  <div class="card shadow-sm border-0">
+    <div class="card-header bg-white"><strong>{{ titre_page }}</strong></div>
+    <div class="card-body">
+      {% if operation %}<p class="small text-muted">Opération du {{ operation.date|date:"d/m/Y" }} — la date n'est pas modifiable.</p>{% endif %}
+      <form method="post" novalidate>{% csrf_token %}
+        {% for champ in form %}
+          <div class="mb-3">
+            <label class="form-label" for="{{ champ.id_for_label }}">{{ champ.label }}</label>
+            {{ champ }}
+            {% if champ.errors %}<div class="text-danger small">{{ champ.errors|striptags }}</div>{% endif %}
+          </div>
+        {% endfor %}
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Enregistrer</button>
+          <a href="{% url 'depenses:recouvrement_liste' cle=cle %}" class="btn btn-outline-secondary">Annuler</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div></div>
+{% endblock %}
