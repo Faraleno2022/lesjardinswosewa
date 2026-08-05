@@ -31,7 +31,17 @@ class PaiementRemiseForm(forms.Form):
         widget=forms.Select(attrs={'class': 'form-select'}),
         label="Remise scolarité (%)"
     )
-    
+
+    # Motif obligatoire: toute remise accordée doit être justifiée.
+    motif = forms.ChoiceField(
+        choices=[("", "— Choisir un motif —")] + list(PaiementRemise.MOTIF_CHOICES),
+        required=True,
+        widget=forms.Select(attrs={'class': 'form-select', 'required': 'required'}),
+        label="Motif de la remise",
+        error_messages={'required': "Le motif de la remise est obligatoire."}
+    )
+
+
     def __init__(self, *args, **kwargs):
         paiement = kwargs.pop('paiement', None)
         super().__init__(*args, **kwargs)
@@ -45,6 +55,12 @@ class PaiementRemiseForm(forms.Form):
                 date_debut__lte=today,
                 date_fin__gte=today
             )
+            # Repartir du motif déjà retenu quand on revient modifier les remises
+            deja_applique = PaiementRemise.objects.filter(
+                paiement=paiement
+            ).exclude(motif='').first()
+            if deja_applique:
+                self.fields['motif'].initial = deja_applique.motif
     
     def calculate_total_remise(self, montant_base):
         """Calcule le montant total des remises sélectionnées"""

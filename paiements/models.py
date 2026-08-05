@@ -308,20 +308,48 @@ class RemiseReduction(SyncTrackedModel):
 
 class PaiementRemise(SyncTrackedModel):
     """Modèle pour associer des remises aux paiements"""
+
+    # Motif justifiant l'octroi de la remise sur ce paiement précis.
+    # À ne pas confondre avec RemiseReduction.motif, qui qualifie la remise du
+    # catalogue (fratrie, mérite...) et non la décision commerciale du jour.
+    MOTIF_CHOICES = [
+        ('CLIENT_FIDELE', 'Client fidèle'),
+        ('PROMOTION', 'Promotion'),
+        ('ERREUR_COMMERCIALE', 'Erreur commerciale'),
+        ('PARTENAIRE', 'Partenaire'),
+        ('GESTE_COMMERCIAL', 'Geste commercial'),
+        ('NE_PAIE_RIEN', 'Ne paie rien'),
+        ('LA_MOITIE', 'La moitié'),
+    ]
+
     paiement = models.ForeignKey(Paiement, on_delete=models.CASCADE, related_name='remises')
     remise = models.ForeignKey(RemiseReduction, on_delete=models.CASCADE)
     montant_remise = models.DecimalField(
         max_digits=10, decimal_places=0,
         verbose_name="Montant de la remise (GNF)"
     )
-    
+    # blank=True uniquement pour les lignes créées avant l'ajout du champ :
+    # le formulaire d'application, lui, exige toujours un motif.
+    motif = models.CharField(
+        max_length=30,
+        choices=MOTIF_CHOICES,
+        blank=True,
+        default='',
+        verbose_name="Motif de la remise"
+    )
+
     class Meta:
         verbose_name = "Remise appliquée"
         verbose_name_plural = "Remises appliquées"
         unique_together = ['paiement', 'remise']
-    
+
     def __str__(self):
         return f"{self.paiement.numero_recu} - {self.remise.nom} - {self.montant_remise:,.0f} GNF"
+
+    @property
+    def motif_libelle(self):
+        """Libellé du motif, avec un repli explicite pour les anciennes lignes."""
+        return self.get_motif_display() if self.motif else "Non renseigné"
 
 
 class Relance(SyncTrackedModel):

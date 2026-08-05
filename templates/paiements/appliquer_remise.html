@@ -94,8 +94,9 @@
                                     <h6 class="card-title">Remises déjà appliquées</h6>
                                     {% for remise_paiement in remises_existantes %}
                                     <p class="mb-1">
-                                        • {{ remise_paiement.remise.nom }}: 
+                                        • {{ remise_paiement.remise.nom }}:
                                         <strong>{{ remise_paiement.montant_remise|floatformat:0 }} GNF</strong>
+                                        <span class="d-block ms-3 small">Motif : {{ remise_paiement.motif_libelle }}</span>
                                     </p>
                                     {% endfor %}
                                 </div>
@@ -117,6 +118,17 @@
                                     <div class="card-body">
                                         {{ form.montant_original.as_hidden }}
                                         <input type="hidden" id="id_base_scolarite" name="base_scolarite" value="{{ base_scolarite }}">
+                                        <!-- Motif obligatoire de la remise -->
+                                        <div class="mb-3">
+                                            <label class="form-label" for="id_motif">
+                                                <i class="fas fa-comment-dots me-1"></i>Motif de la remise
+                                                <span class="text-danger">*</span>
+                                            </label>
+                                            {{ form.motif }}
+                                            <small class="text-muted d-block mt-1">
+                                                Champ obligatoire : toute remise accordée doit être justifiée.
+                                            </small>
+                                        </div>
                                         <!-- Sélecteur de remise scolarité (%) 1-100 -->
                                         <div class="mb-3">
                                             <label class="form-label" for="id_pourcentage_scolarite">
@@ -238,6 +250,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const montantOriginal = parseFloat(montantOriginalInput && montantOriginalInput.value ? montantOriginalInput.value.replace(/\s/g, '') : '0');
     const btnAppliquer = document.getElementById('btnAppliquer');
     const selectPct = document.getElementById('id_pourcentage_scolarite');
+    const selectMotif = document.getElementById('id_motif');
     const baseScolariteInput = document.getElementById('id_base_scolarite');
     const baseScolarite = parseFloat(baseScolariteInput && baseScolariteInput.value ? baseScolariteInput.value.replace(/\s/g, '') : '0');
     // Le bouton reste désactivé tant qu'aucune sélection n'est faite; voir updatePreview()
@@ -310,16 +323,29 @@ document.addEventListener('DOMContentLoaded', function() {
             detailsDiv.innerHTML = '';
         }
         
-        // Activer/désactiver le bouton
-        btnAppliquer.disabled = !hasSelection;
+        // Activer/désactiver le bouton : une remise ET un motif sont requis
+        const motifRenseigne = selectMotif ? !!selectMotif.value : true;
+        btnAppliquer.disabled = !hasSelection || !motifRenseigne;
     }
-    
+
     // Écouter les changements sur les checkboxes
     checkboxes.forEach(checkbox => {
         checkbox.addEventListener('change', updatePreview);
     });
     if (selectPct) {
         selectPct.addEventListener('change', updatePreview);
+    }
+    if (selectMotif) {
+        // « Ne paie rien » et « La moitié » désignent un montant : on propose le
+        // pourcentage correspondant, sans écraser un choix déjà fait.
+        const POURCENTAGE_PAR_MOTIF = { 'NE_PAIE_RIEN': '100', 'LA_MOITIE': '50' };
+        selectMotif.addEventListener('change', function() {
+            const suggestion = POURCENTAGE_PAR_MOTIF[selectMotif.value];
+            if (suggestion && selectPct && !selectPct.value) {
+                selectPct.value = suggestion;
+            }
+            updatePreview();
+        });
     }
     // Initialiser l'aperçu au chargement
     updatePreview();
@@ -333,12 +359,20 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('Veuillez sélectionner au moins une remise ou choisir un pourcentage.');
             return;
         }
-        
+        if (selectMotif && !selectMotif.value) {
+            e.preventDefault();
+            alert('Veuillez choisir le motif de la remise.');
+            selectMotif.focus();
+            return;
+        }
+
         const totalRemises = parseFloat(document.getElementById('totalRemises').textContent.replace(/[^\d]/g, ''));
         const montantFinal = parseFloat(document.getElementById('montantFinal').textContent.replace(/[^\d]/g, ''));
-        
+        const motifLibelle = selectMotif ? selectMotif.options[selectMotif.selectedIndex].text : '';
+
         let message = (
             `Confirmer l'application des remises ?\n\n` +
+            `Motif: ${motifLibelle}\n` +
             `Montant original: ${montantOriginal.toLocaleString('fr-FR')} GNF\n` +
             `Total des remises: ${totalRemises.toLocaleString('fr-FR')} GNF\n` +
             `Nouveau montant: ${montantFinal.toLocaleString('fr-FR')} GNF`

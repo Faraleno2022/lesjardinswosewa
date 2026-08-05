@@ -3419,12 +3419,37 @@ def rapport_remises(request):
     except Exception:
         total_global = 0
 
+    # Répartition par motif d'octroi, pour savoir ce que couvrent ces remises
+    libelles_motifs = dict(PaiementRemise.MOTIF_CHOICES)
+    rows_motifs = []
+    try:
+        agregat_motifs = (
+            rem_qs
+            .values('motif')
+            .annotate(
+                nb_remises=Count('id'),
+                total_remise=Coalesce(Sum('montant_remise'), Value(0, output_field=DecimalField(max_digits=10, decimal_places=0)))
+            )
+            .order_by('-total_remise')
+        )
+        rows_motifs = [
+            {
+                'motif': libelles_motifs.get(ligne['motif'], "Non renseigné"),
+                'nb_remises': ligne['nb_remises'],
+                'total_remise': ligne['total_remise'],
+            }
+            for ligne in agregat_motifs
+        ]
+    except Exception:
+        rows_motifs = []
+
     context = {
         'titre_page': titre_page,
         'q': q,
         'date_debut': date_debut,
         'date_fin': date_fin,
         'rows': rows,
+        'rows_motifs': rows_motifs,
         'total_global': total_global,
     }
     template = 'paiements/rapport_remises.html' if _template_exists('paiements/rapport_remises.html') else None
@@ -4035,6 +4060,7 @@ def appliquer_remise_paiement(request, paiement_id:int):
         form = PaiementRemiseForm(request.POST, paiement=paiement)
         if form.is_valid():
             remises = form.cleaned_data.get('remises') or []
+            motif = form.cleaned_data.get('motif') or ''
             pct_str = form.cleaned_data.get('pourcentage_scolarite') or ''
             try:
                 pct_value = int(pct_str) if str(pct_str).isdigit() else 0
@@ -4076,6 +4102,7 @@ def appliquer_remise_paiement(request, paiement_id:int):
                         paiement=paiement,
                         remise=remise,
                         montant_remise=montant_remise,
+                        motif=motif,
                     )
                     created += 1
 
@@ -4123,6 +4150,7 @@ def appliquer_remise_paiement(request, paiement_id:int):
                         paiement=paiement,
                         remise=remise_pct,
                         montant_remise=montant_remise_pct,
+                        motif=motif,
                     )
                     created += 1
             messages.success(request, f"Remises appliquées: {created}.")
