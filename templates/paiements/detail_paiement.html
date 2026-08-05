@@ -220,7 +220,10 @@
                     </div>
                     {% for paiement_remise in paiement.remises.all %}
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span>{{ paiement_remise.remise.nom }}</span>
+                        <span>
+                            {{ paiement_remise.remise.nom }}
+                            <small class="text-muted d-block">Motif : {{ paiement_remise.motif_libelle }}</small>
+                        </span>
                         <span class="text-success">
                             -{{ paiement_remise.montant_remise|floatformat:0|intcomma }} GNF
                         </span>
