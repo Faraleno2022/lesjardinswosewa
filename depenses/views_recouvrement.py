@@ -17,6 +17,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from eleves.models import Eleve
+from salaires.models import AffectationClasse, EtatSalaire
 from utilisateurs.utils import filter_by_user_school, user_school
 
 from .forms_recouvrement import (
@@ -144,6 +145,13 @@ def hub_recouvrement(request):
     ).count()
     expires = abonnements.filter(date_fin__lt=aujourdhui).count()
 
+    # Module salaires enseignants : compté à part (source = app salaires)
+    etats_payes = _etats_salaire_payes(request.user)
+    total_salaires, nombre_salaires = _totaux_salaire(etats_payes)
+    total_salaires_mois, nombre_salaires_mois = _totaux_salaire(
+        etats_payes.filter(periode__annee=aujourdhui.year, periode__mois=aujourdhui.month)
+    )
+
     contexte = {
         'titre_page': 'Recouvrement',
         'cartes': cartes,
@@ -151,6 +159,10 @@ def hub_recouvrement(request):
             'total': total_abo, 'nombre': nombre_abo,
             'expirant': expirant, 'expires': expires,
             'actifs': abonnements.filter(date_fin__gte=aujourdhui).count(),
+        },
+        'carte_salaires': {
+            'total': total_salaires, 'nombre': nombre_salaires,
+            'total_mois': total_salaires_mois, 'nombre_mois': nombre_salaires_mois,
         },
         'total_sorties': total_sorties,
         'total_entrees': total_entrees,
@@ -614,4 +626,218 @@ def informatique_export_pdf(request):
     reponse = HttpResponse(flux.getvalue(), content_type='application/pdf')
     reponse['Content-Disposition'] = (
         f'attachment; filename="abonnements_informatique_{date.today():%Y%m%d}.pdf"')
+    return reponse
+
+
+# --------------------------------------------------------------------------
+# Module Salaires enseignants : suivi des montants réellement payés
+# --------------------------------------------------------------------------
+
+NIVEAUX_ORDRE = ['Maternelle', 'Primaire', 'Collège', 'Lycée']
+
+MOIS_NOMS = [
+    '', 'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+    'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
+]
+
+# Repli lorsque l'enseignant n'a aucune affectation de classe active :
+# on approxime le niveau depuis son type de rémunération.
+_NIVEAU_PAR_TYPE_ENSEIGNANT = {
+    'GARDERIE': 'Maternelle',
+    'MATERNELLE': 'Maternelle',
+    'PRIMAIRE': 'Primaire',
+    'SECONDAIRE': 'Collège',
+    'ADMINISTRATEUR': 'Autre',
+}
+
+
+def _niveau_bucket_classe(code_niveau):
+    """Regroupe un niveau de classe fin (ex. COLLEGE_8) en 4 grandes catégories."""
+    if not code_niveau:
+        return None
+    if code_niveau == 'MATERNELLE':
+        return 'Maternelle'
+    if code_niveau.startswith('PRIMAIRE'):
+        return 'Primaire'
+    if code_niveau.startswith('COLLEGE'):
+        return 'Collège'
+    if code_niveau.startswith('LYCEE'):
+        return 'Lycée'
+    return None
+
+
+def _niveaux_par_enseignant(user):
+    """Associe chaque enseignant aux niveaux des classes où il est actuellement affecté."""
+    affectations = filter_by_user_school(
+        AffectationClasse.objects.filter(actif=True).select_related('classe'),
+        user, 'enseignant__ecole',
+    )
+    mapping = {}
+    for affectation in affectations:
+        bucket = _niveau_bucket_classe(affectation.classe.niveau)
+        if bucket:
+            mapping.setdefault(affectation.enseignant_id, set()).add(bucket)
+    return mapping
+
+
+def _niveau_enseignant(enseignant, niveaux_map):
+    buckets = niveaux_map.get(enseignant.id) or set()
+    for niveau in NIVEAUX_ORDRE:
+        if niveau in buckets:
+            return niveau
+    return _NIVEAU_PAR_TYPE_ENSEIGNANT.get(enseignant.type_enseignant, 'Autre')
+
+
+def _etats_salaire_payes(user):
+    """États de salaire réellement payés, restreints à l'école de l'utilisateur."""
+    return filter_by_user_school(
+        EtatSalaire.objects.filter(paye=True).select_related('enseignant', 'periode'),
+        user, 'enseignant__ecole',
+    )
+
+
+def _totaux_salaire(qs):
+    agg = qs.aggregate(total=Sum('salaire_net'), nombre=Count('id'))
+    return int(agg['total'] or 0), agg['nombre'] or 0
+
+
+def _construire_lignes_salaires(etats, niveaux_map):
+    """Construit le tableau pivot enseignant x mois à partir des états payés."""
+    mois_presents = sorted(set(etats.values_list('periode__mois', flat=True)))
+    lignes = {}
+    for etat in etats:
+        enseignant = etat.enseignant
+        ligne = lignes.setdefault(enseignant.id, {
+            'enseignant': enseignant,
+            'niveau': _niveau_enseignant(enseignant, niveaux_map),
+            'mois': {m: 0 for m in mois_presents},
+            'total': 0,
+        })
+        montant = int(etat.salaire_net or 0)
+        ligne['mois'][etat.periode.mois] = ligne['mois'].get(etat.periode.mois, 0) + montant
+        ligne['total'] += montant
+
+    lignes_triees = sorted(
+        lignes.values(),
+        key=lambda l: (l['enseignant'].nom, l['enseignant'].prenoms),
+    )
+    return mois_presents, lignes_triees
+
+
+@login_required
+def salaires_dashboard(request):
+    """Suivi des salaires payés : tableau pivot enseignant x mois + tableau de bord."""
+    etats_tous = _etats_salaire_payes(request.user)
+    annees_disponibles = sorted(
+        etats_tous.values_list('periode__annee', flat=True).distinct(), reverse=True
+    )
+    aujourdhui = timezone.localdate()
+    annee_defaut = annees_disponibles[0] if annees_disponibles else aujourdhui.year
+    try:
+        annee = int(request.GET.get('annee') or annee_defaut)
+    except (TypeError, ValueError):
+        annee = annee_defaut
+
+    etats_annee = etats_tous.filter(periode__annee=annee)
+    niveaux_map = _niveaux_par_enseignant(request.user)
+    mois_presents, lignes = _construire_lignes_salaires(etats_annee, niveaux_map)
+
+    totaux_par_mois = {
+        m: sum(l['mois'].get(m, 0) for l in lignes) for m in mois_presents
+    }
+    total_annee = sum(l['total'] for l in lignes)
+    totaux_par_niveau = {
+        niveau: sum(l['total'] for l in lignes if l['niveau'] == niveau)
+        for niveau in NIVEAUX_ORDRE
+    }
+
+    total_mois_courant, nombre_mois_courant = _totaux_salaire(
+        etats_tous.filter(periode__annee=aujourdhui.year, periode__mois=aujourdhui.month)
+    )
+
+    evolution = list(
+        etats_tous.values('periode__annee', 'periode__mois')
+        .annotate(total=Sum('salaire_net'), nombre=Count('id'))
+        .order_by('-periode__annee', '-periode__mois')[:12]
+    )
+    max_evolution = max((row['total'] for row in evolution), default=0) or 1
+    for row in evolution:
+        row['mois_nom'] = MOIS_NOMS[row['periode__mois']]
+        row['part'] = round((row['total'] or 0) * 100 / max_evolution)
+
+    return render(request, 'depenses/recouvrement/salaires_dashboard.html', {
+        'titre_page': 'Recouvrement — Salaires enseignants',
+        'annee': annee,
+        'annees_disponibles': annees_disponibles or [annee],
+        'mois_presents': mois_presents,
+        'mois_noms': {m: MOIS_NOMS[m] for m in range(1, 13)},
+        'lignes': lignes,
+        'totaux_par_mois': totaux_par_mois,
+        'total_annee': total_annee,
+        'totaux_par_niveau': totaux_par_niveau,
+        'niveaux_ordre': NIVEAUX_ORDRE,
+        'total_mois_courant': total_mois_courant,
+        'nombre_mois_courant': nombre_mois_courant,
+        'evolution': evolution[::-1],
+    })
+
+
+@login_required
+def salaires_export_excel(request):
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    etats_tous = _etats_salaire_payes(request.user)
+    aujourdhui = timezone.localdate()
+    try:
+        annee = int(request.GET.get('annee') or aujourdhui.year)
+    except (TypeError, ValueError):
+        annee = aujourdhui.year
+
+    etats_annee = etats_tous.filter(periode__annee=annee)
+    niveaux_map = _niveaux_par_enseignant(request.user)
+    mois_presents, lignes = _construire_lignes_salaires(etats_annee, niveaux_map)
+
+    classeur = Workbook()
+    feuille = classeur.active
+    feuille.title = 'Salaires enseignants'
+
+    entetes = ['Nom', 'Prénoms', 'Niveau'] + [MOIS_NOMS[m] for m in mois_presents] + ['Total (GNF)']
+    feuille.append(entetes)
+    for cellule in feuille[1]:
+        cellule.font = Font(bold=True, color='FFFFFF')
+        cellule.fill = PatternFill('solid', fgColor='1657A8')
+        cellule.alignment = Alignment(horizontal='center')
+
+    for ligne in lignes:
+        feuille.append([
+            ligne['enseignant'].nom,
+            ligne['enseignant'].prenoms,
+            ligne['niveau'],
+            *[ligne['mois'].get(m, 0) for m in mois_presents],
+            ligne['total'],
+        ])
+
+    total_general = sum(l['total'] for l in lignes)
+    feuille.append([])
+    ligne_total = ['', '', 'TOTAL'] + [
+        sum(l['mois'].get(m, 0) for l in lignes) for m in mois_presents
+    ] + [total_general]
+    feuille.append(ligne_total)
+    for col in range(1, len(entetes) + 1):
+        feuille.cell(row=feuille.max_row, column=col).font = Font(bold=True)
+
+    largeurs = [20, 22, 14] + [12] * len(mois_presents) + [16]
+    for i, largeur in enumerate(largeurs, start=1):
+        feuille.column_dimensions[get_column_letter(i)].width = largeur
+
+    flux = io.BytesIO()
+    classeur.save(flux)
+    reponse = HttpResponse(
+        flux.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    reponse['Content-Disposition'] = (
+        f'attachment; filename="salaires_enseignants_{annee}.xlsx"')
     return reponse

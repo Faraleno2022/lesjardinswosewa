@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% load salaire_tags %}
+{% block title %}Salaires enseignants - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+  <h1 class="h4 mb-0"><i class="fas fa-chalkboard-teacher me-2 text-primary"></i>Recouvrement — Salaires enseignants</h1>
+  <div class="d-flex gap-2">
+    <a href="{% url 'depenses:recouvrement_hub' %}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i>Recouvrement</a>
+    <a href="{% url 'depenses:salaires_export_excel' %}?annee={{ annee }}" class="btn btn-sm btn-success"><i class="fas fa-file-excel me-1"></i>Export Excel</a>
+  </div>
+</div>
+
+<form method="get" class="d-flex align-items-center gap-2 mb-4">
+  <label for="annee" class="form-label mb-0 small text-muted">Année</label>
+  <select name="annee" id="annee" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+    {% for a in annees_disponibles %}
+      <option value="{{ a }}" {% if a == annee %}selected{% endif %}>{{ a }}</option>
+    {% endfor %}
+  </select>
+</form>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3"><div class="card border-0 shadow-sm h-100"><div class="card-body">
+    <div class="small text-muted text-uppercase">Total {{ annee }}</div>
+    <div class="h4 mb-0">{{ total_annee|intcomma }}</div><div class="small text-muted">GNF</div></div></div></div>
+  <div class="col-6 col-lg-3"><div class="card border-0 shadow-sm h-100"><div class="card-body">
+    <div class="small text-muted text-uppercase">Mois en cours</div>
+    <div class="h4 mb-0">{{ total_mois_courant|intcomma }}</div>
+    <div class="small text-muted">{{ nombre_mois_courant }} état{{ nombre_mois_courant|pluralize }} payé{{ nombre_mois_courant|pluralize }}</div></div></div></div>
+</div>
+
+<div class="row g-3 mb-4">
+  {% for niveau in niveaux_ordre %}
+  <div class="col-6 col-lg-3">
+    <div class="card border-0 shadow-sm h-100 border-start border-4 border-primary">
+      <div class="card-body">
+        <div class="small text-muted text-uppercase">{{ niveau }}</div>
+        <div class="h5 mb-0">{{ totaux_par_niveau|get_item:niveau|default:0|intcomma }}</div>
+        <div class="small text-muted">GNF sur {{ annee }}</div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+  <div class="card-header bg-white"><strong>Salaires payés par enseignant — {{ annee }}</strong></div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Enseignant</th>
+          <th>Niveau</th>
+          {% for m in mois_presents %}<th class="text-end">{{ mois_noms|get_item:m }}</th>{% endfor %}
+          <th class="text-end">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ligne in lignes %}
+        <tr>
+          <td>{{ ligne.enseignant.prenoms }} {{ ligne.enseignant.nom }}</td>
+          <td><span class="badge bg-secondary bg-opacity-25 text-secondary">{{ ligne.niveau }}</span></td>
+          {% for m in mois_presents %}
+            <td class="text-end">{% with montant=ligne.mois|get_item:m %}{% if montant %}{{ montant|intcomma }}{% else %}—{% endif %}{% endwith %}</td>
+          {% endfor %}
+          <td class="text-end fw-semibold">{{ ligne.total|intcomma }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="{{ mois_presents|length|add:3 }}" class="text-center text-muted py-4">Aucun salaire payé enregistré pour {{ annee }}.</td></tr>
+        {% endfor %}
+      </tbody>
+      {% if lignes %}
+      <tfoot class="table-light">
+        <tr class="fw-bold">
+          <td colspan="2">Total</td>
+          {% for m in mois_presents %}<td class="text-end">{{ totaux_par_mois|get_item:m|intcomma }}</td>{% endfor %}
+          <td class="text-end">{{ total_annee|intcomma }}</td>
+        </tr>
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div>
+
+<div class="card shadow-sm border-0">
+  <div class="card-header bg-white"><strong>Évolution mensuelle (12 derniers mois payés)</strong></div>
+  <div class="card-body">
+    {% for e in evolution %}
+    <div class="d-flex align-items-center mb-2">
+      <div class="small text-muted" style="width: 120px;">{{ e.mois_nom }} {{ e.periode__annee }}</div>
+      <div class="flex-grow-1 bg-light rounded me-2" style="height: 18px;">
+        <div class="bg-primary rounded" style="height: 18px; width: {{ e.part }}%;"></div>
+      </div>
+      <div class="small fw-semibold" style="width: 130px; text-align: right;">{{ e.total|floatformat:0|intcomma }} GNF</div>
+    </div>
+    {% empty %}
+    <p class="text-muted text-center mb-0 py-4">Aucune donnée disponible.</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
