@@ -334,6 +334,11 @@ class PaiementRemise(SyncTrackedModel):
         ('LA_MOITIE', 'La moitié'),
     ]
 
+    BASE_CALCUL_CHOICES = [
+        ('TRANCHES_DUES', 'Montant des tranches sélectionnées'),
+        ('PAIEMENT_ECHEANCE', "Paiement à l'échéance"),
+    ]
+
     paiement = models.ForeignKey(Paiement, on_delete=models.CASCADE, related_name='remises')
     remise = models.ForeignKey(RemiseReduction, on_delete=models.CASCADE)
     montant_remise = models.DecimalField(
@@ -349,6 +354,22 @@ class PaiementRemise(SyncTrackedModel):
         default='',
         verbose_name="Motif de la remise"
     )
+    # Numéros de tranches concernées (ex: "1,2"), jamais l'inscription/réinscription.
+    # blank par défaut pour les lignes créées avant l'ajout de la sélection par tranche.
+    tranches_concernees = models.CharField(
+        max_length=10,
+        blank=True,
+        default='',
+        verbose_name="Tranches concernées",
+        help_text="Numéros de tranches séparés par une virgule, ex: 1,2",
+    )
+    base_calcul = models.CharField(
+        max_length=20,
+        choices=BASE_CALCUL_CHOICES,
+        blank=True,
+        default='',
+        verbose_name="Base de calcul retenue",
+    )
 
     class Meta:
         verbose_name = "Remise appliquée"
@@ -362,6 +383,27 @@ class PaiementRemise(SyncTrackedModel):
     def motif_libelle(self):
         """Libellé du motif, avec un repli explicite pour les anciennes lignes."""
         return self.get_motif_display() if self.motif else "Non renseigné"
+
+    @property
+    def tranches_concernees_liste(self):
+        """Liste d'entiers des tranches concernées, ex: [1, 2]."""
+        if not self.tranches_concernees:
+            return []
+        result = []
+        for part in self.tranches_concernees.split(','):
+            part = part.strip()
+            if part.isdigit():
+                result.append(int(part))
+        return result
+
+    @property
+    def tranches_concernees_libelle(self):
+        """Libellé lisible des tranches concernées, avec repli pour les anciennes lignes."""
+        numeros = self.tranches_concernees_liste
+        if not numeros:
+            return "Non renseigné"
+        noms = {1: "1ère tranche", 2: "2ème tranche", 3: "3ème tranche"}
+        return ", ".join(noms.get(n, f"Tranche {n}") for n in numeros)
 
 
 class Relance(SyncTrackedModel):
