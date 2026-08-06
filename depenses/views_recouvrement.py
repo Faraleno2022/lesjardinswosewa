@@ -17,7 +17,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from eleves.models import Eleve
-from salaires.models import AffectationClasse, EtatSalaire
+from salaires.models import AffectationClasse, Enseignant, EtatSalaire
 from utilisateurs.utils import filter_by_user_school, user_school
 
 from .forms_recouvrement import (
@@ -701,27 +701,36 @@ def _totaux_salaire(qs):
     return int(agg['total'] or 0), agg['nombre'] or 0
 
 
-def _construire_lignes_salaires(etats, niveaux_map):
-    """Construit le tableau pivot enseignant x mois à partir des états payés."""
+def _enseignants_pour_dashboard(user, etats_annee):
+    """Enseignants à afficher : tous les actifs, plus ceux déjà payés cette année
+    (même s'ils ne sont plus actifs). Ainsi un enseignant ajouté dans le module
+    Salaires apparaît immédiatement ici, avant même son premier paiement."""
+    ids_payes = etats_annee.values_list('enseignant_id', flat=True)
+    base = filter_by_user_school(Enseignant.objects.all(), user, 'ecole')
+    return base.filter(
+        Q(statut='ACTIF') | Q(id__in=ids_payes)
+    ).order_by('nom', 'prenoms')
+
+
+def _construire_lignes_salaires(enseignants, etats, niveaux_map):
+    """Construit le tableau pivot enseignant x mois : une ligne par enseignant,
+    les montants proviennent des états payés (0/— si rien n'est encore payé)."""
     mois_presents = sorted(set(etats.values_list('periode__mois', flat=True)))
-    lignes = {}
+    montants = {}
     for etat in etats:
-        enseignant = etat.enseignant
-        ligne = lignes.setdefault(enseignant.id, {
+        cle = (etat.enseignant_id, etat.periode.mois)
+        montants[cle] = montants.get(cle, 0) + int(etat.salaire_net or 0)
+
+    lignes = []
+    for enseignant in enseignants:
+        mois = {m: montants.get((enseignant.id, m), 0) for m in mois_presents}
+        lignes.append({
             'enseignant': enseignant,
             'niveau': _niveau_enseignant(enseignant, niveaux_map),
-            'mois': {m: 0 for m in mois_presents},
-            'total': 0,
+            'mois': mois,
+            'total': sum(mois.values()),
         })
-        montant = int(etat.salaire_net or 0)
-        ligne['mois'][etat.periode.mois] = ligne['mois'].get(etat.periode.mois, 0) + montant
-        ligne['total'] += montant
-
-    lignes_triees = sorted(
-        lignes.values(),
-        key=lambda l: (l['enseignant'].nom, l['enseignant'].prenoms),
-    )
-    return mois_presents, lignes_triees
+    return mois_presents, lignes
 
 
 @login_required
@@ -740,7 +749,8 @@ def salaires_dashboard(request):
 
     etats_annee = etats_tous.filter(periode__annee=annee)
     niveaux_map = _niveaux_par_enseignant(request.user)
-    mois_presents, lignes = _construire_lignes_salaires(etats_annee, niveaux_map)
+    enseignants = _enseignants_pour_dashboard(request.user, etats_annee)
+    mois_presents, lignes = _construire_lignes_salaires(enseignants, etats_annee, niveaux_map)
 
     totaux_par_mois = {
         m: sum(l['mois'].get(m, 0) for l in lignes) for m in mois_presents
@@ -797,7 +807,8 @@ def salaires_export_excel(request):
 
     etats_annee = etats_tous.filter(periode__annee=annee)
     niveaux_map = _niveaux_par_enseignant(request.user)
-    mois_presents, lignes = _construire_lignes_salaires(etats_annee, niveaux_map)
+    enseignants = _enseignants_pour_dashboard(request.user, etats_annee)
+    mois_presents, lignes = _construire_lignes_salaires(enseignants, etats_annee, niveaux_map)
 
     classeur = Workbook()
     feuille = classeur.active

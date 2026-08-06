@@ -41,11 +41,29 @@ class PaiementRemiseForm(forms.Form):
         error_messages={'required': "Le motif de la remise est obligatoire."}
     )
 
+    # Tranches de scolarité concernées par la remise. Jamais l'inscription/réinscription.
+    TRANCHE_CHOICES = [('1', '1ère tranche'), ('2', '2ème tranche'), ('3', '3ème tranche')]
+    tranches = forms.MultipleChoiceField(
+        choices=TRANCHE_CHOICES,
+        required=False,
+        initial=[],
+        widget=forms.CheckboxSelectMultiple(attrs={'class': 'form-check-input'}),
+        label="Tranches concernées",
+    )
+
+    # Base sur laquelle la remise est calculée pour les tranches cochées.
+    base_calcul = forms.ChoiceField(
+        choices=PaiementRemise.BASE_CALCUL_CHOICES,
+        required=False,
+        initial='TRANCHES_DUES',
+        widget=forms.RadioSelect(attrs={'class': 'form-check-input base-calcul-radio'}),
+        label="Base de calcul",
+    )
 
     def __init__(self, *args, **kwargs):
         paiement = kwargs.pop('paiement', None)
         super().__init__(*args, **kwargs)
-        
+
         if paiement:
             self.fields['montant_original'].initial = paiement.montant
             # Filtrer les remises valides à la date du paiement
@@ -55,13 +73,33 @@ class PaiementRemiseForm(forms.Form):
                 date_debut__lte=today,
                 date_fin__gte=today
             )
-            # Repartir du motif déjà retenu quand on revient modifier les remises
+            # Repartir des choix déjà retenus quand on revient modifier les remises
             deja_applique = PaiementRemise.objects.filter(
                 paiement=paiement
             ).exclude(motif='').first()
             if deja_applique:
                 self.fields['motif'].initial = deja_applique.motif
-    
+            deja_avec_tranches = PaiementRemise.objects.filter(
+                paiement=paiement
+            ).exclude(tranches_concernees='').first()
+            if deja_avec_tranches:
+                self.fields['tranches'].initial = deja_avec_tranches.tranches_concernees_liste
+                if deja_avec_tranches.base_calcul:
+                    self.fields['base_calcul'].initial = deja_avec_tranches.base_calcul
+
+    def clean(self):
+        cleaned_data = super().clean()
+        remises = cleaned_data.get('remises') or []
+        pct = cleaned_data.get('pourcentage_scolarite') or ''
+        tranches = cleaned_data.get('tranches') or []
+        if (remises or pct) and not tranches:
+            raise forms.ValidationError(
+                "Sélectionnez au moins une tranche concernée par la remise."
+            )
+        if not cleaned_data.get('base_calcul'):
+            cleaned_data['base_calcul'] = 'TRANCHES_DUES'
+        return cleaned_data
+
     def calculate_total_remise(self, montant_base):
         """Calcule le montant total des remises sélectionnées"""
         remises = self.cleaned_data.get('remises', [])
