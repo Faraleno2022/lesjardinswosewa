@@ -164,6 +164,7 @@ def collecter_donnees_periode(debut, fin, type_periode, user=None):
                 'nombre': 0,
                 'montant_total': Decimal('0'),
                 'frais_inscription': Decimal('0'),
+                'reinscription': Decimal('0'),
                 'scolarite': Decimal('0'),
                 # Ajouts pour alignement journalier
                 'montant_original': Decimal('0'),
@@ -172,6 +173,7 @@ def collecter_donnees_periode(debut, fin, type_periode, user=None):
                 'reste_a_payer': Decimal('0'),
             },
             'classes': [],
+            'remises_par_categorie': [],
             # Dépenses affichées par école mises à 0 pour éviter toute confusion,
             # car le modèle Depense n'est pas lié à Ecole
             'depenses': {
@@ -207,6 +209,7 @@ def collecter_donnees_periode(debut, fin, type_periode, user=None):
 
         # Classification sans double comptage
         frais_inscription = Decimal('0')
+        reinscription = Decimal('0')
         scolarite = Decimal('0')
         non_categorises = Decimal('0')
 
@@ -214,10 +217,20 @@ def collecter_donnees_periode(debut, fin, type_periode, user=None):
             montant = p.montant or Decimal('0')
             nom = (getattr(getattr(p, 'type_paiement', None), 'nom', '') or '').lower()
 
-            has_inscription = 'inscription' in nom
+            # "réinscription" contient la sous-chaîne "inscription": on la teste en premier
+            has_reinscription = ('réinscription' in nom) or ('reinscription' in nom)
+            has_inscription = ('inscription' in nom) and not has_reinscription
             has_scolarite = ('scolar' in nom) or ('tranche' in nom) or ('1ère tranche' in nom) or ('2ème tranche' in nom) or ('3ème tranche' in nom)
 
-            if has_inscription and has_scolarite:
+            if has_reinscription and has_scolarite:
+                # Paiement combiné: 30 000 GNF pour réinscription, reste en scolarité
+                part_ins = min(Decimal('30000'), montant)
+                part_sco = montant - part_ins
+                reinscription += part_ins
+                scolarite += part_sco
+            elif has_reinscription:
+                reinscription += montant
+            elif has_inscription and has_scolarite:
                 # Paiement combiné: 30 000 GNF pour inscription, reste en scolarité
                 part_ins = min(Decimal('30000'), montant)
                 part_sco = montant - part_ins
@@ -255,7 +268,22 @@ def collecter_donnees_periode(debut, fin, type_periode, user=None):
         scolarite += non_categorises
 
         donnees_ecole['paiements']['frais_inscription'] = frais_inscription
+        donnees_ecole['paiements']['reinscription'] = reinscription
         donnees_ecole['paiements']['scolarite'] = scolarite
+
+        # Totaux des remises par catégorie (motif du geste commercial sur ce paiement)
+        motif_labels = dict(PaiementRemise.MOTIF_CHOICES)
+        remises_categorie_qs = PaiementRemise.objects.filter(
+            paiement__in=paiements_periode
+        ).values('motif').annotate(total=Sum('montant_remise')).order_by('-total')
+        donnees_ecole['remises_par_categorie'] = [
+            {
+                'motif': row['motif'] or '',
+                'label': motif_labels.get(row['motif'], row['motif'] or 'Non précisé'),
+                'total': row['total'] or Decimal('0'),
+            }
+            for row in remises_categorie_qs
+        ]
 
         # Élèves concernés de la période (paiements dans période + inscriptions dans période)
         eleves_concernes_ids = set(paiements_periode.values_list('eleve_id', flat=True).distinct())
@@ -399,6 +427,7 @@ def generer_pdf_periode(donnees, debut, fin, type_periode, ecole=None):
             ['Scolarité normale', f"{donnees_ecole['paiements'].get('total_du_concernes', Decimal('0')):,} GNF".replace(',', ' ')],
             ['Scolarité payé', f"{donnees_ecole['paiements']['scolarite']:,} GNF".replace(',', ' ')],
             ['Frais d\'inscription', f"{donnees_ecole['paiements']['frais_inscription']:,} GNF".replace(',', ' ')],
+            ['Frais de réinscription', f"{donnees_ecole['paiements'].get('reinscription', Decimal('0')):,} GNF".replace(',', ' ')],
             ['Reste à payer', f"{donnees_ecole['paiements'].get('reste_a_payer', Decimal('0')):,} GNF".replace(',', ' ')],
             ['Montant original (avant remises)', f"{donnees_ecole['paiements']['montant_original']:,} GNF".replace(',', ' ')],
             ['Total des remises accordées', f"{donnees_ecole['paiements']['total_remises']:,} GNF".replace(',', ' ')],
@@ -408,7 +437,7 @@ def generer_pdf_periode(donnees, debut, fin, type_periode, ecole=None):
             ['États de salaire validés', str(donnees_ecole['salaires']['etats_valides'])],
             ['Montant total des salaires', f"{donnees_ecole['salaires']['montant_total']:,} GNF".replace(',', ' ')],
         ]
-        
+
         table = Table(data, colWidths=[3*inch, 2*inch])
         table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
@@ -420,7 +449,7 @@ def generer_pdf_periode(donnees, debut, fin, type_periode, ecole=None):
             ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
             ('GRID', (0, 0), (-1, -1), 1, colors.black)
         ]))
-        
+
         story.append(table)
         story.append(Spacer(1, 12))
 
@@ -453,7 +482,30 @@ def generer_pdf_periode(donnees, debut, fin, type_periode, ecole=None):
             ]))
             story.append(class_table)
             story.append(Spacer(1, 16))
-    
+
+        # Remises par catégorie
+        if donnees_ecole.get('remises_par_categorie'):
+            story.append(Paragraph("Remises par catégorie", styles['Heading3']))
+            story.append(Spacer(1, 6))
+            remise_data = [['Catégorie', 'Montant']]
+            for r in donnees_ecole['remises_par_categorie']:
+                remise_data.append([
+                    r['label'],
+                    f"{r['total']:,} GNF".replace(',', ' '),
+                ])
+            remise_table = Table(remise_data, colWidths=[200, 120])
+            remise_table.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
+                ('TEXTCOLOR', (0,0), (-1,0), colors.black),
+                ('ALIGN', (1,1), (-1,-1), 'RIGHT'),
+                ('ALIGN', (0,0), (0,-1), 'LEFT'),
+                ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                ('BOTTOMPADDING', (0,0), (-1,0), 6),
+                ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
+            ]))
+            story.append(remise_table)
+            story.append(Spacer(1, 16))
+
     # Section Dépenses globales (non rattachées à une école)
     story.append(Paragraph("DÉPENSES GLOBALES (période)", styles['Heading2']))
     story.append(Spacer(1, 8))
