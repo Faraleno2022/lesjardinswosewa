@@ -87,6 +87,11 @@ class Classe(SyncTrackedModel):
     """Modèle pour représenter une classe"""
     NIVEAUX_CHOICES = [
         ('GARDERIE', 'Garderie'),
+        ('CRECHE', 'Crèche'),
+        ('TOUTE_PETITE_SECTION', 'Toute petite section'),
+        ('PETITE_SECTION', 'Petite section'),
+        ('MOYENNE_SECTION', 'Moyenne section'),
+        ('GRANDE_SECTION', 'Grande section'),
         ('MATERNELLE', 'Maternelle'),
         ('PRIMAIRE_1', 'Primaire 1ère'),
         ('PRIMAIRE_2', 'Primaire 2ème'),
@@ -417,6 +422,15 @@ class Eleve(SyncTrackedModel):
     classe = models.ForeignKey(Classe, on_delete=models.CASCADE, related_name='eleves')
     date_inscription = models.DateField(verbose_name="Date d'inscription", blank=True, null=True)
     statut = models.CharField(max_length=20, choices=STATUT_CHOICES, default='ACTIF', verbose_name="Statut", db_index=True)
+    garde_prolongee = models.BooleanField(
+        default=False,
+        verbose_name="Garde prolongée (au-delà des heures de cours)",
+        help_text=(
+            "L'élève reste à l'école au-delà des heures de cours, le temps que les parents "
+            "viennent le récupérer en sortant du travail. Applique le tarif forfaitaire annuel "
+            "correspondant (maternelle/garderie ou primaire)."
+        ),
+    )
     
     # Responsables
     responsable_principal = models.ForeignKey(

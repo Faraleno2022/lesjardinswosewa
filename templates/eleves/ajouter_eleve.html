@@ -227,8 +227,23 @@
                                 {% endif %}
                             </div>
                         </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="form-label">&nbsp;</label>
+                                <div class="form-check mt-2">
+                                    {{ form.garde_prolongee }}
+                                    <label class="form-check-label" for="{{ form.garde_prolongee.id_for_label }}">
+                                        {{ form.garde_prolongee.label }}
+                                    </label>
+                                </div>
+                                <small class="text-muted d-block">{{ form.garde_prolongee.help_text }}</small>
+                                {% if form.garde_prolongee.errors %}
+                                    <div class="text-danger small mt-1">{{ form.garde_prolongee.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
                     </div>
-                    
+
                     <!-- Responsable -->
                     <h4 class="section-title mt-4"><i class="fas fa-users me-2"></i>Responsable principal</h4>
                     

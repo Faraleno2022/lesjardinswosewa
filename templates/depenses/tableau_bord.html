@@ -63,6 +63,75 @@
         border-color: #ffeaa7;
         color: #856404;
     }
+
+    /* ===== Cartes de modules (même style que le menu Notes) ===== */
+    .depenses-card {
+        background: white;
+        border-radius: 15px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+        height: 100%;
+        border: 2px solid transparent;
+        cursor: pointer;
+        text-decoration: none;
+        display: block;
+    }
+
+    .depenses-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        border-color: #007bff;
+    }
+
+    .depenses-card-icon {
+        font-size: 2.6rem;
+        margin-bottom: 1rem;
+        display: block;
+    }
+
+    .depenses-card-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 0.4rem;
+    }
+
+    .depenses-card-description {
+        color: #666;
+        font-size: 0.88rem;
+        margin: 0;
+    }
+
+    .depenses-card.primary { border-left: 5px solid #007bff; }
+    .depenses-card.primary:hover { background: linear-gradient(135deg, #e7f1ff 0%, #ffffff 100%); }
+    .depenses-card.primary .depenses-card-icon { color: #007bff; }
+
+    .depenses-card.success { border-left: 5px solid #28a745; }
+    .depenses-card.success:hover { background: linear-gradient(135deg, #e3eaf2 0%, #ffffff 100%); }
+    .depenses-card.success .depenses-card-icon { color: #28a745; }
+
+    .depenses-card.info { border-left: 5px solid #17a2b8; }
+    .depenses-card.info:hover { background: linear-gradient(135deg, #e8edf3 0%, #ffffff 100%); }
+    .depenses-card.info .depenses-card-icon { color: #17a2b8; }
+
+    .depenses-card.warning { border-left: 5px solid #ffc107; }
+    .depenses-card.warning:hover { background: linear-gradient(135deg, #fff8e1 0%, #ffffff 100%); }
+    .depenses-card.warning .depenses-card-icon { color: #e6a700; }
+
+    .depenses-card.danger { border-left: 5px solid #003d82; }
+    .depenses-card.danger:hover { background: linear-gradient(135deg, #e6eef7 0%, #ffffff 100%); }
+    .depenses-card.danger .depenses-card-icon { color: #003d82; }
+
+    .depenses-modules-title {
+        color: #2c3e50;
+        font-weight: 700;
+        margin: 1.75rem 0 1rem;
+    }
+
+    .depenses-modules-title:first-child {
+        margin-top: 0;
+    }
 </style>
 {% endblock %}
 
@@ -80,6 +149,149 @@
             </a>
             <a href="{% url 'depenses:ajouter_depense' %}" class="btn btn-outline-secondary">
                 <i class="fas fa-plus"></i> Nouvelle Dépense
+            </a>
+        </div>
+    </div>
+
+    <!-- ===== Modules ===== -->
+    <h5 class="depenses-modules-title"><i class="fas fa-receipt me-2"></i>Dépenses générales</h5>
+    <div class="row g-3 mb-3">
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'depenses:liste_depenses' %}" class="depenses-card primary">
+                <i class="fas fa-list depenses-card-icon"></i>
+                <h3 class="depenses-card-title">Liste des dépenses</h3>
+                <p class="depenses-card-description">Consulter, filtrer et suivre toutes les dépenses enregistrées</p>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'depenses:ajouter_depense' %}" class="depenses-card success">
+                <i class="fas fa-plus depenses-card-icon"></i>
+                <h3 class="depenses-card-title">Nouvelle dépense</h3>
+                <p class="depenses-card-description">Enregistrer une nouvelle dépense avec justificatif</p>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'depenses:gestion_categories' %}" class="depenses-card info">
+                <i class="fas fa-tags depenses-card-icon"></i>
+                <h3 class="depenses-card-title">Catégories</h3>
+                <p class="depenses-card-description">Gérer les catégories utilisées pour classer les dépenses</p>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'depenses:tableau_bord_fournitures' %}" class="depenses-card success">
+                <i class="fas fa-store depenses-card-icon"></i>
+                <h3 class="depenses-card-title">Fournitures & ventes</h3>
+                <p class="depenses-card-description">Suivre le stock de fournitures et les ventes aux élèves</p>
+            </a>
+        </div>
+    </div>
+
+    <h5 class="depenses-modules-title"><i class="fas fa-hand-holding-dollar me-2"></i>Recouvrement</h5>
+    <div class="row g-3 mb-3">
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'depenses:recouvrement_hub' %}" class="depenses-card primary">
+                <i class="fas fa-gauge-high depenses-card-icon"></i>
+                <h3 class="depenses-card-title">Tableau de bord général</h3>
+                <p class="depenses-card-description">Vue d'ensemble du recouvrement, tous modules confondus</p>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'depenses:recouvrement_liste' cle='cuisine' %}" class="depenses-card warning">
+                <i class="fas fa-utensils depenses-card-icon"></i>
+                <h3 class="depenses-card-title">Dépenses de la cuisine</h3>
+                <p class="depenses-card-description">Suivre les recettes et dépenses liées à la cuisine</p>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'depenses:recouvrement_liste' cle='document' %}" class="depenses-card info">
+                <i class="fas fa-file-invoice depenses-card-icon"></i>
+                <h3 class="depenses-card-title">Documents</h3>
+                <p class="depenses-card-description">Recouvrement lié aux documents et dossiers administratifs</p>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'depenses:recouvrement_liste' cle='versement' %}" class="depenses-card success">
+                <i class="fas fa-hand-holding-dollar depenses-card-icon"></i>
+                <h3 class="depenses-card-title">Versements</h3>
+                <p class="depenses-card-description">Suivre les versements reçus et à recouvrer</p>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'depenses:informatique_liste' %}" class="depenses-card primary">
+                <i class="fas fa-laptop depenses-card-icon"></i>
+                <h3 class="depenses-card-title">Informatique</h3>
+                <p class="depenses-card-description">Recouvrement des frais liés à l'informatique</p>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'depenses:salaires_dashboard' %}" class="depenses-card danger">
+                <i class="fas fa-money-check-alt depenses-card-icon"></i>
+                <h3 class="depenses-card-title">Salaires</h3>
+                <p class="depenses-card-description">Tableau de bord du recouvrement lié aux salaires</p>
+            </a>
+        </div>
+    </div>
+
+    <h5 class="depenses-modules-title"><i class="fas fa-tachometer-alt me-2"></i>Logistique</h5>
+    <div class="row g-3 mb-3">
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'depenses:dashboard_logistique' %}" class="depenses-card primary">
+                <i class="fas fa-tachometer-alt depenses-card-icon"></i>
+                <h3 class="depenses-card-title">Dashboard logistique</h3>
+                <p class="depenses-card-description">Vue d'ensemble des biens et fournitures de l'établissement</p>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'depenses:liste_biens' %}" class="depenses-card info">
+                <i class="fas fa-building depenses-card-icon"></i>
+                <h3 class="depenses-card-title">Biens établissement</h3>
+                <p class="depenses-card-description">Inventaire et suivi des biens de l'établissement</p>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'depenses:gestion_papier_ram' %}" class="depenses-card success">
+                <i class="fas fa-copy depenses-card-icon"></i>
+                <h3 class="depenses-card-title">Papier RAM</h3>
+                <p class="depenses-card-description">Suivre les contributions et le stock de papier RAM</p>
+            </a>
+        </div>
+    </div>
+
+    <h5 class="depenses-modules-title"><i class="fas fa-book-reader me-2"></i>Bibliothèque</h5>
+    <div class="row g-3 mb-3">
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'depenses:dashboard_bibliotheque' %}" class="depenses-card primary">
+                <i class="fas fa-tachometer-alt depenses-card-icon"></i>
+                <h3 class="depenses-card-title">Dashboard</h3>
+                <p class="depenses-card-description">Vue d'ensemble de la bibliothèque</p>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'depenses:catalogue_livres' %}" class="depenses-card primary">
+                <i class="fas fa-book depenses-card-icon"></i>
+                <h3 class="depenses-card-title">Catalogue livres</h3>
+                <p class="depenses-card-description">Gérer le catalogue des livres disponibles</p>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'depenses:liste_emprunts' %}" class="depenses-card success">
+                <i class="fas fa-hand-holding-heart depenses-card-icon"></i>
+                <h3 class="depenses-card-title">Emprunts</h3>
+                <p class="depenses-card-description">Suivre les livres empruntés et les retours</p>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'depenses:liste_reservations' %}" class="depenses-card warning">
+                <i class="fas fa-bookmark depenses-card-icon"></i>
+                <h3 class="depenses-card-title">Réservations</h3>
+                <p class="depenses-card-description">Gérer les réservations de livres</p>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'depenses:statistiques_bibliotheque' %}" class="depenses-card info">
+                <i class="fas fa-chart-line depenses-card-icon"></i>
+                <h3 class="depenses-card-title">Statistiques</h3>
+                <p class="depenses-card-description">Statistiques d'utilisation de la bibliothèque</p>
             </a>
         </div>
     </div>

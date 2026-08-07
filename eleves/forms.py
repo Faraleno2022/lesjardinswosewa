@@ -138,9 +138,9 @@ class EleveForm(forms.ModelForm):
     class Meta:
         model = Eleve
         fields = [
-            'matricule', 'prenom', 'nom', 'sexe', 'date_naissance', 
-            'lieu_naissance', 'photo', 'classe', 'date_inscription', 
-            'statut', 'responsable_principal', 'responsable_secondaire'
+            'matricule', 'prenom', 'nom', 'sexe', 'date_naissance',
+            'lieu_naissance', 'photo', 'classe', 'date_inscription',
+            'statut', 'garde_prolongee', 'responsable_principal', 'responsable_secondaire'
         ]
         widgets = {
             'matricule': forms.TextInput(attrs={
@@ -186,6 +186,9 @@ class EleveForm(forms.ModelForm):
             }, format='%Y-%m-%d'),
             'statut': forms.Select(attrs={
                 'class': 'form-select'
+            }),
+            'garde_prolongee': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
             }),
             'responsable_principal': forms.Select(attrs={
                 'class': 'form-select'
