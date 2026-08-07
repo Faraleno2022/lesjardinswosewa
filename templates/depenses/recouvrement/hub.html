@@ -145,4 +145,104 @@
     </div>
   </div>
 </div>
+
+<h2 class="h5 text-muted mt-4 mb-3">Dépenses et fournitures</h2>
+<div class="row g-4">
+  <div class="col-md-6 col-xl-3">
+    <a href="{% url 'depenses:tableau_bord' %}" class="hub-module-card primary">
+      <i class="fas fa-receipt hub-module-icon"></i>
+      <h3 class="hub-module-title">Dépenses</h3>
+      <p class="hub-module-text">Factures fournisseurs, validation et suivi des paiements</p>
+    </a>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <a href="{% url 'depenses:liste_depenses' %}" class="hub-module-card primary">
+      <i class="fas fa-list hub-module-icon"></i>
+      <h3 class="hub-module-title">Liste des dépenses</h3>
+      <p class="hub-module-text">Consulter et filtrer toutes les dépenses enregistrées</p>
+    </a>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <a href="{% url 'depenses:gestion_categories' %}" class="hub-module-card info">
+      <i class="fas fa-tags hub-module-icon"></i>
+      <h3 class="hub-module-title">Catégories</h3>
+      <p class="hub-module-text">Gérer les catégories utilisées pour classer les dépenses</p>
+    </a>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <a href="{% url 'depenses:tableau_bord_fournitures' %}" class="hub-module-card success">
+      <i class="fas fa-store hub-module-icon"></i>
+      <h3 class="hub-module-title">Fournitures & ventes</h3>
+      <p class="hub-module-text">Produits en vente, stocks et ventes aux élèves</p>
+    </a>
+  </div>
+</div>
+
+<h2 class="h5 text-muted mt-4 mb-3">Logistique</h2>
+<div class="row g-4">
+  <div class="col-md-6 col-xl-3">
+    <a href="{% url 'depenses:dashboard_logistique' %}" class="hub-module-card primary">
+      <i class="fas fa-tachometer-alt hub-module-icon"></i>
+      <h3 class="hub-module-title">Tableau de bord</h3>
+      <p class="hub-module-text">Vue d'ensemble des biens et fournitures de l'établissement</p>
+    </a>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <a href="{% url 'depenses:liste_biens' %}" class="hub-module-card info">
+      <i class="fas fa-building hub-module-icon"></i>
+      <h3 class="hub-module-title">Biens de l'établissement</h3>
+      <p class="hub-module-text">Inventaire des biens achetés et de leur disponibilité</p>
+    </a>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <a href="{% url 'depenses:gestion_papier_ram' %}" class="hub-module-card success">
+      <i class="fas fa-copy hub-module-icon"></i>
+      <h3 class="hub-module-title">Papier RAM</h3>
+      <p class="hub-module-text">Contributions des élèves en papier ou en espèces</p>
+    </a>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <a href="{% url 'depenses:dashboard_bibliotheque' %}" class="hub-module-card warning">
+      <i class="fas fa-book-reader hub-module-icon"></i>
+      <h3 class="hub-module-title">Bibliothèque</h3>
+      <p class="hub-module-text">Catalogue, emprunts, réservations et statistiques</p>
+    </a>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .hub-module-card {
+    background: #fff;
+    border-radius: 15px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 15px rgba(0,0,0,.1);
+    transition: all .3s ease;
+    height: 100%;
+    border: 2px solid transparent;
+    text-decoration: none;
+    display: block;
+  }
+  .hub-module-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,.15);
+    border-color: #007bff;
+  }
+  .hub-module-icon { font-size: 2.6rem; margin-bottom: 1rem; display: block; }
+  .hub-module-title { font-size: 1.1rem; font-weight: 600; color: #333; margin-bottom: .4rem; }
+  .hub-module-text { color: #666; font-size: .88rem; margin: 0; }
+  .hub-module-card.primary { border-left: 5px solid #007bff; }
+  .hub-module-card.primary:hover { background: linear-gradient(135deg,#e7f1ff 0%,#fff 100%); }
+  .hub-module-card.primary .hub-module-icon { color: #007bff; }
+  .hub-module-card.success { border-left: 5px solid #28a745; }
+  .hub-module-card.success:hover { background: linear-gradient(135deg,#e3eaf2 0%,#fff 100%); }
+  .hub-module-card.success .hub-module-icon { color: #28a745; }
+  .hub-module-card.info { border-left: 5px solid #17a2b8; }
+  .hub-module-card.info:hover { background: linear-gradient(135deg,#e8edf3 0%,#fff 100%); }
+  .hub-module-card.info .hub-module-icon { color: #17a2b8; }
+  .hub-module-card.warning { border-left: 5px solid #ffc107; }
+  .hub-module-card.warning:hover { background: linear-gradient(135deg,#fff8e1 0%,#fff 100%); }
+  .hub-module-card.warning .hub-module-icon { color: #e6a700; }
+</style>
 {% endblock %}

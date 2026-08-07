@@ -8,7 +8,76 @@
 {% block page_actions %}
 <a class="btn btn-success" href="{% url 'bus:nouveau' %}"><i class="fas fa-plus me-1"></i>Nouvel abonnement</a>
 {% endblock %}
+{% block extra_css %}
+<style>
+  .transport-card {
+    background: #fff;
+    border-radius: 15px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 15px rgba(0,0,0,.1);
+    transition: all .3s ease;
+    height: 100%;
+    border: 2px solid transparent;
+    text-decoration: none;
+    display: block;
+  }
+  .transport-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0,0,0,.15);
+    border-color: #007bff;
+  }
+  .transport-card-icon { font-size: 2.6rem; margin-bottom: 1rem; display: block; }
+  .transport-card-title { font-size: 1.1rem; font-weight: 600; color: #333; margin-bottom: .4rem; }
+  .transport-card-text { color: #666; font-size: .88rem; margin: 0; }
+  .transport-card.primary { border-left: 5px solid #007bff; }
+  .transport-card.primary:hover { background: linear-gradient(135deg,#e7f1ff 0%,#fff 100%); }
+  .transport-card.primary .transport-card-icon { color: #007bff; }
+  .transport-card.success { border-left: 5px solid #28a745; }
+  .transport-card.success:hover { background: linear-gradient(135deg,#e3eaf2 0%,#fff 100%); }
+  .transport-card.success .transport-card-icon { color: #28a745; }
+  .transport-card.info { border-left: 5px solid #17a2b8; }
+  .transport-card.info:hover { background: linear-gradient(135deg,#e8edf3 0%,#fff 100%); }
+  .transport-card.info .transport-card-icon { color: #17a2b8; }
+  .transport-card.warning { border-left: 5px solid #ffc107; }
+  .transport-card.warning:hover { background: linear-gradient(135deg,#fff8e1 0%,#fff 100%); }
+  .transport-card.warning .transport-card-icon { color: #e6a700; }
+  .transport-modules-title { color: #2c3e50; font-weight: 700; margin: 0 0 1rem; }
+</style>
+{% endblock %}
 {% block content %}
+<!-- ===== Modules Transport ===== -->
+<h5 class="transport-modules-title"><i class="fas fa-bus me-2"></i>Modules Transport</h5>
+<div class="row g-3 mb-4">
+  <div class="col-md-6 col-lg-3">
+    <a href="{% url 'bus:index' %}" class="transport-card primary">
+      <i class="fas fa-bus transport-card-icon"></i>
+      <h3 class="transport-card-title">Abonnements Bus</h3>
+      <p class="transport-card-text">Liste et suivi des abonnements au bus scolaire</p>
+    </a>
+  </div>
+  <div class="col-md-6 col-lg-3">
+    <a href="{% url 'bus:tableau_bord_cantine' %}" class="transport-card success">
+      <i class="fas fa-utensils transport-card-icon"></i>
+      <h3 class="transport-card-title">Cantine scolaire</h3>
+      <p class="transport-card-text">Tableau de bord de la cantine et de ses recettes</p>
+    </a>
+  </div>
+  <div class="col-md-6 col-lg-3">
+    <a href="{% url 'bus:liste_abonnements_cantine' %}" class="transport-card info">
+      <i class="fas fa-list transport-card-icon"></i>
+      <h3 class="transport-card-title">Abonnements Cantine</h3>
+      <p class="transport-card-text">Consulter et gérer les abonnements à la cantine</p>
+    </a>
+  </div>
+  <div class="col-md-6 col-lg-3">
+    <a href="{% url 'bus:creer_abonnement_cantine' %}" class="transport-card warning">
+      <i class="fas fa-plus transport-card-icon"></i>
+      <h3 class="transport-card-title">Nouvel abonnement Cantine</h3>
+      <p class="transport-card-text">Inscrire un élève à la cantine scolaire</p>
+    </a>
+  </div>
+</div>
+
 <form method="get" class="row g-2 mb-3">
   <div class="col-md-4">
     <input type="text" name="q" class="form-control" placeholder="Rechercher (élève, zone, arrêt, contact)" value="{{ q }}">
