@@ -20,7 +20,117 @@
     </div>
 {% endblock %}
 
+{% block extra_css %}
+<style>
+    /* ===== Cartes de modules (même style que le menu Notes / Dépenses) ===== */
+    .eleves-card {
+        background: white;
+        border-radius: 15px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+        height: 100%;
+        border: 2px solid transparent;
+        cursor: pointer;
+        text-decoration: none;
+        display: block;
+    }
+    .eleves-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        border-color: #007bff;
+    }
+    .eleves-card-icon {
+        font-size: 2.6rem;
+        margin-bottom: 1rem;
+        display: block;
+    }
+    .eleves-card-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 0.4rem;
+    }
+    .eleves-card-description {
+        color: #666;
+        font-size: 0.88rem;
+        margin: 0;
+    }
+    .eleves-card.primary { border-left: 5px solid #007bff; }
+    .eleves-card.primary:hover { background: linear-gradient(135deg, #e7f1ff 0%, #ffffff 100%); }
+    .eleves-card.primary .eleves-card-icon { color: #007bff; }
+    .eleves-card.success { border-left: 5px solid #28a745; }
+    .eleves-card.success:hover { background: linear-gradient(135deg, #e3eaf2 0%, #ffffff 100%); }
+    .eleves-card.success .eleves-card-icon { color: #28a745; }
+    .eleves-card.info { border-left: 5px solid #17a2b8; }
+    .eleves-card.info:hover { background: linear-gradient(135deg, #e8edf3 0%, #ffffff 100%); }
+    .eleves-card.info .eleves-card-icon { color: #17a2b8; }
+    .eleves-card.warning { border-left: 5px solid #ffc107; }
+    .eleves-card.warning:hover { background: linear-gradient(135deg, #fff8e1 0%, #ffffff 100%); }
+    .eleves-card.warning .eleves-card-icon { color: #e6a700; }
+    .eleves-modules-title {
+        color: #2c3e50;
+        font-weight: 700;
+        margin: 0 0 1rem;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
+    <!-- ===== Modules ===== -->
+    <h5 class="eleves-modules-title"><i class="fas fa-users me-2"></i>Modules Élèves</h5>
+    <div class="row g-3 mb-4">
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'eleves:liste_eleves' %}" class="eleves-card primary">
+                <i class="fas fa-users eleves-card-icon"></i>
+                <h3 class="eleves-card-title">Liste des élèves</h3>
+                <p class="eleves-card-description">Rechercher, consulter et gérer les élèves inscrits</p>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'eleves:ajouter_eleve' %}" class="eleves-card success">
+                <i class="fas fa-user-plus eleves-card-icon"></i>
+                <h3 class="eleves-card-title">Ajouter un élève</h3>
+                <p class="eleves-card-description">Inscrire un nouvel élève dans l'établissement</p>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'eleves:gestion_classes' %}" class="eleves-card info">
+                <i class="fas fa-school eleves-card-icon"></i>
+                <h3 class="eleves-card-title">Gestion des classes</h3>
+                <p class="eleves-card-description">Créer, modifier et organiser les classes de l'établissement</p>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'eleves:importer_eleves' %}" class="eleves-card warning">
+                <i class="fas fa-file-upload eleves-card-icon"></i>
+                <h3 class="eleves-card-title">Importer Excel</h3>
+                <p class="eleves-card-description">Importer rapidement une liste d'élèves depuis Excel</p>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'eleves:statistiques_eleves' %}" class="eleves-card primary">
+                <i class="fas fa-chart-pie eleves-card-icon"></i>
+                <h3 class="eleves-card-title">Statistiques</h3>
+                <p class="eleves-card-description">Répartition des élèves par classe, sexe et statut</p>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'eleves:gestion_annees' %}" class="eleves-card info">
+                <i class="fas fa-history eleves-card-icon"></i>
+                <h3 class="eleves-card-title">Gestion des années</h3>
+                <p class="eleves-card-description">Consulter et basculer entre les années scolaires</p>
+            </a>
+        </div>
+        <div class="col-md-6 col-lg-3">
+            <a href="{% url 'eleves:nouvelle_annee_apercu' %}" class="eleves-card success">
+                <i class="fas fa-calendar-plus eleves-card-icon"></i>
+                <h3 class="eleves-card-title">Nouvelle année scolaire</h3>
+                <p class="eleves-card-description">Démarrer une nouvelle année et faire passer les élèves</p>
+            </a>
+        </div>
+    </div>
+
     <!-- Zone dynamique: stats + résultats -->
     <div id="zone-eleves">
         {% include 'eleves/partials/_liste_eleves_zone.html' %}
