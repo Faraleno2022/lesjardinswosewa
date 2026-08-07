@@ -262,69 +262,15 @@
                         </li>
                         {% endif %}
                         {% if 'depenses' in allowed %}
-                        <li class="nav-item dropdown">
-                            <button class="nav-link dropdown-toggle btn btn-link" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'depenses:recouvrement_hub' %}">
                                 <i class="fas fa-hand-holding-dollar me-1"></i>Recouvrement
-                            </button>
-                            <ul class="dropdown-menu">
-                                <li><a class="dropdown-item fw-semibold" href="{% url 'depenses:recouvrement_hub' %}">
-                                    <i class="fas fa-gauge-high text-primary me-1"></i>Tableau de bord général
-                                </a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:recouvrement_liste' cle='cuisine' %}">
-                                    <i class="fas fa-utensils text-warning me-1"></i>Dépenses de la cuisine
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:recouvrement_liste' cle='document' %}">
-                                    <i class="fas fa-file-invoice text-info me-1"></i>Documents
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:recouvrement_liste' cle='versement' %}">
-                                    <i class="fas fa-hand-holding-dollar text-success me-1"></i>Versements
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:informatique_liste' %}">
-                                    <i class="fas fa-laptop text-primary me-1"></i>Informatique
-                                </a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:tableau_bord' %}">
-                                    <i class="fas fa-receipt me-1"></i>Dépenses
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:tableau_bord_fournitures' %}">
-                                    <i class="fas fa-store text-success me-1"></i>Fournitures & ventes
-                                </a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><h6 class="dropdown-header">Logistique</h6></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:dashboard_logistique' %}">
-                                    <i class="fas fa-tachometer-alt me-1"></i>Dashboard
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:liste_biens' %}">
-                                    <i class="fas fa-building text-info me-1"></i>Biens Établissement
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:gestion_papier_ram' %}">
-                                    <i class="fas fa-copy text-success me-1"></i>Papier RAM
-                                </a></li>
-                            </ul>
+                            </a>
                         </li>
-                        <li class="nav-item dropdown">
-                            <button class="nav-link dropdown-toggle btn btn-link" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'depenses:dashboard_bibliotheque' %}">
                                 <i class="fas fa-book-reader me-1"></i>Bibliothèque
-                            </button>
-                            <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="{% url 'depenses:dashboard_bibliotheque' %}">
-                                    <i class="fas fa-tachometer-alt me-1"></i>Dashboard
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:catalogue_livres' %}">
-                                    <i class="fas fa-book text-primary me-1"></i>Catalogue Livres
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:liste_emprunts' %}">
-                                    <i class="fas fa-hand-holding-heart text-success me-1"></i>Emprunts
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:liste_reservations' %}">
-                                    <i class="fas fa-bookmark text-warning me-1"></i>Réservations
-                                </a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:statistiques_bibliotheque' %}">
-                                    <i class="fas fa-chart-line me-1"></i>Statistiques
-                                </a></li>
-                            </ul>
+                            </a>
                         </li>
                         {% endif %}
                         {% if 'salaires' in allowed %}
@@ -335,25 +281,10 @@
                         </li>
                         {% endif %}
                         {% if 'bus' in allowed %}
-                        <li class="nav-item dropdown">
-                            <button class="nav-link dropdown-toggle btn btn-link" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'bus:index' %}">
                                 <i class="fas fa-bus me-1"></i>Transport
-                            </button>
-                            <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="{% url 'bus:index' %}">
-                                    <i class="fas fa-bus me-1"></i>Abonnements Bus
-                                </a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="{% url 'bus:tableau_bord_cantine' %}">
-                                    <i class="fas fa-utensils text-success me-1"></i>Cantine Scolaire
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'bus:liste_abonnements_cantine' %}">
-                                    <i class="fas fa-list me-1"></i>Liste Abonnements Cantine
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'bus:creer_abonnement_cantine' %}">
-                                    <i class="fas fa-plus me-1"></i>Nouvel Abonnement Cantine
-                                </a></li>
-                            </ul>
+                            </a>
                         </li>
                         {% endif %}
                         {% if 'notes' in allowed %}
@@ -374,125 +305,35 @@
                                 <i class="fas fa-home me-1"></i>Accueil
                             </a>
                         </li>
-                        <li class="nav-item dropdown">
-                            <button class="nav-link dropdown-toggle btn btn-link" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fas fa-users me-1"></i>Élèves
-                            </button>
-                            <ul class="dropdown-menu">
-                                {% if annee_active %}
-                                <li><a class="dropdown-item disabled py-1" style="font-size:.8rem;opacity:.7;">
-                                    <i class="fas fa-calendar-alt me-1"></i>Année : <strong>{{ annee_active }}</strong>
-                                </a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                {% endif %}
-                                <li><a class="dropdown-item" href="{% url 'eleves:liste_eleves' %}">
-                                    <i class="fas fa-users text-primary me-1"></i>Liste des élèves
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'eleves:gestion_classes' %}">
-                                    <i class="fas fa-school text-secondary me-1"></i>Gestion des classes
-                                </a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item text-info" href="{% url 'eleves:gestion_annees' %}">
-                                    <i class="fas fa-history text-info me-1"></i>Gestion des années
-                                </a></li>
-                                <li><a class="dropdown-item text-success fw-semibold" href="{% url 'eleves:nouvelle_annee_apercu' %}">
-                                    <i class="fas fa-calendar-plus text-success me-1"></i>Nouvelle Année Scolaire
-                                </a></li>
-                            </ul>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'eleves:liste_eleves' %}">
+                                <i class="fas fa-users me-1"></i>Élèves{% if annee_active %} <span class="badge bg-secondary ms-1" style="font-size:.7rem;">{{ annee_active }}</span>{% endif %}
+                            </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'paiements:tableau_bord' %}">
                                 <i class="fas fa-money-bill me-1"></i>Paiements
                             </a>
                         </li>
-                        <li class="nav-item dropdown">
-                            <button class="nav-link dropdown-toggle btn btn-link" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'depenses:recouvrement_hub' %}">
                                 <i class="fas fa-hand-holding-dollar me-1"></i>Recouvrement
-                            </button>
-                            <ul class="dropdown-menu">
-                                <li><a class="dropdown-item fw-semibold" href="{% url 'depenses:recouvrement_hub' %}">
-                                    <i class="fas fa-gauge-high text-primary me-1"></i>Tableau de bord général
-                                </a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:recouvrement_liste' cle='cuisine' %}">
-                                    <i class="fas fa-utensils text-warning me-1"></i>Dépenses de la cuisine
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:recouvrement_liste' cle='document' %}">
-                                    <i class="fas fa-file-invoice text-info me-1"></i>Documents
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:recouvrement_liste' cle='versement' %}">
-                                    <i class="fas fa-hand-holding-dollar text-success me-1"></i>Versements
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:informatique_liste' %}">
-                                    <i class="fas fa-laptop text-primary me-1"></i>Informatique
-                                </a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:tableau_bord' %}">
-                                    <i class="fas fa-receipt me-1"></i>Dépenses
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:tableau_bord_fournitures' %}">
-                                    <i class="fas fa-store text-success me-1"></i>Fournitures & ventes
-                                </a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><h6 class="dropdown-header">Logistique</h6></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:dashboard_logistique' %}">
-                                    <i class="fas fa-tachometer-alt me-1"></i>Dashboard
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:liste_biens' %}">
-                                    <i class="fas fa-building text-info me-1"></i>Biens Établissement
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:gestion_papier_ram' %}">
-                                    <i class="fas fa-copy text-success me-1"></i>Papier RAM
-                                </a></li>
-                            </ul>
+                            </a>
                         </li>
-                        <li class="nav-item dropdown">
-                            <button class="nav-link dropdown-toggle btn btn-link" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'depenses:dashboard_bibliotheque' %}">
                                 <i class="fas fa-book-reader me-1"></i>Bibliothèque
-                            </button>
-                            <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="{% url 'depenses:dashboard_bibliotheque' %}">
-                                    <i class="fas fa-tachometer-alt me-1"></i>Dashboard
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:catalogue_livres' %}">
-                                    <i class="fas fa-book text-primary me-1"></i>Catalogue Livres
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:liste_emprunts' %}">
-                                    <i class="fas fa-hand-holding-heart text-success me-1"></i>Emprunts
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:liste_reservations' %}">
-                                    <i class="fas fa-bookmark text-warning me-1"></i>Réservations
-                                </a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="{% url 'depenses:statistiques_bibliotheque' %}">
-                                    <i class="fas fa-chart-line me-1"></i>Statistiques
-                                </a></li>
-                            </ul>
+                            </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'salaires:tableau_bord' %}">
                                 <i class="fas fa-money-check-alt me-1"></i>Salaires
                             </a>
                         </li>
-                        <li class="nav-item dropdown">
-                            <button class="nav-link dropdown-toggle btn btn-link" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <li class="nav-item">
+                            <a class="nav-link" href="{% url 'bus:index' %}">
                                 <i class="fas fa-bus me-1"></i>Transport
-                            </button>
-                            <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="{% url 'bus:index' %}">
-                                    <i class="fas fa-bus me-1"></i>Abonnements Bus
-                                </a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="{% url 'bus:tableau_bord_cantine' %}">
-                                    <i class="fas fa-utensils text-success me-1"></i>Cantine Scolaire
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'bus:liste_abonnements_cantine' %}">
-                                    <i class="fas fa-list me-1"></i>Liste Abonnements Cantine
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'bus:creer_abonnement_cantine' %}">
-                                    <i class="fas fa-plus me-1"></i>Nouvel Abonnement Cantine
-                                </a></li>
-                            </ul>
+                            </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="{% url 'notes:tableau_bord' %}">
