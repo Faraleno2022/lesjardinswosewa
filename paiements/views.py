@@ -107,15 +107,13 @@ def _applicable_grille_for_eleve(eleve, annee_scolaire=None):
 
 
 def _rebalance_garde_prolongee(eleve, echeancier):
-    """Garantit que le total dû d'un élève en garde prolongée vaut exactement le
-    forfait annuel de son niveau.
+    """Garantit que la scolarité due d'un élève en garde prolongée (les 3
+    tranches) vaut exactement le forfait annuel de son niveau.
 
     Le forfait (2 700 000 maternelle/garderie, 2 800 000 primaire, 2 850 000
-    collège 10ème) est un montant GLOBAL, frais d'inscription/réinscription
-    compris. Dès que le frais bouge — parce que la grille devient enfin
-    trouvable, ou parce qu'on passe du tarif d'inscription à celui de
-    réinscription — les tranches doivent être rééquilibrées, sinon le total
-    dérive (2 730 000 si le frais monte, 2 680 000 s'il baisse).
+    collège 10ème) couvre la scolarité seule : les frais d'inscription ou de
+    réinscription s'y ajoutent et ne sont jamais touchés ici. Ce contrôle
+    répare les échéanciers dont les tranches ont dérivé du forfait.
 
     Retourne la liste des champs modifiés (vide si rien à faire).
     """
@@ -131,14 +129,13 @@ def _rebalance_garde_prolongee(eleve, echeancier):
     if forfait is None:
         return []  # niveau non concerné par la garde prolongée
 
-    fi = Decimal(str(echeancier.frais_inscription_du or 0))
     t1 = Decimal(str(echeancier.tranche_1_due or 0))
     t2 = Decimal(str(echeancier.tranche_2_due or 0))
     t3 = Decimal(str(echeancier.tranche_3_due or 0))
-    if fi + t1 + t2 + t3 == forfait:
+    if t1 + t2 + t3 == forfait:
         return []  # déjà conforme
 
-    resultat = calculer_montants_garde_prolongee(niveau, fi, t1, t2, t3)
+    resultat = calculer_montants_garde_prolongee(niveau, t1, t2, t3)
     if resultat is None:
         return []
     echeancier.tranche_1_due, echeancier.tranche_2_due, echeancier.tranche_3_due = resultat
@@ -263,14 +260,14 @@ def ensure_echeancier_for_eleve(eleve: "Eleve", *, created_by=None, prefer_reins
         t3 = 0
     nature_frais = 'REINSCRIPTION' if prefer_reinscription else 'INSCRIPTION'
 
-    # Garde prolongée (au-delà des heures de cours) : le montant GLOBAL annuel dû
-    # (frais d'inscription/réinscription + 3 tranches) devient le forfait du niveau
-    # (maternelle/garderie, primaire, ou 10ème pour les fins de révision). Le frais
-    # d'inscription/réinscription (fi, déjà déterminé ci-dessus) n'est jamais ignoré :
-    # il est déduit du forfait pour obtenir les tranches restantes.
+    # Garde prolongée (au-delà des heures de cours) : la scolarité annuelle
+    # (les 3 tranches) devient le forfait du niveau — 2 700 000 en maternelle et
+    # garderie, 2 800 000 au primaire, 2 850 000 en 10ème pour les fins de
+    # révision. Les frais d'inscription/réinscription (fi) s'y AJOUTENT : ils
+    # restent ceux de la grille et ne sont pas touchés ici.
     if getattr(eleve, 'garde_prolongee', False):
         from eleves.tarification import calculer_montants_garde_prolongee
-        resultat = calculer_montants_garde_prolongee(niveau, fi, t1, t2, t3)
+        resultat = calculer_montants_garde_prolongee(niveau, t1, t2, t3)
         if resultat is not None:
             t1, t2, t3 = resultat
 
@@ -2744,11 +2741,12 @@ def creer_echeancier(request, eleve_id:int):
         if grille:
             t1, t2, t3 = grille.tranche_1, grille.tranche_2, grille.tranche_3
             # Garde prolongée (au-delà des heures de cours) : même règle que
-            # ensure_echeancier_for_eleve (paiements/views.py) — le montant global
-            # annuel (frais d'inscription compris) devient le forfait du niveau.
+            # ensure_echeancier_for_eleve (paiements/views.py) — la scolarité
+            # annuelle devient le forfait du niveau, les frais d'inscription
+            # s'y ajoutant sans être modifiés.
             if getattr(eleve, 'garde_prolongee', False):
                 from eleves.tarification import calculer_montants_garde_prolongee
-                resultat = calculer_montants_garde_prolongee(niveau, grille.frais_inscription, t1, t2, t3)
+                resultat = calculer_montants_garde_prolongee(niveau, t1, t2, t3)
                 if resultat is not None:
                     t1, t2, t3 = resultat
             initial.update({

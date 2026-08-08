@@ -1,9 +1,19 @@
 """Règles de tarification liées à la garde prolongée (au-delà des heures de cours).
 
 L'école peut garder certains élèves après les heures de cours, le temps que les
-parents viennent les récupérer en sortant du travail. Ces élèves basculent alors
-sur un tarif annuel GLOBAL forfaitaire (frais d'inscription/réinscription compris),
-différent selon leur cycle.
+parents viennent les récupérer en sortant du travail. La scolarité annuelle de
+ces élèves (les 3 tranches) bascule alors sur un forfait dépendant du cycle :
+
+    Crèche, TPS, PS, MS, GS, Garderie ....... 2 700 000 GNF
+    Primaire (1ère à 6ème) .................. 2 800 000 GNF
+    Collège 10ème (fins de révision) ........ 2 850 000 GNF
+
+Les frais d'inscription ou de réinscription **s'ajoutent** à ce forfait : ils
+restent lus dans la grille tarifaire du niveau (par exemple 50 000 GNF à
+l'inscription et 30 000 GNF à la réinscription en maternelle et au primaire,
+70 000 / 50 000 en 10ème année) et ne sont jamais absorbés par le forfait.
+
+Total dû pour l'année = forfait + frais d'inscription (ou de réinscription).
 """
 from decimal import Decimal
 
@@ -39,9 +49,11 @@ MONTANT_GARDE_PROLONGEE_COLLEGE_10 = Decimal('2850000')
 
 
 def montant_scolarite_garde_prolongee(niveau):
-    """Retourne le montant GLOBAL forfaitaire annuel (GNF), frais d'inscription ou
-    de réinscription compris, pour un élève en garde prolongée, selon son niveau,
-    ou ``None`` si ce niveau n'est pas concerné par cette option.
+    """Retourne le forfait annuel de SCOLARITÉ (GNF) d'un élève en garde
+    prolongée, selon son niveau, ou ``None`` si ce niveau n'est pas concerné.
+
+    Ce montant couvre les 3 tranches. Les frais d'inscription ou de
+    réinscription s'y ajoutent, ils n'en font pas partie.
     """
     if not niveau:
         return None
@@ -78,21 +90,18 @@ def repartir_scolarite_forfait(montant_tranches, t1, t2, t3):
     return nouveau_t1, nouveau_t2, nouveau_t3
 
 
-def calculer_montants_garde_prolongee(niveau, frais_inscription_ou_reinscription, t1, t2, t3):
-    """Calcule les montants dus (frais d'inscription/réinscription + 3 tranches) pour
-    un élève en garde prolongée, de sorte que le TOTAL GLOBAL (frais compris) soit
-    exactement le forfait annuel du niveau.
+def calculer_montants_garde_prolongee(niveau, t1, t2, t3):
+    """Calcule les 3 tranches dues par un élève en garde prolongée : leur somme
+    vaut le forfait annuel de son niveau.
 
-    ``frais_inscription_ou_reinscription`` est le montant déjà déterminé par
-    l'appelant selon qu'il s'agit d'une inscription ou d'une réinscription : il
-    n'est jamais ignoré, seulement déduit du forfait pour obtenir les tranches.
+    Les frais d'inscription/réinscription ne sont **pas** concernés : ils restent
+    ceux de la grille tarifaire et viennent s'ajouter à ce forfait.
 
-    Retourne ``None`` si le niveau n'est pas concerné par le forfait (le
-    calcul habituel doit alors s'appliquer), sinon un tuple (t1, t2, t3).
+    Retourne ``None`` si le niveau n'est pas concerné par la garde prolongée
+    (le calcul habituel de la grille doit alors s'appliquer), sinon un tuple
+    (t1, t2, t3).
     """
     montant_forfait = montant_scolarite_garde_prolongee(niveau)
     if montant_forfait is None:
         return None
-    fi = Decimal(frais_inscription_ou_reinscription or 0)
-    montant_tranches = max(montant_forfait - fi, Decimal('0'))
-    return repartir_scolarite_forfait(montant_tranches, t1, t2, t3)
+    return repartir_scolarite_forfait(montant_forfait, t1, t2, t3)

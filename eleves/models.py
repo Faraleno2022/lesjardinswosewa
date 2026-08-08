@@ -427,8 +427,9 @@ class Eleve(SyncTrackedModel):
         verbose_name="Garde prolongée (au-delà des heures de cours)",
         help_text=(
             "L'élève reste à l'école au-delà des heures de cours, le temps que les parents "
-            "viennent le récupérer en sortant du travail. Applique le tarif forfaitaire annuel "
-            "correspondant (maternelle/garderie ou primaire)."
+            "viennent le récupérer en sortant du travail. La scolarité annuelle passe alors au "
+            "forfait de son cycle (2 700 000 GNF en maternelle et garderie, 2 800 000 au primaire, "
+            "2 850 000 en 10ème année), auquel s'ajoutent les frais d'inscription ou de réinscription."
         ),
     )
     
