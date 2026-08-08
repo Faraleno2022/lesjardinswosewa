@@ -1602,7 +1602,22 @@ def ajouter_paiement(request, eleve_id:int=None):
                 ech = getattr(paiement.eleve, 'echeancier', None)
             except Exception:
                 ech = None
-            if not ech:
+
+            # Un échéancier peut exister mais être entièrement vide (créé avant que
+            # la grille tarifaire de son niveau/année ne soit saisie, ou lors d'un
+            # passage d'année sans grille). Tous les montants dus valent alors 0 et
+            # chaque paiement est refusé ("le reste total à payer est de 0 GNF").
+            # `ensure_echeancier_for_eleve` sait renseigner un échéancier vide à
+            # partir de la grille, et ressort immédiatement s'il est déjà rempli.
+            try:
+                total_du_actuel = int(
+                    (ech.frais_inscription_du or 0) + (ech.tranche_1_due or 0)
+                    + (ech.tranche_2_due or 0) + (ech.tranche_3_due or 0)
+                ) if ech else 0
+            except Exception:
+                total_du_actuel = 0
+
+            if not ech or total_du_actuel <= 0:
                 try:
                     ech = ensure_echeancier_for_eleve(
                         paiement.eleve,
@@ -1610,9 +1625,11 @@ def ajouter_paiement(request, eleve_id:int=None):
                         prefer_reinscription=(
                             _enrollment_preference_from_type(type_nom) is True
                         ),
-                    )
+                    ) or ech
                 except Exception:
-                    ech = None
+                    logging.getLogger(__name__).exception(
+                        "Impossible de (re)charger l'échéancier de l'élève %s depuis la grille", paiement.eleve_id
+                    )
 
             # Si on ne parvient pas à obtenir un échéancier, on empêche un enregistrement potentiellement incohérent
             if not ech:
@@ -2118,10 +2135,28 @@ def ajouter_paiement(request, eleve_id:int=None):
                     montant_autorise = max(0, restant_global)
                 except Exception:
                     montant_autorise = 0
-                messages.error(
-                    request,
-                    f"Montant trop élevé: le reste total à payer pour cet élève est de {montant_autorise:,} GNF. Veuillez saisir un montant inférieur ou égal.",
-                )
+                if total_du <= 0:
+                    # Cas particulier : rien n'est dû car l'échéancier est vide.
+                    # Le vrai problème n'est pas le montant saisi mais l'absence de
+                    # grille tarifaire applicable — on oriente vers la bonne correction.
+                    niveau_lbl = ''
+                    annee_lbl = ''
+                    try:
+                        niveau_lbl = paiement.eleve.classe.get_niveau_display()
+                        annee_lbl = paiement.eleve.classe.annee_scolaire
+                    except Exception:
+                        pass
+                    messages.error(
+                        request,
+                        "Aucun montant n'est dû pour cet élève : son échéancier est vide. "
+                        f"Vérifiez qu'une grille tarifaire existe bien pour le niveau « {niveau_lbl} » "
+                        f"et l'année scolaire « {annee_lbl} » de sa classe, puis réessayez.",
+                    )
+                else:
+                    messages.error(
+                        request,
+                        f"Montant trop élevé: le reste total à payer pour cet élève est de {montant_autorise:,} GNF. Veuillez saisir un montant inférieur ou égal.",
+                    )
                 return render(request, 'paiements/form_paiement.html', {
                     'titre_page': titre_page,
                     'action': action,
