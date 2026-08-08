@@ -219,14 +219,16 @@ def ensure_echeancier_for_eleve(eleve: "Eleve", *, created_by=None, prefer_reins
         t3 = 0
     nature_frais = 'REINSCRIPTION' if prefer_reinscription else 'INSCRIPTION'
 
-    # Garde prolongée (au-delà des heures de cours) : la scolarité annuelle
-    # est remplacée par le forfait correspondant (maternelle/garderie ou primaire).
-    # Les frais d'inscription/réinscription restent calculés normalement.
+    # Garde prolongée (au-delà des heures de cours) : le montant GLOBAL annuel dû
+    # (frais d'inscription/réinscription + 3 tranches) devient le forfait du niveau
+    # (maternelle/garderie, primaire, ou 10ème pour les fins de révision). Le frais
+    # d'inscription/réinscription (fi, déjà déterminé ci-dessus) n'est jamais ignoré :
+    # il est déduit du forfait pour obtenir les tranches restantes.
     if getattr(eleve, 'garde_prolongee', False):
-        from eleves.tarification import montant_scolarite_garde_prolongee, repartir_scolarite_forfait
-        montant_forfait = montant_scolarite_garde_prolongee(niveau)
-        if montant_forfait is not None:
-            t1, t2, t3 = repartir_scolarite_forfait(montant_forfait, t1, t2, t3)
+        from eleves.tarification import calculer_montants_garde_prolongee
+        resultat = calculer_montants_garde_prolongee(niveau, fi, t1, t2, t3)
+        if resultat is not None:
+            t1, t2, t3 = resultat
 
     # Dates d'échéance par défaut (priorité aux valeurs de la grille si présentes)
     try:
