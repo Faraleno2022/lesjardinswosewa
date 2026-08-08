@@ -884,14 +884,16 @@ def nouvelle_annee_creer(request):
                         t2 = Decimal(str(grille.tranche_2 or 0)) if grille else Decimal('0')
                         t3 = Decimal(str(grille.tranche_3 or 0)) if grille else Decimal('0')
 
-                        # Garde prolongée (au-delà des heures de cours) : la scolarité
-                        # annuelle est remplacée par le forfait correspondant. Les frais
-                        # de réinscription restent calculés normalement.
+                        # Garde prolongée (au-delà des heures de cours) : le montant
+                        # GLOBAL annuel dû (réinscription + 3 tranches) devient le
+                        # forfait du niveau. Les frais de réinscription (fi) ne sont
+                        # jamais ignorés : ils sont déduits du forfait pour obtenir
+                        # les tranches restantes.
                         if getattr(eleve, 'garde_prolongee', False):
-                            from .tarification import montant_scolarite_garde_prolongee, repartir_scolarite_forfait
-                            montant_forfait = montant_scolarite_garde_prolongee(niveau)
-                            if montant_forfait is not None:
-                                t1, t2, t3 = repartir_scolarite_forfait(montant_forfait, t1, t2, t3)
+                            from .tarification import calculer_montants_garde_prolongee
+                            resultat = calculer_montants_garde_prolongee(niveau, fi, t1, t2, t3)
+                            if resultat is not None:
+                                t1, t2, t3 = resultat
 
                         EcheancierPaiement.objects.create(
                             eleve=eleve,
