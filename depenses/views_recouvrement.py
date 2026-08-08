@@ -18,11 +18,12 @@ from django.utils import timezone
 
 from eleves.models import Eleve
 from salaires.models import AffectationClasse, Enseignant, EtatSalaire
-from utilisateurs.utils import filter_by_user_school, user_school
+from utilisateurs.utils import filter_by_user_school, user_is_superadmin, user_school
 
 from .forms_recouvrement import (
     AbonnementInformatiqueForm, DepenseCuisineForm, DepenseDocumentForm, VersementForm,
 )
+from .models import Depense
 from .models_recouvrement import (
     AbonnementInformatique, DepenseCuisine, DepenseDocument, Versement,
 )
@@ -118,6 +119,7 @@ def hub_recouvrement(request):
 
     cartes = []
     total_sorties = total_entrees = 0
+    total_sorties_mois = 0
 
     for cle, cfg in MODULES.items():
         qs = _queryset(cle, request.user)
@@ -125,6 +127,7 @@ def hub_recouvrement(request):
         total_mois, nombre_mois = _totaux(qs.filter(date__gte=debut_mois))
         if cfg['sens'] == 'sortie':
             total_sorties += total
+            total_sorties_mois += total_mois
         else:
             total_entrees += total
         cartes.append({
@@ -152,9 +155,31 @@ def hub_recouvrement(request):
         etats_payes.filter(periode__annee=aujourdhui.year, periode__mois=aujourdhui.month)
     )
 
+    # Dépenses générales (module Dépenses principal, factures fournisseurs) :
+    # comptées à part, sa logique (validation, fournisseurs...) étant différente.
+    depenses_qs = Depense.objects.all()
+    if not user_is_superadmin(request.user):
+        ecole = user_school(request.user)
+        depenses_qs = depenses_qs.filter(cree_par__profil__ecole=ecole) if ecole else Depense.objects.none()
+    total_depenses = depenses_qs.aggregate(total=Sum('montant_ttc'))['total'] or 0
+    nombre_depenses = depenses_qs.count()
+    depenses_mois_qs = depenses_qs.filter(date_facture__gte=debut_mois)
+    total_depenses_mois = depenses_mois_qs.aggregate(total=Sum('montant_ttc'))['total'] or 0
+    nombre_depenses_mois = depenses_mois_qs.count()
+    total_sorties += total_depenses
+    total_sorties_mois += total_depenses_mois
+
+    # Versements : mis en avant à part dans le bandeau de synthèse (ce sont des entrées)
+    total_versements = next((c['total'] for c in cartes if c['cle'] == 'versement'), 0)
+
     contexte = {
         'titre_page': 'Recouvrement',
         'cartes': cartes,
+        'carte_depenses': {
+            'total': int(total_depenses), 'nombre': nombre_depenses,
+            'total_mois': int(total_depenses_mois), 'nombre_mois': nombre_depenses_mois,
+        },
+        'total_versements': total_versements,
         'carte_informatique': {
             'total': total_abo, 'nombre': nombre_abo,
             'expirant': expirant, 'expires': expires,
@@ -165,6 +190,7 @@ def hub_recouvrement(request):
             'total_mois': total_salaires_mois, 'nombre_mois': nombre_salaires_mois,
         },
         'total_sorties': total_sorties,
+        'total_sorties_mois': total_sorties_mois,
         'total_entrees': total_entrees,
         'solde': total_entrees - total_sorties,
         'mois_courant': debut_mois,
