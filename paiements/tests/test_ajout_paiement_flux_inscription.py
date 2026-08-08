@@ -7,16 +7,18 @@ from django.urls import reverse
 
 from eleves.models import Classe, Ecole, Eleve, GrilleTarifaire, Responsable
 from paiements.models import EcheancierPaiement, ModePaiement, Paiement, TypePaiement
-from utilisateurs.models import Profil
 
 from .support import TEST_MIDDLEWARE
 
 
 @override_settings(MIDDLEWARE=TEST_MIDDLEWARE)
 class AjoutPaiementFluxInscriptionTests(TestCase):
-    """Vérifie l'enchaînement : ajout paiement -> validation automatique de
-    l'échéancier et du paiement -> retour au formulaire d'inscription, lorsque
-    `next` est fourni (flux "nouvel élève")."""
+    """Flux d'inscription : Ajouter élève -> Ajouter paiement -> fiche du paiement
+    (où une remise peut être appliquée avant validation) -> validation -> retour
+    au formulaire d'inscription.
+
+    Le paiement n'est jamais validé automatiquement : le comptable doit pouvoir
+    appliquer une remise d'abord."""
 
     def setUp(self):
         self.ecole = Ecole.objects.create(
@@ -83,24 +85,78 @@ class AjoutPaiementFluxInscriptionTests(TestCase):
             data["next"] = next_url
         return self.client.post(url, data)
 
-    def test_avec_next_le_paiement_est_valide_automatiquement_et_retourne_a_inscription(self):
+    def test_avec_next_on_arrive_sur_la_fiche_du_paiement_sans_validation_auto(self):
+        """Le paiement doit rester EN_ATTENTE et l'utilisateur atterrir sur la fiche
+        du paiement, pour pouvoir appliquer une remise puis valider lui-même."""
         student = self._student("FLUX-001")
         next_url = reverse("eleves:ajouter_eleve")
 
         response = self._post_payment(student, next_url=next_url)
 
-        self.assertRedirects(response, next_url, fetch_redirect_response=False)
-
         paiement = Paiement.objects.get(eleve=student)
+        self.assertEqual(paiement.statut, "EN_ATTENTE")
+        self.assertIsNone(paiement.date_validation)
+
+        detail_url = reverse("paiements:detail_paiement", args=[paiement.pk])
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            response.url.startswith(detail_url),
+            f"Attendu une redirection vers {detail_url}, obtenu {response.url}",
+        )
+        self.assertIn("next=", response.url)
+
+        # L'échéancier, lui, est bien créé/synchronisé dès l'ajout.
+        self.assertTrue(EcheancierPaiement.objects.filter(eleve=student).exists())
+
+    def test_la_fiche_transmet_next_au_formulaire_de_validation(self):
+        student = self._student("FLUX-002")
+        next_url = reverse("eleves:ajouter_eleve")
+        self._post_payment(student, next_url=next_url)
+        paiement = Paiement.objects.get(eleve=student)
+
+        response = self.client.get(
+            reverse("paiements:detail_paiement", args=[paiement.pk]), {"next": next_url}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["next_url"], next_url)
+        self.assertContains(response, f'name="next" value="{next_url}"')
+
+    def test_validation_renvoie_au_formulaire_d_inscription(self):
+        student = self._student("FLUX-003")
+        next_url = reverse("eleves:ajouter_eleve")
+        self._post_payment(student, next_url=next_url)
+        paiement = Paiement.objects.get(eleve=student)
+
+        response = self.client.post(
+            reverse("paiements:valider_paiement", args=[paiement.pk]),
+            {"next": next_url},
+        )
+
+        self.assertRedirects(response, next_url, fetch_redirect_response=False)
+        paiement.refresh_from_db()
         self.assertEqual(paiement.statut, "VALIDE")
         self.assertEqual(paiement.valide_par, self.user)
-        self.assertIsNotNone(paiement.date_validation)
 
-        echeancier = EcheancierPaiement.objects.get(eleve=student)
-        self.assertEqual(echeancier.frais_inscription_paye, Decimal("30000"))
+    def test_validation_sans_next_reste_sur_la_fiche(self):
+        """Comportement historique inchangé hors flux d'inscription."""
+        student = self._student("FLUX-004")
+        self._post_payment(student, next_url=None)
+        paiement = Paiement.objects.get(eleve=student)
 
-    def test_sans_next_le_paiement_reste_en_attente(self):
-        student = self._student("FLUX-002")
+        response = self.client.post(
+            reverse("paiements:valider_paiement", args=[paiement.pk])
+        )
+
+        self.assertRedirects(
+            response, reverse("paiements:detail_paiement", args=[paiement.pk])
+        )
+        paiement.refresh_from_db()
+        self.assertEqual(paiement.statut, "VALIDE")
+
+    def test_sans_next_on_va_sur_l_echeancier(self):
+        """Ajout de paiement classique depuis la fiche élève : comportement inchangé."""
+        student = self._student("FLUX-005")
 
         response = self._post_payment(student, next_url=None)
 
@@ -108,42 +164,5 @@ class AjoutPaiementFluxInscriptionTests(TestCase):
             response,
             reverse("paiements:echeancier_eleve", args=[student.pk]),
         )
-
         paiement = Paiement.objects.get(eleve=student)
         self.assertEqual(paiement.statut, "EN_ATTENTE")
-        self.assertIsNone(paiement.date_validation)
-
-        echeancier = EcheancierPaiement.objects.get(eleve=student)
-        self.assertEqual(echeancier.frais_inscription_paye, Decimal("0"))
-
-    def test_avec_next_mais_sans_permission_le_paiement_reste_en_attente(self):
-        # Une secrétaire (rôle sans droit de validation implicite, contrairement au
-        # rôle COMPTABLE) peut saisir un paiement mais pas le valider automatiquement.
-        secretaire = get_user_model().objects.create_user(
-            username="secretaire_sans_droit",
-            email="secretaire_sans_droit@example.com",
-            password="pass12345",
-        )
-        Profil.objects.update_or_create(
-            user=secretaire,
-            defaults=dict(
-                role="SECRETAIRE",
-                ecole=self.ecole,
-                is_validated=True,
-                actif=True,
-                peut_ajouter_paiements=True,
-                peut_valider_paiements=False,
-            ),
-        )
-        self.client.force_login(secretaire)
-
-        student = self._student("FLUX-003")
-        next_url = reverse("eleves:ajouter_eleve")
-
-        response = self._post_payment(student, next_url=next_url)
-
-        self.assertRedirects(response, next_url, fetch_redirect_response=False)
-
-        paiement = Paiement.objects.get(eleve=student)
-        self.assertEqual(paiement.statut, "EN_ATTENTE")
-        self.assertIsNone(paiement.valide_par)

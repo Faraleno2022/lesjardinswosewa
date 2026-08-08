@@ -109,6 +109,7 @@
                     <!-- Formulaire d'application des remises -->
                     <form method="post" id="remiseForm">
                         {% csrf_token %}
+                        {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
                         
                         <div class="row">
                             <div class="col-md-8">
