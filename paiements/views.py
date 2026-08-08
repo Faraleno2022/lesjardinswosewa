@@ -145,6 +145,28 @@ def _align_enrollment_fee(eleve, echeancier, preferred_type_name=None):
     if current_fee in configured_fees and current_fee != expected_fee:
         echeancier.frais_inscription_du = expected_fee
         update_fields.append("frais_inscription_du")
+
+        # Garde prolongée : le forfait annuel est un montant GLOBAL, frais
+        # d'inscription/réinscription compris. Modifier ce frais sans rééquilibrer
+        # les tranches ferait dépasser le forfait (ex. 2 700 000 -> 2 730 000).
+        if getattr(eleve, 'garde_prolongee', False):
+            from eleves.tarification import calculer_montants_garde_prolongee
+            niveau = getattr(getattr(eleve, 'classe', None), 'niveau', None)
+            resultat = calculer_montants_garde_prolongee(
+                niveau,
+                expected_fee,
+                echeancier.tranche_1_due,
+                echeancier.tranche_2_due,
+                echeancier.tranche_3_due,
+            )
+            if resultat is not None:
+                (
+                    echeancier.tranche_1_due,
+                    echeancier.tranche_2_due,
+                    echeancier.tranche_3_due,
+                ) = resultat
+                update_fields += ["tranche_1_due", "tranche_2_due", "tranche_3_due"]
+
     if update_fields:
         echeancier.save(update_fields=update_fields + ["date_modification"])
     return echeancier
