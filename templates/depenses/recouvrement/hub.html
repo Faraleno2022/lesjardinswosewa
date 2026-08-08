@@ -3,246 +3,357 @@
 {% block title %}Recouvrement - {{ block.super }}{% endblock %}
 
 {% block content %}
-<div class="mb-4">
-  <h1 class="h3 mb-1"><i class="fas fa-hand-holding-dollar text-primary me-2"></i>Recouvrement</h1>
-  <p class="text-muted mb-0">Vue consolidée de tous les modules.</p>
+<div class="rec-header mb-4">
+  <div class="rec-header-icon"><i class="fas fa-hand-holding-dollar"></i></div>
+  <div>
+    <h1 class="h3 mb-1">Recouvrement</h1>
+    <p class="text-muted mb-0">Tableau de bord général de tous les modules, puis accès à chaque registre.</p>
+  </div>
 </div>
 
+<!-- ===== Bandeau KPI ===== -->
 <div class="row g-3 mb-4">
-  <div class="col-md-4">
-    <div class="card border-0 shadow-sm h-100 border-start border-4 border-success">
-      <div class="card-body">
-        <div class="text-muted small text-uppercase">Total des entrées</div>
-        <div class="h3 mb-0 text-success">{{ total_entrees|intcomma }} <small>GNF</small></div>
-        <div class="small text-muted">Versements et abonnements informatique</div>
-      </div>
+  <div class="col-6 col-lg-3">
+    <div class="rec-kpi rec-kpi--danger">
+      <div class="rec-kpi-icon"><i class="fas fa-arrow-trend-up"></i></div>
+      <div class="rec-kpi-value">{{ total_sorties|intcomma }} <small>GNF</small></div>
+      <div class="rec-kpi-label">Total dépensé</div>
+      <div class="rec-kpi-sub">Dépenses, cuisine et documents</div>
     </div>
   </div>
-  <div class="col-md-4">
-    <div class="card border-0 shadow-sm h-100 border-start border-4 border-danger">
-      <div class="card-body">
-        <div class="text-muted small text-uppercase">Total des sorties</div>
-        <div class="h3 mb-0 text-danger">{{ total_sorties|intcomma }} <small>GNF</small></div>
-        <div class="small text-muted">Cuisine et documents</div>
-      </div>
+  <div class="col-6 col-lg-3">
+    <div class="rec-kpi rec-kpi--warning">
+      <div class="rec-kpi-icon"><i class="fas fa-calendar-day"></i></div>
+      <div class="rec-kpi-value">{{ total_sorties_mois|intcomma }} <small>GNF</small></div>
+      <div class="rec-kpi-label">Dépensé ce mois</div>
+      <div class="rec-kpi-sub">Depuis le 1er du mois en cours</div>
     </div>
   </div>
-  <div class="col-md-4">
-    <div class="card border-0 shadow-sm h-100 border-start border-4 border-primary">
-      <div class="card-body">
-        <div class="text-muted small text-uppercase">Solde</div>
-        <div class="h3 mb-0 text-primary">{{ solde|intcomma }} <small>GNF</small></div>
-        <div class="small text-muted">Entrées moins sorties</div>
-      </div>
+  <div class="col-6 col-lg-3">
+    <div class="rec-kpi rec-kpi--success">
+      <div class="rec-kpi-icon"><i class="fas fa-hand-holding-dollar"></i></div>
+      <div class="rec-kpi-value">{{ total_versements|intcomma }} <small>GNF</small></div>
+      <div class="rec-kpi-label">Versements encaissés</div>
+      <div class="rec-kpi-sub">Comptés à part : ce sont des entrées</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="rec-kpi rec-kpi--primary">
+      <div class="rec-kpi-icon"><i class="fas fa-laptop"></i></div>
+      <div class="rec-kpi-value">{{ carte_informatique.actifs }} <small>actifs</small></div>
+      <div class="rec-kpi-label">Abonnements informatique</div>
+      <div class="rec-kpi-sub">{{ carte_informatique.expires }} expiré{{ carte_informatique.expires|pluralize }}</div>
     </div>
   </div>
 </div>
 
-<h2 class="h5 text-muted mb-3">Modules</h2>
-<div class="row g-4">
+<!-- ===== Modules du recouvrement ===== -->
+<h2 class="rec-section-title"><i class="fas fa-layer-group me-2"></i>Modules du recouvrement</h2>
+<div class="row g-4 mb-4">
+  <div class="col-md-6 col-xl-4">
+    <div class="rec-card rec-card--primary">
+      <div class="rec-card-head">
+        <span class="rec-card-icon"><i class="fas fa-receipt"></i></span>
+        <div>
+          <h3 class="rec-card-title">Dépenses</h3>
+          <p class="rec-card-text">Factures fournisseurs, validation et suivi des paiements</p>
+        </div>
+      </div>
+      <div class="rec-card-stat">
+        {{ carte_depenses.nombre }} dépense{{ carte_depenses.nombre|pluralize }} ·
+        {{ carte_depenses.total|intcomma }} GNF
+        <span class="text-muted">(dont {{ carte_depenses.total_mois|intcomma }} GNF ce mois)</span>
+      </div>
+      <div class="rec-card-actions">
+        <a href="{% url 'depenses:tableau_bord' %}" class="btn btn-sm btn-primary">
+          <i class="fas fa-chart-line me-1"></i>Tableau de bord
+        </a>
+        <a href="{% url 'depenses:liste_depenses' %}" class="btn btn-sm btn-outline-secondary">
+          <i class="fas fa-list me-1"></i>Liste
+        </a>
+      </div>
+    </div>
+  </div>
+
   {% for carte in cartes %}
-  <div class="col-md-6 col-xl-3">
-    <div class="card h-100 shadow-sm border-0">
-      <div class="card-body">
-        <div class="d-flex align-items-center mb-3">
-          <span class="badge bg-{{ carte.couleur }} bg-opacity-25 text-{{ carte.couleur }} p-3 me-3">
-            <i class="{{ carte.icone }} fa-lg"></i>
-          </span>
-          <div>
-            <h3 class="h6 mb-0">{{ carte.titre }}</h3>
-            <small class="text-muted">{{ carte.nombre }} opération{{ carte.nombre|pluralize }}</small>
-          </div>
+  <div class="col-md-6 col-xl-4">
+    <div class="rec-card rec-card--{{ carte.couleur }}">
+      <div class="rec-card-head">
+        <span class="rec-card-icon"><i class="{{ carte.icone }}"></i></span>
+        <div>
+          <h3 class="rec-card-title">{{ carte.titre }}</h3>
+          <p class="rec-card-text">
+            {% if carte.cle == 'cuisine' %}Achats et frais engagés pour la cuisine de l'établissement
+            {% elif carte.cle == 'document' %}Impressions, reprographie et fournitures administratives
+            {% elif carte.cle == 'versement' %}Versements d'espèces vers la banque, le coffre ou la direction
+            {% endif %}
+          </p>
         </div>
-        <div class="row text-center g-2 mb-3">
-          <div class="col-6 border-end">
-            <div class="fw-bold">{{ carte.total|intcomma }}</div>
-            <div class="small text-muted">Total GNF</div>
-          </div>
-          <div class="col-6">
-            <div class="fw-bold">{{ carte.total_mois|intcomma }}</div>
-            <div class="small text-muted">Ce mois</div>
-          </div>
-        </div>
-        <div class="d-grid gap-2">
-          <a href="{% url 'depenses:recouvrement_tableau_bord' cle=carte.cle %}" class="btn btn-sm btn-primary">
-            <i class="fas fa-chart-line me-1"></i>Tableau de bord
-          </a>
-          <a href="{% url 'depenses:recouvrement_liste' cle=carte.cle %}" class="btn btn-sm btn-outline-secondary">
-            <i class="fas fa-list me-1"></i>Saisie et liste
-          </a>
-        </div>
+      </div>
+      <div class="rec-card-stat">
+        {{ carte.nombre }} opération{{ carte.nombre|pluralize }} ·
+        {{ carte.total|intcomma }} GNF
+        <span class="text-muted">(dont {{ carte.total_mois|intcomma }} GNF ce mois)</span>
+      </div>
+      <div class="rec-card-actions">
+        <a href="{% url 'depenses:recouvrement_tableau_bord' cle=carte.cle %}" class="btn btn-sm btn-primary">
+          <i class="fas fa-chart-line me-1"></i>Tableau de bord
+        </a>
+        <a href="{% url 'depenses:recouvrement_liste' cle=carte.cle %}" class="btn btn-sm btn-outline-secondary">
+          <i class="fas fa-list me-1"></i>Saisie et liste
+        </a>
       </div>
     </div>
   </div>
   {% endfor %}
 
-  <div class="col-md-6 col-xl-3">
-    <div class="card h-100 shadow-sm border-0">
-      <div class="card-body">
-        <div class="d-flex align-items-center mb-3">
-          <span class="badge bg-primary bg-opacity-25 text-primary p-3 me-3">
-            <i class="fas fa-laptop fa-lg"></i>
-          </span>
-          <div>
-            <h3 class="h6 mb-0">Informatique</h3>
-            <small class="text-muted">{{ carte_informatique.nombre }} abonnement{{ carte_informatique.nombre|pluralize }}</small>
-          </div>
+  <div class="col-md-6 col-xl-4">
+    <div class="rec-card rec-card--primary">
+      <div class="rec-card-head">
+        <span class="rec-card-icon"><i class="fas fa-laptop"></i></span>
+        <div>
+          <h3 class="rec-card-title">Informatique</h3>
+          <p class="rec-card-text">Abonnements des élèves, alertes de fin et cartes d'abonnement</p>
         </div>
-        <div class="row text-center g-2 mb-3">
-          <div class="col-4 border-end">
-            <div class="fw-bold text-success">{{ carte_informatique.actifs }}</div>
-            <div class="small text-muted">Actifs</div>
-          </div>
-          <div class="col-4 border-end">
-            <div class="fw-bold text-warning">{{ carte_informatique.expirant }}</div>
-            <div class="small text-muted">Échéance</div>
-          </div>
-          <div class="col-4">
-            <div class="fw-bold text-danger">{{ carte_informatique.expires }}</div>
-            <div class="small text-muted">Expirés</div>
-          </div>
-        </div>
-        <div class="d-grid gap-2">
-          <a href="{% url 'depenses:informatique_tableau_bord' %}" class="btn btn-sm btn-primary">
-            <i class="fas fa-chart-line me-1"></i>Tableau de bord
-          </a>
-          <a href="{% url 'depenses:informatique_liste' %}" class="btn btn-sm btn-outline-secondary">
-            <i class="fas fa-list me-1"></i>Abonnements
-          </a>
-        </div>
+      </div>
+      <div class="rec-card-stat">
+        {{ carte_informatique.nombre }} abonnement{{ carte_informatique.nombre|pluralize }} ·
+        {{ carte_informatique.total|intcomma }} GNF
+        <span class="text-muted">({{ carte_informatique.actifs }} actif{{ carte_informatique.actifs|pluralize }})</span>
+      </div>
+      <div class="rec-card-actions">
+        <a href="{% url 'depenses:informatique_tableau_bord' %}" class="btn btn-sm btn-primary">
+          <i class="fas fa-chart-line me-1"></i>Tableau de bord
+        </a>
+        <a href="{% url 'depenses:informatique_liste' %}" class="btn btn-sm btn-outline-secondary">
+          <i class="fas fa-list me-1"></i>Abonnements
+        </a>
       </div>
     </div>
   </div>
 
-  <div class="col-md-6 col-xl-3">
-    <div class="card h-100 shadow-sm border-0">
-      <div class="card-body">
-        <div class="d-flex align-items-center mb-3">
-          <span class="badge bg-info bg-opacity-25 text-info p-3 me-3">
-            <i class="fas fa-chalkboard-teacher fa-lg"></i>
-          </span>
-          <div>
-            <h3 class="h6 mb-0">Salaires enseignants</h3>
-            <small class="text-muted">{{ carte_salaires.nombre }} état{{ carte_salaires.nombre|pluralize }} payé{{ carte_salaires.nombre|pluralize }}</small>
-          </div>
+  <div class="col-md-6 col-xl-4">
+    <div class="rec-card rec-card--info">
+      <div class="rec-card-head">
+        <span class="rec-card-icon"><i class="fas fa-chalkboard-teacher"></i></span>
+        <div>
+          <h3 class="rec-card-title">Salaires enseignants</h3>
+          <p class="rec-card-text">Suivi des salaires payés par enseignant, mois et niveau</p>
         </div>
-        <div class="row text-center g-2 mb-3">
-          <div class="col-6 border-end">
-            <div class="fw-bold">{{ carte_salaires.total|intcomma }}</div>
-            <div class="small text-muted">Total GNF</div>
-          </div>
-          <div class="col-6">
-            <div class="fw-bold">{{ carte_salaires.total_mois|intcomma }}</div>
-            <div class="small text-muted">Ce mois</div>
-          </div>
-        </div>
-        <div class="d-grid gap-2">
-          <a href="{% url 'depenses:salaires_dashboard' %}" class="btn btn-sm btn-primary">
-            <i class="fas fa-chart-line me-1"></i>Tableau de bord
-          </a>
-        </div>
+      </div>
+      <div class="rec-card-stat">
+        {{ carte_salaires.nombre }} état{{ carte_salaires.nombre|pluralize }} payé{{ carte_salaires.nombre|pluralize }} ·
+        {{ carte_salaires.total|intcomma }} GNF
+        <span class="text-muted">(dont {{ carte_salaires.total_mois|intcomma }} GNF ce mois)</span>
+      </div>
+      <div class="rec-card-actions">
+        <a href="{% url 'depenses:salaires_dashboard' %}" class="btn btn-sm btn-primary">
+          <i class="fas fa-chart-line me-1"></i>Tableau de bord
+        </a>
       </div>
     </div>
   </div>
 </div>
 
-<h2 class="h5 text-muted mt-4 mb-3">Dépenses et fournitures</h2>
-<div class="row g-4">
-  <div class="col-md-6 col-xl-3">
-    <a href="{% url 'depenses:tableau_bord' %}" class="hub-module-card primary">
-      <i class="fas fa-receipt hub-module-icon"></i>
-      <h3 class="hub-module-title">Dépenses</h3>
-      <p class="hub-module-text">Factures fournisseurs, validation et suivi des paiements</p>
+<!-- ===== Logistique ===== -->
+<h2 class="rec-section-title"><i class="fas fa-boxes-stacked me-2"></i>Logistique</h2>
+<div class="row g-4 mb-4">
+  <div class="col-md-6 col-xl-4">
+    <a href="{% url 'depenses:dashboard_logistique' %}" class="rec-mini-card rec-mini-card--primary">
+      <span class="rec-mini-icon"><i class="fas fa-tachometer-alt"></i></span>
+      <div>
+        <h3 class="rec-mini-title">Logistique</h3>
+        <p class="rec-mini-text">Biens de l'établissement, stocks et suivi du papier RAM</p>
+        <span class="rec-mini-cta">Tableau de bord, biens et papier RAM <i class="fas fa-arrow-right ms-1"></i></span>
+      </div>
     </a>
   </div>
-  <div class="col-md-6 col-xl-3">
-    <a href="{% url 'depenses:liste_depenses' %}" class="hub-module-card primary">
-      <i class="fas fa-list hub-module-icon"></i>
-      <h3 class="hub-module-title">Liste des dépenses</h3>
-      <p class="hub-module-text">Consulter et filtrer toutes les dépenses enregistrées</p>
+  <div class="col-md-6 col-xl-4">
+    <a href="{% url 'depenses:liste_biens' %}" class="rec-mini-card rec-mini-card--info">
+      <span class="rec-mini-icon"><i class="fas fa-building"></i></span>
+      <div>
+        <h3 class="rec-mini-title">Biens de l'établissement</h3>
+        <p class="rec-mini-text">Inventaire des biens achetés et de leur disponibilité</p>
+        <span class="rec-mini-cta">Liste et saisie des biens <i class="fas fa-arrow-right ms-1"></i></span>
+      </div>
     </a>
   </div>
-  <div class="col-md-6 col-xl-3">
-    <a href="{% url 'depenses:gestion_categories' %}" class="hub-module-card info">
-      <i class="fas fa-tags hub-module-icon"></i>
-      <h3 class="hub-module-title">Catégories</h3>
-      <p class="hub-module-text">Gérer les catégories utilisées pour classer les dépenses</p>
+  <div class="col-md-6 col-xl-4">
+    <a href="{% url 'depenses:gestion_papier_ram' %}" class="rec-mini-card rec-mini-card--success">
+      <span class="rec-mini-icon"><i class="fas fa-copy"></i></span>
+      <div>
+        <h3 class="rec-mini-title">Papier RAM</h3>
+        <p class="rec-mini-text">Contributions des élèves en papier ou en espèces</p>
+        <span class="rec-mini-cta">Suivi des contributions <i class="fas fa-arrow-right ms-1"></i></span>
+      </div>
     </a>
   </div>
-  <div class="col-md-6 col-xl-3">
-    <a href="{% url 'depenses:tableau_bord_fournitures' %}" class="hub-module-card success">
-      <i class="fas fa-store hub-module-icon"></i>
-      <h3 class="hub-module-title">Fournitures & ventes</h3>
-      <p class="hub-module-text">Produits en vente, stocks et ventes aux élèves</p>
+  <div class="col-md-6 col-xl-4">
+    <a href="{% url 'depenses:tableau_bord_fournitures' %}" class="rec-mini-card rec-mini-card--warning">
+      <span class="rec-mini-icon"><i class="fas fa-store"></i></span>
+      <div>
+        <h3 class="rec-mini-title">Fournitures scolaires</h3>
+        <p class="rec-mini-text">Produits en vente, stocks et ventes aux élèves</p>
+        <span class="rec-mini-cta">Tableau de bord et ventes <i class="fas fa-arrow-right ms-1"></i></span>
+      </div>
+    </a>
+  </div>
+  <div class="col-md-6 col-xl-4">
+    <a href="{% url 'depenses:dashboard_bibliotheque' %}" class="rec-mini-card rec-mini-card--purple">
+      <span class="rec-mini-icon"><i class="fas fa-book-reader"></i></span>
+      <div>
+        <h3 class="rec-mini-title">Bibliothèque</h3>
+        <p class="rec-mini-text">Catalogue, emprunts, réservations et statistiques</p>
+        <span class="rec-mini-cta">Tableau de bord et catalogue <i class="fas fa-arrow-right ms-1"></i></span>
+      </div>
     </a>
   </div>
 </div>
 
-<h2 class="h5 text-muted mt-4 mb-3">Logistique</h2>
-<div class="row g-4">
-  <div class="col-md-6 col-xl-3">
-    <a href="{% url 'depenses:dashboard_logistique' %}" class="hub-module-card primary">
-      <i class="fas fa-tachometer-alt hub-module-icon"></i>
-      <h3 class="hub-module-title">Tableau de bord</h3>
-      <p class="hub-module-text">Vue d'ensemble des biens et fournitures de l'établissement</p>
-    </a>
-  </div>
-  <div class="col-md-6 col-xl-3">
-    <a href="{% url 'depenses:liste_biens' %}" class="hub-module-card info">
-      <i class="fas fa-building hub-module-icon"></i>
-      <h3 class="hub-module-title">Biens de l'établissement</h3>
-      <p class="hub-module-text">Inventaire des biens achetés et de leur disponibilité</p>
-    </a>
-  </div>
-  <div class="col-md-6 col-xl-3">
-    <a href="{% url 'depenses:gestion_papier_ram' %}" class="hub-module-card success">
-      <i class="fas fa-copy hub-module-icon"></i>
-      <h3 class="hub-module-title">Papier RAM</h3>
-      <p class="hub-module-text">Contributions des élèves en papier ou en espèces</p>
-    </a>
-  </div>
-  <div class="col-md-6 col-xl-3">
-    <a href="{% url 'depenses:dashboard_bibliotheque' %}" class="hub-module-card warning">
-      <i class="fas fa-book-reader hub-module-icon"></i>
-      <h3 class="hub-module-title">Bibliothèque</h3>
-      <p class="hub-module-text">Catalogue, emprunts, réservations et statistiques</p>
-    </a>
-  </div>
+<!-- ===== Raccourcis ===== -->
+<h2 class="rec-section-title"><i class="fas fa-bolt me-2"></i>Raccourcis</h2>
+<div class="rec-shortcuts">
+  <a href="{% url 'depenses:ajouter_depense' %}" class="rec-shortcut">
+    <i class="fas fa-plus"></i>Nouvelle dépense
+  </a>
+  <a href="{% url 'depenses:recouvrement_liste' cle='versement' %}" class="rec-shortcut">
+    <i class="fas fa-hand-holding-dollar"></i>Nouveau versement
+  </a>
+  <a href="{% url 'depenses:recouvrement_liste' cle='cuisine' %}" class="rec-shortcut">
+    <i class="fas fa-utensils"></i>Dépense cuisine
+  </a>
+  <a href="{% url 'depenses:recouvrement_liste' cle='document' %}" class="rec-shortcut">
+    <i class="fas fa-file-invoice"></i>Dépense document
+  </a>
+  <a href="{% url 'depenses:informatique_nouveau' %}" class="rec-shortcut">
+    <i class="fas fa-laptop"></i>Abonnement informatique
+  </a>
+  <a href="{% url 'depenses:creer_bien' %}" class="rec-shortcut">
+    <i class="fas fa-building"></i>Ajouter un bien
+  </a>
+  <a href="{% url 'depenses:ajouter_papier_ram' %}" class="rec-shortcut">
+    <i class="fas fa-copy"></i>Contribution papier RAM
+  </a>
+  <a href="{% url 'depenses:creer_emprunt' %}" class="rec-shortcut">
+    <i class="fas fa-hand-holding-heart"></i>Nouvel emprunt
+  </a>
 </div>
 {% endblock %}
 
 {% block extra_css %}
 <style>
-  .hub-module-card {
+  /* ===== En-tête ===== */
+  .rec-header { display: flex; align-items: center; gap: 1rem; }
+  .rec-header-icon {
+    width: 56px; height: 56px; border-radius: 14px;
+    background: linear-gradient(135deg, #1657a8 0%, #0f3f7d 100%);
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem; flex: 0 0 auto;
+    box-shadow: 0 6px 16px rgba(22,87,168,.25);
+  }
+
+  /* ===== KPI ===== */
+  .rec-kpi {
     background: #fff;
-    border-radius: 15px;
-    padding: 1.5rem;
-    box-shadow: 0 4px 15px rgba(0,0,0,.1);
-    transition: all .3s ease;
+    border-radius: 14px;
+    padding: 1.25rem 1.25rem 1.1rem;
     height: 100%;
+    box-shadow: 0 2px 10px rgba(0,0,0,.06);
+    border-top: 4px solid #ccc;
+    transition: transform .25s ease, box-shadow .25s ease;
+  }
+  .rec-kpi:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,.1); }
+  .rec-kpi-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.1rem; margin-bottom: .6rem;
+  }
+  .rec-kpi-value { font-size: 1.5rem; font-weight: 700; color: #24303f; line-height: 1.2; }
+  .rec-kpi-value small { font-size: .8rem; font-weight: 600; color: #8a95a3; }
+  .rec-kpi-label { font-size: .82rem; font-weight: 600; color: #495057; margin-top: .25rem; }
+  .rec-kpi-sub { font-size: .76rem; color: #8a95a3; margin-top: .15rem; }
+  .rec-kpi--danger  { border-top-color: #dc3545; }
+  .rec-kpi--danger .rec-kpi-icon  { background: rgba(220,53,69,.12); color: #dc3545; }
+  .rec-kpi--warning { border-top-color: #ffc107; }
+  .rec-kpi--warning .rec-kpi-icon { background: rgba(255,193,7,.15); color: #b8860b; }
+  .rec-kpi--success { border-top-color: #28a745; }
+  .rec-kpi--success .rec-kpi-icon { background: rgba(40,167,69,.12); color: #28a745; }
+  .rec-kpi--primary { border-top-color: #007bff; }
+  .rec-kpi--primary .rec-kpi-icon { background: rgba(0,123,255,.12); color: #007bff; }
+
+  /* ===== Titres de section ===== */
+  .rec-section-title {
+    font-size: 1.05rem; font-weight: 700; color: #2c3e50;
+    margin: 0 0 1rem; padding-bottom: .5rem;
+    border-bottom: 2px solid #eef1f5;
+  }
+
+  /* ===== Cartes de modules (avec stats) ===== */
+  .rec-card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 1.4rem;
+    height: 100%;
+    box-shadow: 0 2px 10px rgba(0,0,0,.06);
+    border-left: 4px solid #ccc;
+    transition: transform .25s ease, box-shadow .25s ease;
+  }
+  .rec-card:hover { transform: translateY(-4px); box-shadow: 0 10px 24px rgba(0,0,0,.1); }
+  .rec-card-head { display: flex; align-items: flex-start; gap: .9rem; margin-bottom: .9rem; }
+  .rec-card-icon {
+    width: 48px; height: 48px; border-radius: 12px; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center; font-size: 1.25rem;
+  }
+  .rec-card-title { font-size: 1.02rem; font-weight: 700; color: #24303f; margin-bottom: .2rem; }
+  .rec-card-text { font-size: .82rem; color: #6c757d; margin: 0; }
+  .rec-card-stat {
+    font-size: .84rem; font-weight: 600; color: #24303f;
+    background: #f8f9fb; border-radius: 8px; padding: .55rem .75rem;
+    margin-bottom: 1rem;
+  }
+  .rec-card-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .rec-card--warning { border-left-color: #ffc107; }
+  .rec-card--warning .rec-card-icon { background: rgba(255,193,7,.15); color: #b8860b; }
+  .rec-card--info { border-left-color: #17a2b8; }
+  .rec-card--info .rec-card-icon { background: rgba(23,162,184,.12); color: #17a2b8; }
+  .rec-card--success { border-left-color: #28a745; }
+  .rec-card--success .rec-card-icon { background: rgba(40,167,69,.12); color: #28a745; }
+  .rec-card--primary { border-left-color: #007bff; }
+  .rec-card--primary .rec-card-icon { background: rgba(0,123,255,.12); color: #007bff; }
+
+  /* ===== Mini-cartes Logistique (sans stats) ===== */
+  .rec-mini-card {
+    display: flex; align-items: flex-start; gap: 1rem;
+    background: #fff; border-radius: 14px; padding: 1.25rem;
+    height: 100%; text-decoration: none;
+    box-shadow: 0 2px 10px rgba(0,0,0,.06);
     border: 2px solid transparent;
-    text-decoration: none;
-    display: block;
+    transition: all .25s ease;
   }
-  .hub-module-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 25px rgba(0,0,0,.15);
-    border-color: #007bff;
+  .rec-mini-card:hover { transform: translateY(-4px); box-shadow: 0 10px 24px rgba(0,0,0,.1); border-color: #dfe6ee; }
+  .rec-mini-icon {
+    width: 46px; height: 46px; border-radius: 12px; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center; font-size: 1.15rem;
   }
-  .hub-module-icon { font-size: 2.6rem; margin-bottom: 1rem; display: block; }
-  .hub-module-title { font-size: 1.1rem; font-weight: 600; color: #333; margin-bottom: .4rem; }
-  .hub-module-text { color: #666; font-size: .88rem; margin: 0; }
-  .hub-module-card.primary { border-left: 5px solid #007bff; }
-  .hub-module-card.primary:hover { background: linear-gradient(135deg,#e7f1ff 0%,#fff 100%); }
-  .hub-module-card.primary .hub-module-icon { color: #007bff; }
-  .hub-module-card.success { border-left: 5px solid #28a745; }
-  .hub-module-card.success:hover { background: linear-gradient(135deg,#e3eaf2 0%,#fff 100%); }
-  .hub-module-card.success .hub-module-icon { color: #28a745; }
-  .hub-module-card.info { border-left: 5px solid #17a2b8; }
-  .hub-module-card.info:hover { background: linear-gradient(135deg,#e8edf3 0%,#fff 100%); }
-  .hub-module-card.info .hub-module-icon { color: #17a2b8; }
-  .hub-module-card.warning { border-left: 5px solid #ffc107; }
-  .hub-module-card.warning:hover { background: linear-gradient(135deg,#fff8e1 0%,#fff 100%); }
-  .hub-module-card.warning .hub-module-icon { color: #e6a700; }
+  .rec-mini-title { font-size: .98rem; font-weight: 700; color: #24303f; margin-bottom: .2rem; }
+  .rec-mini-text { font-size: .82rem; color: #6c757d; margin-bottom: .4rem; }
+  .rec-mini-cta { font-size: .78rem; font-weight: 600; color: #1657a8; }
+  .rec-mini-card--primary .rec-mini-icon { background: rgba(0,123,255,.12); color: #007bff; }
+  .rec-mini-card--info .rec-mini-icon { background: rgba(23,162,184,.12); color: #17a2b8; }
+  .rec-mini-card--success .rec-mini-icon { background: rgba(40,167,69,.12); color: #28a745; }
+  .rec-mini-card--warning .rec-mini-icon { background: rgba(255,193,7,.15); color: #b8860b; }
+  .rec-mini-card--purple .rec-mini-icon { background: rgba(155,89,182,.14); color: #9b59b6; }
+
+  /* ===== Raccourcis ===== */
+  .rec-shortcuts { display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: .5rem; }
+  .rec-shortcut {
+    display: inline-flex; align-items: center; gap: .45rem;
+    background: #fff; border: 1px solid #e3e8ef; border-radius: 999px;
+    padding: .5rem 1rem; font-size: .84rem; font-weight: 600; color: #24303f;
+    text-decoration: none; transition: all .2s ease;
+  }
+  .rec-shortcut i { color: #1657a8; }
+  .rec-shortcut:hover { background: #1657a8; color: #fff; border-color: #1657a8; }
+  .rec-shortcut:hover i { color: #fff; }
 </style>
 {% endblock %}
