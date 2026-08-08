@@ -135,3 +135,80 @@ class GardeProlongeeTarificationTests(TestCase):
             + form.initial["tranche_3_due"]
         )
         self.assertEqual(total, Decimal("2800000"))
+
+
+@override_settings(MIDDLEWARE=TEST_MIDDLEWARE)
+class GardeProlongeeAlignementFraisTests(TestCase):
+    """Le forfait est un montant GLOBAL. Quand `_align_enrollment_fee` ajuste le
+    frais d'inscription/réinscription (par exemple parce que la grille devient
+    enfin trouvable après correction du niveau de la classe), les tranches
+    doivent être rééquilibrées pour que le total reste égal au forfait."""
+
+    def setUp(self):
+        self.ecole = Ecole.objects.create(
+            nom="École alignement forfait",
+            adresse="Conakry",
+            telephone="+224620000500",
+            directeur="Direction",
+        )
+        self.classe = Classe.objects.create(
+            nom="PETITE SECTION A",
+            ecole=self.ecole,
+            niveau="PETITE_SECTION",
+            annee_scolaire="2026-2027",
+        )
+        GrilleTarifaire.objects.create(
+            ecole=self.ecole,
+            niveau="PETITE_SECTION",
+            annee_scolaire="2026-2027",
+            frais_inscription=Decimal("50000"),
+            frais_reinscription=Decimal("30000"),
+            tranche_1=Decimal("1100000"),
+            tranche_2=Decimal("0"),
+            tranche_3=Decimal("0"),
+        )
+        self.eleve = Eleve.objects.create(
+            matricule="PSA-001",
+            prenom="Fara",
+            nom="Leno",
+            sexe="M",
+            classe=self.classe,
+            date_inscription=date(2026, 9, 1),
+            statut="ACTIF",
+            garde_prolongee=True,
+        )
+
+    def test_le_total_reste_egal_au_forfait_apres_alignement_du_frais(self):
+        from paiements.views import _align_enrollment_fee
+
+        # Échéancier tel que construit quand aucune grille n'était trouvable :
+        # frais à 0 et forfait réparti également sur les 3 tranches.
+        ech = EcheancierPaiement.objects.create(
+            eleve=self.eleve,
+            annee_scolaire="2026-2027",
+            nature_frais="INSCRIPTION",
+            frais_inscription_du=Decimal("0"),
+            tranche_1_due=Decimal("900000"),
+            tranche_2_due=Decimal("900000"),
+            tranche_3_due=Decimal("900000"),
+            date_echeance_inscription=date(2026, 9, 1),
+            date_echeance_tranche_1=date(2027, 1, 15),
+            date_echeance_tranche_2=date(2027, 3, 15),
+            date_echeance_tranche_3=date(2027, 5, 15),
+        )
+        self.assertEqual(
+            ech.frais_inscription_du + ech.tranche_1_due + ech.tranche_2_due + ech.tranche_3_due,
+            Decimal("2700000"),
+        )
+
+        _align_enrollment_fee(self.eleve, ech, "Réinscription + Tranche 1")
+        ech.refresh_from_db()
+
+        # Le frais de réinscription est désormais pris en compte...
+        self.assertEqual(ech.frais_inscription_du, Decimal("30000"))
+        # ...sans que le total global ne dépasse le forfait.
+        total = (
+            ech.frais_inscription_du + ech.tranche_1_due
+            + ech.tranche_2_due + ech.tranche_3_due
+        )
+        self.assertEqual(total, Decimal("2700000"))
