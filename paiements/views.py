@@ -9,6 +9,7 @@ from django.db import transaction, IntegrityError
 from django.db.models import Q, F, Sum, Count, Value, DecimalField, ExpressionWrapper, Case, When
 from django.db.models.functions import Coalesce, Greatest, Least
 from django.http import JsonResponse, HttpResponse, Http404
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.core.cache import cache
@@ -1542,6 +1543,12 @@ def detail_paiement(request, paiement_id:int):
     except Exception:
         is_comptable_flag = False
 
+    # Destination après validation, transmise par le flux inscription ->
+    # paiement -> validation -> retour au formulaire d'ajout d'élève.
+    next_url = (request.GET.get('next') or '').strip()
+    if next_url and not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+        next_url = ''
+
     context = {
         'titre_page': f"Détail du paiement #{paiement.id}",
         'paiement': paiement,
@@ -1550,6 +1557,7 @@ def detail_paiement(request, paiement_id:int):
         'user_permissions': perms_ctx,
         'is_comptable': is_comptable_flag,
         'remises_total': int(remises_total or 0),
+        'next_url': next_url,
     }
     return render(request, 'paiements/detail_paiement.html', context)
 
@@ -2177,19 +2185,6 @@ def ajouter_paiement(request, eleve_id:int=None):
                 except Exception:
                     logging.getLogger(__name__).exception("Auto-validation échéancier après enregistrement paiement")
 
-            # Enchaînement inscription -> paiement -> validation automatique -> retour
-            # au formulaire d'inscription : si la page appelante a fourni un "next"
-            # (formulaire d'ajout d'élève) et que l'utilisateur est autorisé à valider
-            # des paiements, on valide directement le paiement (statut VALIDE, allocation
-            # à l'échéancier, échéancier synchronisé) avant de renvoyer au formulaire.
-            paiement_valide_auto = False
-            if next_url and (user_is_admin(request.user) or has_permission(request.user, 'peut_valider_paiements')):
-                try:
-                    _valider_paiement_impl(paiement, request.user)
-                    paiement_valide_auto = True
-                except Exception:
-                    logging.getLogger(__name__).exception("Validation automatique du paiement (flux inscription) échouée")
-
             # Notifications: reçu paiement (WhatsApp + SMS) et, si inscription, confirmation d'inscription
             try:
                 send_payment_receipt(paiement.eleve, paiement)
@@ -2199,15 +2194,17 @@ def ajouter_paiement(request, eleve_id:int=None):
             except Exception:
                 logging.getLogger(__name__).exception("Erreur lors de l'envoi des notifications Twilio")
 
-            if paiement_valide_auto:
-                messages.success(request, "Paiement enregistré et validé automatiquement ; échéancier mis à jour.")
-            else:
-                messages.success(request, "Paiement enregistré avec succès.")
-            # Enchaînement inscription -> paiement -> nouvel élève : si la page
-            # appelante a fourni un "next" (formulaire d'ajout d'élève), on y
-            # retourne. Sinon, comportement inchangé : l'échéancier de l'élève.
+            messages.success(request, "Paiement enregistré avec succès.")
+            # Enchaînement inscription -> paiement -> validation -> nouvel élève :
+            # si la page appelante a fourni un "next" (formulaire d'ajout d'élève),
+            # on passe d'abord par la fiche du paiement. C'est là que se valide le
+            # paiement, et qu'une remise peut être appliquée avant validation. Le
+            # "next" y est transmis pour revenir au formulaire une fois validé.
             if next_url:
-                return redirect(next_url)
+                return redirect(
+                    f"{reverse('paiements:detail_paiement', args=[paiement.id])}"
+                    f"?next={urllib.parse.quote(next_url)}"
+                )
             return redirect('paiements:echeancier_eleve', eleve_id=paiement.eleve_id)
         else:
             messages.error(request, "Veuillez corriger les erreurs du formulaire.")
@@ -2280,6 +2277,12 @@ def valider_paiement(request, paiement_id:int):
     )
     paiement = get_object_or_404(paiement_qs, pk=paiement_id)
 
+    # Destination après validation (flux inscription -> paiement -> validation
+    # -> retour au formulaire d'ajout d'élève).
+    next_url = (request.POST.get('next') or '').strip()
+    if next_url and not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+        next_url = ''
+
     # Contrôle serveur strict: seuls admin ou détenteurs de la permission explicite peuvent valider
     if not request.user.is_authenticated or not (user_is_admin(request.user) or has_permission(request.user, 'peut_valider_paiements')):
         messages.error(request, "Vous n'avez pas l'autorisation de valider ce paiement.")
@@ -2298,6 +2301,8 @@ def valider_paiement(request, paiement_id:int):
         logging.getLogger(__name__).exception("Erreur lors de l'envoi du reçu après validation")
 
     messages.success(request, "Paiement validé avec succès.")
+    if next_url:
+        return redirect(next_url)
     return redirect('paiements:detail_paiement', paiement_id=paiement.id)
 
 @login_required
@@ -4110,10 +4115,23 @@ def appliquer_remise_paiement(request, paiement_id:int):
         pk=paiement_id,
     )
 
+    # Destination finale à préserver pendant le détour par la remise (flux
+    # inscription -> paiement -> remise -> validation -> retour au formulaire).
+    next_url = (request.POST.get('next') or request.GET.get('next') or '').strip()
+    if next_url and not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+        next_url = ''
+
+    def _retour_detail():
+        """Retour à la fiche du paiement, en conservant la destination finale."""
+        url = reverse('paiements:detail_paiement', args=[paiement.id])
+        if next_url:
+            url = f"{url}?next={urllib.parse.quote(next_url)}"
+        return redirect(url)
+
     # Seuls les paiements en attente peuvent être modifiés
     if getattr(paiement, 'statut', 'EN_ATTENTE') != 'EN_ATTENTE':
         messages.warning(request, "Seuls les paiements en attente peuvent recevoir des remises.")
-        return redirect('paiements:detail_paiement', paiement_id=paiement.id)
+        return _retour_detail()
 
     # Tranches de scolarité (1/2/3): montant dû restant et part de CE reçu qui les couvre.
     # La remise ne porte jamais sur l'inscription/réinscription.
@@ -4252,7 +4270,7 @@ def appliquer_remise_paiement(request, paiement_id:int):
                     )
                     created += 1
             messages.success(request, f"Remises appliquées: {created}.")
-            return redirect('paiements:detail_paiement', paiement_id=paiement.id)
+            return _retour_detail()
         else:
             messages.error(request, "Veuillez corriger les erreurs du formulaire de remises.")
     else:
@@ -4269,6 +4287,7 @@ def appliquer_remise_paiement(request, paiement_id:int):
         'form': form,
         'remises_existantes': remises_existantes,
         'tranches_info': tranches_info,
+        'next_url': next_url,
     }
     return render(request, 'paiements/appliquer_remise.html', context)
 

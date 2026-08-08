@@ -28,12 +28,13 @@
             </button>
         {% endif %}
         {% if paiement.statut == 'EN_ATTENTE' %}
-            <a href="{% url 'paiements:appliquer_remise' paiement.id %}" class="btn btn-warning">
+            <a href="{% url 'paiements:appliquer_remise' paiement.id %}{% if next_url %}?next={{ next_url|urlencode }}{% endif %}" class="btn btn-warning">
                 <i class="fas fa-percentage me-1"></i>Appliquer remises
             </a>
             {% if is_admin or is_comptable or user_permissions.can_validate_payments or user_permissions.can_modify_payments %}
                 <form method="post" action="{% url 'paiements:valider_paiement' paiement.id %}" class="d-inline">
                     {% csrf_token %}
+                    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
                     <button type="submit" class="btn btn-success" onclick="return confirm('Confirmer la validation de ce paiement ?');">
                         <i class="fas fa-check me-1"></i>Valider le paiement
                     </button>
