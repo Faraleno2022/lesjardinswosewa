@@ -2659,13 +2659,22 @@ def creer_echeancier(request, eleve_id:int):
                 messages.warning(request, f"Grille exacte introuvable. Utilisation de la plus récente: {grille.annee_scolaire}.")
 
         if grille:
+            t1, t2, t3 = grille.tranche_1, grille.tranche_2, grille.tranche_3
+            # Garde prolongée (au-delà des heures de cours) : même règle que
+            # ensure_echeancier_for_eleve (paiements/views.py) — le montant global
+            # annuel (frais d'inscription compris) devient le forfait du niveau.
+            if getattr(eleve, 'garde_prolongee', False):
+                from eleves.tarification import calculer_montants_garde_prolongee
+                resultat = calculer_montants_garde_prolongee(niveau, grille.frais_inscription, t1, t2, t3)
+                if resultat is not None:
+                    t1, t2, t3 = resultat
             initial.update({
                 'annee_scolaire': grille.annee_scolaire,
                 'nature_frais': 'INSCRIPTION',
                 'frais_inscription_du': grille.frais_inscription,
-                'tranche_1_due': grille.tranche_1,
-                'tranche_2_due': grille.tranche_2,
-                'tranche_3_due': grille.tranche_3,
+                'tranche_1_due': t1,
+                'tranche_2_due': t2,
+                'tranche_3_due': t3,
             })
         # Proposer des dates d'échéance par défaut
         try:
