@@ -26,6 +26,7 @@ NIVEAUX_A_CORRIGER = {'MATERNELLE', 'GARDERIE'}
 # longues d'abord pour éviter que « petite section » ne capture « toute petite
 # section ».
 MAPPING_NOM_NIVEAU = {
+    # Maternelle
     'toute petite section': 'TOUTE_PETITE_SECTION',
     'tres petite section': 'TOUTE_PETITE_SECTION',
     'tps': 'TOUTE_PETITE_SECTION',
@@ -38,6 +39,19 @@ MAPPING_NOM_NIVEAU = {
     'ps': 'PETITE_SECTION',
     'ms': 'MOYENNE_SECTION',
     'gs': 'GRANDE_SECTION',
+    # Primaire / collège : une classe de primaire ou de collège peut elle aussi
+    # avoir été rattachée par erreur au niveau générique « Maternelle ».
+    '1ere annee': 'PRIMAIRE_1',
+    '1re annee': 'PRIMAIRE_1',
+    '2eme annee': 'PRIMAIRE_2',
+    '3eme annee': 'PRIMAIRE_3',
+    '4eme annee': 'PRIMAIRE_4',
+    '5eme annee': 'PRIMAIRE_5',
+    '6eme annee': 'PRIMAIRE_6',
+    '7eme annee': 'COLLEGE_7',
+    '8eme annee': 'COLLEGE_8',
+    '9eme annee': 'COLLEGE_9',
+    '10eme annee': 'COLLEGE_10',
 }
 
 
