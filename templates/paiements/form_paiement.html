@@ -868,6 +868,69 @@ document.addEventListener('DOMContentLoaded', function() {
         return false;
     }
 
+    // ===== Montant exact : le serveur fait autorité =====
+    // Le reste à payer dépend de l'échéancier à jour (forfait de garde prolongée,
+    // frais d'inscription ou de réinscription selon le type choisi, paiements déjà
+    // encaissés). Plutôt que de rejouer ces règles en JavaScript — où elles
+    // finissent toujours par diverger — on interroge le serveur à chaque
+    // changement de type de paiement.
+    let montantFetchSeq = 0;
+
+    async function chargerMontantExact() {
+        const eleveEl = document.getElementById('id_eleve');
+        const eleveId = eleveEl && eleveEl.value ? eleveEl.value : null;
+        const typeId = typeSelect && typeSelect.value ? typeSelect.value : null;
+        if (!eleveId || !typeId || !montantInput) return false;
+
+        // Anti-course : seule la réponse à la dernière demande est appliquée.
+        const seq = ++montantFetchSeq;
+        if (badgeValue) badgeValue.textContent = '…';
+        if (badge) badge.style.display = '';
+
+        try {
+            const url = new URL('{% url "paiements:ajax_montant_suggere" %}', window.location.origin);
+            url.searchParams.set('eleve_id', eleveId);
+            url.searchParams.set('type_id', typeId);
+            const resp = await fetch(url.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const data = await resp.json();
+            if (seq !== montantFetchSeq) return true;   // réponse obsolète, ignorée
+            if (!data.ok) throw new Error(data.error || 'réponse invalide');
+
+            const suggested = Number(data.suggested || 0);
+            const bd = data.breakdown || {};
+
+            const setTxt = (id, v) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = fmtGNF(v);
+            };
+            setTxt('sbFi', bd.fi_restant);
+            setTxt('sbT1', bd.t1_restant);
+            setTxt('sbT2', bd.t2_restant);
+            setTxt('sbT3', bd.t3_restant);
+            const desc = document.getElementById('sbDesc');
+            if (desc) desc.textContent = bd.description || '';
+            const bloc = document.getElementById('suggestionBreakdown');
+            if (bloc) bloc.style.display = '';
+
+            if (suggested > 0) {
+                montantInput.value = suggested;
+                if (badge) badge.style.display = '';
+                if (badgeValue) badgeValue.textContent = Number(suggested).toLocaleString('fr-FR');
+            } else {
+                // Rien à payer sur ce poste (déjà soldé) ou type hors échéancier.
+                if (badge) badge.style.display = 'none';
+            }
+            montantInput.dispatchEvent(new Event('input', { bubbles: true }));
+            if (typeof updateFinalAmount === 'function') updateFinalAmount();
+            return true;
+        } catch (e) {
+            console.warn('Montant exact indisponible, repli sur le calcul local', e);
+            if (badge) badge.style.display = 'none';
+            return false;
+        }
+    }
+
     function updateMontantSuggestion() {
         console.log('updateMontantSuggestion called');
         if (!typeSelect || !montantInput) {
@@ -967,17 +1030,28 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Montant field updated to:', montantInput.value);
     }
 
-    // Écouteurs d'événements
+    // Écouteurs d'événements : le serveur est interrogé à chaque changement de
+    // type ; le calcul local ne sert que si l'appel échoue (hors ligne, erreur).
+    async function rafraichirMontant() {
+        const ok = await chargerMontantExact();
+        if (!ok) updateMontantSuggestion();
+    }
+
     if (typeSelect) {
-        typeSelect.addEventListener('change', updateMontantSuggestion);
-        // Déclencher aussi sur focus pour s'assurer que ça marche
-        typeSelect.addEventListener('focus', updateMontantSuggestion);
+        typeSelect.addEventListener('change', rafraichirMontant);
+    }
+
+    // L'élève peut changer (sélection ou recherche par matricule) : le reste
+    // à payer n'est plus le même.
+    const eleveField = document.getElementById('id_eleve');
+    if (eleveField) {
+        eleveField.addEventListener('change', rafraichirMontant);
     }
 
     // Bouton pour remplir le montant suggéré à la demande
     const btnFillSuggested = document.getElementById('btnFillSuggested');
     if (btnFillSuggested) {
-        btnFillSuggested.addEventListener('click', updateMontantSuggestion);
+        btnFillSuggested.addEventListener('click', rafraichirMontant);
     }
 
     // Auto-sélection d'un type par défaut si aucun n'est choisi
@@ -1018,100 +1092,20 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(autoSelectDefaultType, 0);
     {% endif %}
 
-    // Déclenchement immédiat et répété pour s'assurer que ça marche
+    // Au chargement : un seul appel au serveur, qui connaît le montant exact.
+    // (Auparavant : calcul local, puis deux réessais en cascade à 500 ms et
+    // 400 ms — d'où des montants affichés puis corrigés, voire jamais remplis.)
     async function tryUpdateMontant() {
-        console.log('tryUpdateMontant called');
-        
-        // Si pas d'échéancier, essayer de le charger via AJAX
+        const ok = await chargerMontantExact();
+        if (ok) return;
+        // Repli hors ligne : calcul local à partir de l'échéancier embarqué.
         if (!getEcheancier()) {
-            console.log('No echeancier found, trying AJAX...');
-            const loaded = await ensureEcheancierLoaded();
-            if (!loaded) {
-                console.log('Failed to load echeancier via AJAX');
-                return;
-            }
+            await ensureEcheancierLoaded();
         }
-        
         updateMontantSuggestion();
-        
-        // Réessayer dans 500ms si le montant n'est toujours pas rempli
-        setTimeout(async () => {
-            if (montantInput && !montantInput.value) {
-                console.log('Retrying montant update...');
-                if (!getEcheancier()) {
-                    await ensureEcheancierLoaded();
-                }
-                updateMontantSuggestion();
-                // Fallback: si toujours vide, appeler le serveur pour une suggestion exacte
-                setTimeout(async () => {
-                    if (montantInput && !montantInput.value) {
-                        console.log('Fallback to server ajax_montant_suggere');
-                        try {
-                            const csrfInput = document.querySelector('#paiementForm input[name="csrfmiddlewaretoken"]');
-                            const eleveHidden = document.getElementById('id_eleve');
-                            const typeSelectEl = document.getElementById('id_type_paiement');
-                            const eleveId = eleveHidden && eleveHidden.value ? eleveHidden.value : null;
-                            const typeId = typeSelectEl && typeSelectEl.value ? typeSelectEl.value : null;
-                            if (!eleveId || !typeId) return;
-                            const resp = await fetch('{% url "paiements:ajax_montant_suggere" %}', {
-                                method: 'POST',
-                                headers: {
-                                    'X-Requested-With': 'XMLHttpRequest',
-                                    'Content-Type': 'application/x-www-form-urlencoded',
-                                    'X-CSRFToken': csrfInput ? csrfInput.value : ''
-                                },
-                                body: new URLSearchParams({ eleve_id: eleveId, type_id: typeId }).toString()
-                            });
-                            const data = await resp.json();
-                            if (data && data.ok) {
-                                const suggested = Number(data.suggested || 0);
-                                if (suggested > 0) {
-                                    montantInput.value = suggested;
-                                    const txt = suggested.toLocaleString('fr-FR') + ' GNF';
-                                    if (montantDisplay) montantDisplay.textContent = txt;
-                                    const stickyMontant = document.getElementById('stickyMontant');
-                                    if (stickyMontant) stickyMontant.textContent = txt;
-                                    const finalDisp = document.getElementById('finalAmountDisplay');
-                                    const stickyFinal = document.getElementById('stickyFinal');
-                                    if (finalDisp) finalDisp.textContent = txt;
-                                    if (stickyFinal) stickyFinal.textContent = txt;
-                                    if (badge && badgeValue) {
-                                        badge.style.display = 'inline-flex';
-                                        badgeValue.textContent = Number(suggested).toLocaleString('fr-FR');
-                                    }
-                                    // Mettre à jour le breakdown si disponible
-                                    const bd = data.breakdown || {};
-                                    const sb = document.getElementById('suggestionBreakdown');
-                                    const fmt = (v) => { try { return Number(v||0).toLocaleString('fr-FR') + ' GNF'; } catch(_) { return String(v||0) + ' GNF'; } };
-                                    if (sb) {
-                                        const sbFi = document.getElementById('sbFi');
-                                        const sbT1 = document.getElementById('sbT1');
-                                        const sbT2 = document.getElementById('sbT2');
-                                        const sbT3 = document.getElementById('sbT3');
-                                        const sbDesc = document.getElementById('sbDesc');
-                                        if (sbFi) sbFi.textContent = fmt(bd.fi_restant);
-                                        if (sbT1) sbT1.textContent = fmt(bd.t1_restant);
-                                        if (sbT2) sbT2.textContent = fmt(bd.t2_restant);
-                                        if (sbT3) sbT3.textContent = fmt(bd.t3_restant);
-                                        if (sbDesc) sbDesc.textContent = bd.description || '';
-                                        sb.style.display = '';
-                                    }
-                                }
-                            }
-                        } catch(e) {
-                            console.warn('ajax_montant_suggere fallback failed', e);
-                        }
-                    }
-                }, 400);
-            }
-        }, 500);
     }
-    
-    // Déclencher immédiatement
+
     tryUpdateMontant();
-    
-    // Déclencher aussi après un délai
-    setTimeout(() => tryUpdateMontant(), 100);
 
     // Helpers format
     function formatGNF(v) {

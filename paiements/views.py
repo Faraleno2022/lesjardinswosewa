@@ -351,13 +351,111 @@ def ensure_echeancier_for_eleve(eleve: "Eleve", *, created_by=None, prefer_reins
             )
             return EcheancierPaiement.objects.filter(eleve=eleve).first()
 
+def _tranches_visees_par_type(type_nom):
+    """Retourne l'ensemble des tranches ({1, 2, 3}) couvertes par un type de paiement.
+
+    ``type_nom`` doit déjà être normalisé (minuscules, sans accents).
+    « Annuel » et « Scolarité » couvrent les trois tranches.
+    """
+    if 'annuel' in type_nom or 'scolarite' in type_nom:
+        return {1, 2, 3}
+    tranches = set()
+    motifs = {
+        1: ('tranche 1', 'tranche1', '1ere tranche', '1re tranche'),
+        2: ('tranche 2', 'tranche2', '2eme tranche'),
+        3: ('tranche 3', 'tranche3', '3eme tranche'),
+    }
+    for numero, variantes in motifs.items():
+        if any(variante in type_nom for variante in variantes):
+            tranches.add(numero)
+    return tranches
+
+
+def _suggestion_paiement(ech, type_nom):
+    """Calcule le montant exact restant à payer pour un type de paiement donné.
+
+    Additionne le reste dû de chacun des postes couverts par le type : frais
+    d'inscription/réinscription et/ou tranches. Retourne un dictionnaire prêt à
+    être renvoyé au formulaire de saisie.
+
+    L'analyse est additive (et non une cascade de cas) afin que les libellés
+    combinés soient tous couverts, y compris « Inscription + Tranche 1 +
+    Tranche 2 + Tranche 3 ».
+    """
+    restes = {
+        'fi': max(0, int(ech.frais_inscription_du or 0) - int(ech.frais_inscription_paye or 0)),
+        1: max(0, int(ech.tranche_1_due or 0) - int(ech.tranche_1_payee or 0)),
+        2: max(0, int(ech.tranche_2_due or 0) - int(ech.tranche_2_payee or 0)),
+        3: max(0, int(ech.tranche_3_due or 0) - int(ech.tranche_3_payee or 0)),
+    }
+
+    inclut_frais = 'inscription' in type_nom  # couvre aussi « reinscription »
+    tranches = _tranches_visees_par_type(type_nom)
+
+    suggested = (restes['fi'] if inclut_frais else 0) + sum(restes[n] for n in tranches)
+
+    # Libellé lisible de ce qui est couvert
+    postes = []
+    if inclut_frais:
+        est_reinscription = 'reinscription' in type_nom.replace(' ', '')
+        postes.append("frais de réinscription" if est_reinscription else "frais d'inscription")
+    if tranches == {1, 2, 3}:
+        postes.append("scolarité annuelle (3 tranches)")
+    else:
+        for numero in sorted(tranches):
+            postes.append(f"{numero}{'ère' if numero == 1 else 'ème'} tranche")
+
+    if postes:
+        description = "Reste à payer : " + " + ".join(postes) + "."
+    else:
+        description = (
+            "Ce type de paiement ne correspond à aucun poste de l'échéancier "
+            "(cantine, transport, uniforme…) : saisissez le montant manuellement."
+        )
+
+    total_du = int(
+        (ech.frais_inscription_du or 0) + (ech.tranche_1_due or 0)
+        + (ech.tranche_2_due or 0) + (ech.tranche_3_due or 0)
+    )
+    total_paye = int(
+        (ech.frais_inscription_paye or 0) + (ech.tranche_1_payee or 0)
+        + (ech.tranche_2_payee or 0) + (ech.tranche_3_payee or 0)
+    )
+
+    return {
+        'suggested': int(suggested),
+        'couvre_frais': inclut_frais,
+        'tranches': sorted(tranches),
+        'breakdown': {
+            'fi_restant': restes['fi'],
+            't1_restant': restes[1],
+            't2_restant': restes[2],
+            't3_restant': restes[3],
+            'description': description,
+        },
+        'echeancier': {
+            'nature_frais': getattr(ech, 'nature_frais', '') or '',
+            'total_du': total_du,
+            'total_paye': total_paye,
+            'solde_restant': max(0, total_du - total_paye),
+            'frais_du': int(ech.frais_inscription_du or 0),
+            't1_du': int(ech.tranche_1_due or 0),
+            't2_du': int(ech.tranche_2_due or 0),
+            't3_du': int(ech.tranche_3_due or 0),
+        },
+    }
+
+
 @login_required
 def ajax_montant_suggere(request):
-    if request.method != 'POST':
+    # GET accepté pour permettre l'interrogation en temps réel depuis le
+    # formulaire, POST conservé pour compatibilité avec l'existant.
+    if request.method not in ('GET', 'POST'):
         return JsonResponse({'ok': False, 'error': 'Méthode invalide'}, status=405)
     try:
-        eleve_id = request.POST.get('eleve_id')
-        type_id = request.POST.get('type_id')
+        source = request.POST if request.method == 'POST' else request.GET
+        eleve_id = source.get('eleve_id')
+        type_id = source.get('type_id')
         if not eleve_id or not type_id:
             return JsonResponse({'ok': False, 'error': 'Paramètres manquants'}, status=400)
 
@@ -376,71 +474,16 @@ def ajax_montant_suggere(request):
             ech = ensure_echeancier_for_eleve(eleve, created_by=request.user, prefer_reinscription=prefer_reinsc)
         if not ech:
             return JsonResponse({'ok': False, 'error': "Aucun échéancier disponible pour l'élève."}, status=400)
+        # Réaligne le frais sur inscription/réinscription selon le type choisi,
+        # et rééquilibre la scolarité au forfait pour les élèves en garde
+        # prolongée : le montant renvoyé reflète donc l'échéancier à jour.
         _align_enrollment_fee(eleve, ech, type_nom)
+        ech.refresh_from_db()
 
-        # Récup montants dus/payés
-        try:
-            fi_due = int(ech.frais_inscription_du or 0)
-            fi_pay = int(ech.frais_inscription_paye or 0)
-            t1_due = int(ech.tranche_1_due or 0)
-            t1_pay = int(ech.tranche_1_payee or 0)
-            t2_due = int(ech.tranche_2_due or 0)
-            t2_pay = int(ech.tranche_2_payee or 0)
-            t3_due = int(ech.tranche_3_due or 0)
-            t3_pay = int(ech.tranche_3_payee or 0)
-        except Exception:
-            fi_due = fi_pay = t1_due = t1_pay = t2_due = t2_pay = t3_due = t3_pay = 0
-
-        rfi = max(0, fi_due - fi_pay)
-        rt1 = max(0, t1_due - t1_pay)
-        rt2 = max(0, t2_due - t2_pay)
-        rt3 = max(0, t3_due - t3_pay)
-
-        suggested = 0
-        description = ''
-        # Types combinés prioritairement
-        if ((('inscription' in type_nom) and ('annuel' in type_nom)) or ((('réinscription' in type_nom) or ('reinscription' in type_nom)) and ('annuel' in type_nom))):
-            suggested = rfi + rt1 + rt2 + rt3
-            description = "frais d'inscription/réinscription + Annuel (reste)"
-        elif ((('inscription' in type_nom) or ('réinscription' in type_nom) or ('reinscription' in type_nom)) and ('tranche 1 + tranche 2' in type_nom or 'tranche1 + tranche2' in type_nom)):
-            suggested = rfi + rt1 + rt2
-            description = "frais d'inscription/réinscription + Tranche 1 + Tranche 2 (reste)"
-        elif ((('inscription' in type_nom) or ('réinscription' in type_nom) or ('reinscription' in type_nom)) and ('tranche 1' in type_nom or '1ère tranche' in type_nom or '1ere tranche' in type_nom)):
-            suggested = rfi + rt1
-            description = "frais d'inscription/réinscription + Tranche 1 (reste)"
-        elif ('inscription' in type_nom) or ('réinscription' in type_nom) or ('reinscription' in type_nom):
-            suggested = rfi
-            description = "frais d'inscription/réinscription (reste)"
-        elif ('tranche 1 + tranche 2 + tranche 3' in type_nom or 'tranche1 + tranche2 + tranche3' in type_nom):
-            suggested = rt1 + rt2 + rt3
-            description = "Tranche 1 + Tranche 2 + Tranche 3 (reste)"
-        elif 'tranche 1 + tranche 2' in type_nom or 'tranche1 + tranche2' in type_nom:
-            suggested = rt1 + rt2
-            description = "Tranche 1 + Tranche 2 (reste)"
-        elif 'tranche 2 + tranche 3' in type_nom or 'tranche2 + tranche3' in type_nom:
-            suggested = rt2 + rt3
-            description = "Tranche 2 + Tranche 3 (reste)"
-        elif 'tranche 1' in type_nom or '1ère tranche' in type_nom or '1ere tranche' in type_nom:
-            suggested = rt1
-            description = "1ère tranche (reste)"
-        elif 'tranche 2' in type_nom or '2ème tranche' in type_nom or '2eme tranche' in type_nom:
-            suggested = rt2
-            description = "2ème tranche (reste)"
-        elif 'tranche 3' in type_nom or '3ème tranche' in type_nom or '3eme tranche' in type_nom:
-            suggested = rt3
-            description = "3ème tranche (reste)"
-        elif 'scolarité' in type_nom:
-            suggested = rt1 + rt2 + rt3
-            description = "Scolarité (reste)"
-
-        breakdown = {
-            'fi_restant': rfi,
-            't1_restant': rt1,
-            't2_restant': rt2,
-            't3_restant': rt3,
-            'description': description,
-        }
-        return JsonResponse({'ok': True, 'suggested': int(suggested or 0), 'breakdown': breakdown})
+        resultat = _suggestion_paiement(ech, type_nom)
+        resultat['ok'] = True
+        resultat['type_nom'] = type_pmt.nom
+        return JsonResponse(resultat)
     except Exception:
         logging.getLogger(__name__).exception("ajax_montant_suggere failed")
         return JsonResponse({'ok': False, 'error': 'Erreur interne'}, status=500)
