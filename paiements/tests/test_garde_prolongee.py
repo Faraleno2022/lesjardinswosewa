@@ -14,11 +14,10 @@ from .support import TEST_MIDDLEWARE
 
 @override_settings(MIDDLEWARE=TEST_MIDDLEWARE)
 class GardeProlongeeTarificationTests(TestCase):
-    """Le forfait de garde prolongée (2 700 000 maternelle/garderie, 2 800 000
-    primaire, 2 850 000 collège 10ème) est un montant GLOBAL : les frais
-    d'inscription/réinscription ne doivent jamais être ignorés, ni ajoutés en
-    plus du forfait — ils doivent en être déduits avant répartition en tranches.
-    Ce comportement doit se retrouver partout où l'échéancier est initialisé."""
+    """Le forfait de garde prolongée couvre la SCOLARITÉ seule (les 3 tranches) :
+    2 700 000 en maternelle/garderie, 2 800 000 au primaire, 2 850 000 en 10ème.
+    Les frais d'inscription ou de réinscription s'y AJOUTENT, ils ne sont ni
+    ignorés ni absorbés par le forfait."""
 
     def setUp(self):
         self.ecole = Ecole.objects.create(
@@ -65,45 +64,76 @@ class GardeProlongeeTarificationTests(TestCase):
             garde_prolongee=True,
         )
 
-    def test_echeancier_maternelle_inscription(self):
+    @staticmethod
+    def _scolarite(ech):
+        return ech.tranche_1_due + ech.tranche_2_due + ech.tranche_3_due
+
+    @staticmethod
+    def _total(ech):
+        return (
+            ech.frais_inscription_du + ech.tranche_1_due
+            + ech.tranche_2_due + ech.tranche_3_due
+        )
+
+    def test_maternelle_inscription(self):
         classe = self._classe_et_grille("GRANDE_SECTION", 50000, 30000)
         eleve = self._eleve(classe, "GARDE-001")
 
         ech = ensure_echeancier_for_eleve(eleve, prefer_reinscription=False)
 
         self.assertEqual(ech.frais_inscription_du, Decimal("50000"))
-        total = ech.frais_inscription_du + ech.tranche_1_due + ech.tranche_2_due + ech.tranche_3_due
-        self.assertEqual(total, Decimal("2700000"))
+        self.assertEqual(self._scolarite(ech), Decimal("2700000"))
+        self.assertEqual(self._total(ech), Decimal("2750000"))
 
-    def test_echeancier_maternelle_reinscription(self):
+    def test_maternelle_reinscription(self):
         classe = self._classe_et_grille("CRECHE", 50000, 30000)
         eleve = self._eleve(classe, "GARDE-002")
 
         ech = ensure_echeancier_for_eleve(eleve, prefer_reinscription=True)
 
         self.assertEqual(ech.frais_inscription_du, Decimal("30000"))
-        total = ech.frais_inscription_du + ech.tranche_1_due + ech.tranche_2_due + ech.tranche_3_due
-        self.assertEqual(total, Decimal("2700000"))
+        self.assertEqual(self._scolarite(ech), Decimal("2700000"))
+        self.assertEqual(self._total(ech), Decimal("2730000"))
 
-    def test_echeancier_primaire_reinscription(self):
+    def test_primaire_reinscription(self):
         classe = self._classe_et_grille("PRIMAIRE_4", 50000, 30000)
         eleve = self._eleve(classe, "GARDE-003")
 
         ech = ensure_echeancier_for_eleve(eleve, prefer_reinscription=True)
 
         self.assertEqual(ech.frais_inscription_du, Decimal("30000"))
-        total = ech.frais_inscription_du + ech.tranche_1_due + ech.tranche_2_due + ech.tranche_3_due
-        self.assertEqual(total, Decimal("2800000"))
+        self.assertEqual(self._scolarite(ech), Decimal("2800000"))
+        self.assertEqual(self._total(ech), Decimal("2830000"))
 
-    def test_echeancier_college_10_inscription(self):
+    def test_primaire_inscription(self):
+        classe = self._classe_et_grille("PRIMAIRE_1", 50000, 30000)
+        eleve = self._eleve(classe, "GARDE-007")
+
+        ech = ensure_echeancier_for_eleve(eleve, prefer_reinscription=False)
+
+        self.assertEqual(ech.frais_inscription_du, Decimal("50000"))
+        self.assertEqual(self._scolarite(ech), Decimal("2800000"))
+        self.assertEqual(self._total(ech), Decimal("2850000"))
+
+    def test_college_10_inscription(self):
         classe = self._classe_et_grille("COLLEGE_10", 70000, 50000)
         eleve = self._eleve(classe, "GARDE-004")
 
         ech = ensure_echeancier_for_eleve(eleve, prefer_reinscription=False)
 
         self.assertEqual(ech.frais_inscription_du, Decimal("70000"))
-        total = ech.frais_inscription_du + ech.tranche_1_due + ech.tranche_2_due + ech.tranche_3_due
-        self.assertEqual(total, Decimal("2850000"))
+        self.assertEqual(self._scolarite(ech), Decimal("2850000"))
+        self.assertEqual(self._total(ech), Decimal("2920000"))
+
+    def test_college_10_reinscription(self):
+        classe = self._classe_et_grille("COLLEGE_10", 70000, 50000)
+        eleve = self._eleve(classe, "GARDE-008")
+
+        ech = ensure_echeancier_for_eleve(eleve, prefer_reinscription=True)
+
+        self.assertEqual(ech.frais_inscription_du, Decimal("50000"))
+        self.assertEqual(self._scolarite(ech), Decimal("2850000"))
+        self.assertEqual(self._total(ech), Decimal("2900000"))
 
     def test_college_9_non_concerne_par_le_forfait(self):
         classe = self._classe_et_grille("COLLEGE_9", 70000, 50000)
@@ -111,15 +141,14 @@ class GardeProlongeeTarificationTests(TestCase):
 
         ech = ensure_echeancier_for_eleve(eleve, prefer_reinscription=False)
 
-        total = ech.frais_inscription_du + ech.tranche_1_due + ech.tranche_2_due + ech.tranche_3_due
         # Grille normale (frais d'inscription + 3 tranches), pas de forfait.
-        self.assertEqual(total, Decimal("70000") + Decimal("700000") + Decimal("600000") + Decimal("500000"))
+        self.assertEqual(self._scolarite(ech), Decimal("1800000"))
+        self.assertEqual(self._total(ech), Decimal("1870000"))
 
     def test_formulaire_creation_manuelle_echeancier_applique_le_forfait(self):
         """Régression : l'écran de création manuelle d'échéancier
         (paiements:creer_echeancier) pré-remplissait les tranches depuis la
-        grille tarifaire brute, sans jamais appliquer le forfait de garde
-        prolongée."""
+        grille tarifaire brute, sans jamais appliquer le forfait."""
         classe = self._classe_et_grille("PRIMAIRE_2", 50000, 30000)
         eleve = self._eleve(classe, "GARDE-006")
         self.assertIsNone(EcheancierPaiement.objects.filter(eleve=eleve).first())
@@ -128,21 +157,20 @@ class GardeProlongeeTarificationTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         form = response.context["form"]
-        total = (
-            form.initial["frais_inscription_du"]
-            + form.initial["tranche_1_due"]
+        scolarite = (
+            form.initial["tranche_1_due"]
             + form.initial["tranche_2_due"]
             + form.initial["tranche_3_due"]
         )
-        self.assertEqual(total, Decimal("2800000"))
+        self.assertEqual(scolarite, Decimal("2800000"))
+        self.assertEqual(form.initial["frais_inscription_du"], Decimal("50000"))
 
 
 @override_settings(MIDDLEWARE=TEST_MIDDLEWARE)
 class GardeProlongeeAlignementFraisTests(TestCase):
-    """Le forfait est un montant GLOBAL. Quand `_align_enrollment_fee` ajuste le
-    frais d'inscription/réinscription (par exemple parce que la grille devient
-    enfin trouvable après correction du niveau de la classe), les tranches
-    doivent être rééquilibrées pour que le total reste égal au forfait."""
+    """La scolarité (3 tranches) doit toujours valoir le forfait, quels que
+    soient les ajustements du frais d'inscription/réinscription — lequel s'ajoute
+    au forfait sans jamais le modifier."""
 
     def setUp(self):
         self.ecole = Ecole.objects.create(
@@ -178,73 +206,47 @@ class GardeProlongeeAlignementFraisTests(TestCase):
             garde_prolongee=True,
         )
 
-    def test_le_total_reste_egal_au_forfait_apres_alignement_du_frais(self):
-        from paiements.views import _align_enrollment_fee
-
-        # Échéancier tel que construit quand aucune grille n'était trouvable :
-        # frais à 0 et forfait réparti également sur les 3 tranches.
-        ech = EcheancierPaiement.objects.create(
+    def _echeancier(self, fi, t1, t2, t3, nature="INSCRIPTION"):
+        return EcheancierPaiement.objects.create(
             eleve=self.eleve,
             annee_scolaire="2026-2027",
-            nature_frais="INSCRIPTION",
-            frais_inscription_du=Decimal("0"),
-            tranche_1_due=Decimal("900000"),
-            tranche_2_due=Decimal("900000"),
-            tranche_3_due=Decimal("900000"),
-            date_echeance_inscription=date(2026, 9, 1),
-            date_echeance_tranche_1=date(2027, 1, 15),
-            date_echeance_tranche_2=date(2027, 3, 15),
-            date_echeance_tranche_3=date(2027, 5, 15),
-        )
-        self.assertEqual(
-            ech.frais_inscription_du + ech.tranche_1_due + ech.tranche_2_due + ech.tranche_3_due,
-            Decimal("2700000"),
-        )
-
-        _align_enrollment_fee(self.eleve, ech, "Réinscription + Tranche 1")
-        ech.refresh_from_db()
-
-        # Le frais de réinscription est désormais pris en compte...
-        self.assertEqual(ech.frais_inscription_du, Decimal("30000"))
-        # ...sans que le total global ne dépasse le forfait.
-        total = (
-            ech.frais_inscription_du + ech.tranche_1_due
-            + ech.tranche_2_due + ech.tranche_3_due
-        )
-        self.assertEqual(total, Decimal("2700000"))
-
-    def test_total_deja_derive_est_repare_meme_sans_changement_de_frais(self):
-        """Cas du reçu REC20260010 (SUZANNE LENO) : l'échéancier avait été créé
-        au tarif d'inscription (50 000 + 2 650 000), puis le frais avait été
-        aligné sur la réinscription (30 000) sans toucher aux tranches — d'où un
-        total de 2 680 000 au lieu de 2 700 000. Le frais étant désormais déjà
-        correct, seule une réparation inconditionnelle peut rattraper l'écart."""
-        from paiements.views import _align_enrollment_fee
-
-        ech = EcheancierPaiement.objects.create(
-            eleve=self.eleve,
-            annee_scolaire="2026-2027",
-            nature_frais="REINSCRIPTION",
-            frais_inscription_du=Decimal("30000"),   # déjà aligné
-            tranche_1_due=Decimal("2650000"),        # calculée pour un frais de 50 000
-            tranche_2_due=Decimal("0"),
-            tranche_3_due=Decimal("0"),
+            nature_frais=nature,
+            frais_inscription_du=Decimal(fi),
+            tranche_1_due=Decimal(t1),
+            tranche_2_due=Decimal(t2),
+            tranche_3_due=Decimal(t3),
             date_echeance_inscription=date(2026, 7, 1),
             date_echeance_tranche_1=date(2026, 10, 1),
             date_echeance_tranche_2=date(2027, 1, 1),
             date_echeance_tranche_3=date(2027, 4, 1),
         )
-        self.assertEqual(
-            ech.frais_inscription_du + ech.tranche_1_due + ech.tranche_2_due + ech.tranche_3_due,
-            Decimal("2680000"),
-        )
+
+    def test_le_frais_est_aligne_sans_toucher_a_la_scolarite(self):
+        """Passer du tarif d'inscription à celui de réinscription ne doit pas
+        modifier la scolarité : le frais s'ajoute au forfait."""
+        from paiements.views import _align_enrollment_fee
+
+        ech = self._echeancier("50000", "2700000", "0", "0")
 
         _align_enrollment_fee(self.eleve, ech, "Réinscription + Tranche 1")
         ech.refresh_from_db()
 
         self.assertEqual(ech.frais_inscription_du, Decimal("30000"))
-        total = (
-            ech.frais_inscription_du + ech.tranche_1_due
-            + ech.tranche_2_due + ech.tranche_3_due
-        )
-        self.assertEqual(total, Decimal("2700000"))
+        scolarite = ech.tranche_1_due + ech.tranche_2_due + ech.tranche_3_due
+        self.assertEqual(scolarite, Decimal("2700000"))
+
+    def test_une_scolarite_derivee_est_reparee(self):
+        """Échéanciers dont les tranches ont dérivé du forfait (ancien calcul qui
+        déduisait le frais) : la scolarité est ramenée au forfait."""
+        from paiements.views import _align_enrollment_fee
+
+        ech = self._echeancier("30000", "2650000", "0", "0", nature="REINSCRIPTION")
+
+        _align_enrollment_fee(self.eleve, ech, "Réinscription + Tranche 1")
+        ech.refresh_from_db()
+
+        self.assertEqual(ech.frais_inscription_du, Decimal("30000"))
+        scolarite = ech.tranche_1_due + ech.tranche_2_due + ech.tranche_3_due
+        self.assertEqual(scolarite, Decimal("2700000"))
+        total = ech.frais_inscription_du + scolarite
+        self.assertEqual(total, Decimal("2730000"))
