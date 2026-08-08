@@ -2141,6 +2141,20 @@ def ajouter_paiement(request, eleve_id:int=None):
                     _auto_validate_echeancier_for_eleve(paiement.eleve)
                 except Exception:
                     logging.getLogger(__name__).exception("Auto-validation échéancier après enregistrement paiement")
+
+            # Enchaînement inscription -> paiement -> validation automatique -> retour
+            # au formulaire d'inscription : si la page appelante a fourni un "next"
+            # (formulaire d'ajout d'élève) et que l'utilisateur est autorisé à valider
+            # des paiements, on valide directement le paiement (statut VALIDE, allocation
+            # à l'échéancier, échéancier synchronisé) avant de renvoyer au formulaire.
+            paiement_valide_auto = False
+            if next_url and (user_is_admin(request.user) or has_permission(request.user, 'peut_valider_paiements')):
+                try:
+                    _valider_paiement_impl(paiement, request.user)
+                    paiement_valide_auto = True
+                except Exception:
+                    logging.getLogger(__name__).exception("Validation automatique du paiement (flux inscription) échouée")
+
             # Notifications: reçu paiement (WhatsApp + SMS) et, si inscription, confirmation d'inscription
             try:
                 send_payment_receipt(paiement.eleve, paiement)
@@ -2149,7 +2163,11 @@ def ajouter_paiement(request, eleve_id:int=None):
                     send_enrollment_confirmation(paiement.eleve, paiement)
             except Exception:
                 logging.getLogger(__name__).exception("Erreur lors de l'envoi des notifications Twilio")
-            messages.success(request, "Paiement enregistré avec succès.")
+
+            if paiement_valide_auto:
+                messages.success(request, "Paiement enregistré et validé automatiquement ; échéancier mis à jour.")
+            else:
+                messages.success(request, "Paiement enregistré avec succès.")
             # Enchaînement inscription -> paiement -> nouvel élève : si la page
             # appelante a fourni un "next" (formulaire d'ajout d'élève), on y
             # retourne. Sinon, comportement inchangé : l'échéancier de l'élève.
@@ -2172,6 +2190,43 @@ def ajouter_paiement(request, eleve_id:int=None):
         'next_url': next_url,
     }
     return render(request, 'paiements/form_paiement.html', context)
+
+def _valider_paiement_impl(paiement: "Paiement", user) -> None:
+    """Marque ``paiement`` comme VALIDE, l'alloue à l'échéancier de l'élève puis
+    synchronise le statut de cet échéancier (incl. EN_RETARD, PAYE_COMPLET...).
+
+    Logique pure, réutilisée par la vue `valider_paiement` (validation manuelle)
+    et par `ajouter_paiement` (validation automatique enchaînée après l'ajout,
+    dans le flux d'inscription). N'envoie AUCUNE notification et ne vérifie
+    AUCUNE permission — à la charge de l'appelant.
+    """
+    with transaction.atomic():
+        paiement.statut = 'VALIDE'
+        try:
+            paiement.date_validation = timezone.now()
+        except Exception:
+            from django.utils import timezone as _tz
+            paiement.date_validation = _tz.now()
+        paiement.valide_par = user
+        try:
+            paiement.date_modification = timezone.now()
+        except Exception:
+            pass
+        paiement.save()
+
+        # Allocation intelligente à l'échéancier
+        try:
+            _allocate_payment_to_echeancier(paiement)
+        except Exception:
+            logging.getLogger(__name__).exception("Erreur lors de l'allocation du paiement à l'échéancier")
+
+        # S'assurer que l'échéancier existe et synchroniser le statut (incl. EN_RETARD)
+        try:
+            ensure_echeancier_for_eleve(paiement.eleve, created_by=user if getattr(user, 'is_authenticated', False) else None)
+            _auto_validate_echeancier_for_eleve(paiement.eleve)
+        except Exception:
+            logging.getLogger(__name__).exception("Erreur ensure/auto-validate échéancier après validation du paiement")
+
 
 @login_required
 @require_POST
@@ -2199,32 +2254,7 @@ def valider_paiement(request, paiement_id:int):
         messages.info(request, "Ce paiement est déjà validé.")
         return redirect('paiements:detail_paiement', paiement_id=paiement.id)
 
-    with transaction.atomic():
-        paiement.statut = 'VALIDE'
-        try:
-            paiement.date_validation = timezone.now()
-        except Exception:
-            from django.utils import timezone as _tz
-            paiement.date_validation = _tz.now()
-        paiement.valide_par = request.user
-        try:
-            paiement.date_modification = timezone.now()
-        except Exception:
-            pass
-        paiement.save()
-
-        # Allocation intelligente à l'échéancier
-        try:
-            _allocate_payment_to_echeancier(paiement)
-        except Exception:
-            logging.getLogger(__name__).exception("Erreur lors de l'allocation du paiement à l'échéancier")
-
-        # S'assurer que l'échéancier existe et synchroniser le statut (incl. EN_RETARD)
-        try:
-            ensure_echeancier_for_eleve(paiement.eleve, created_by=request.user if request.user.is_authenticated else None)
-            _auto_validate_echeancier_for_eleve(paiement.eleve)
-        except Exception:
-            logging.getLogger(__name__).exception("Erreur ensure/auto-validate échéancier après validation du paiement")
+    _valider_paiement_impl(paiement, request.user)
 
     # Envoyer le reçu de paiement après validation
     try:
