@@ -212,3 +212,39 @@ class GardeProlongeeAlignementFraisTests(TestCase):
             + ech.tranche_2_due + ech.tranche_3_due
         )
         self.assertEqual(total, Decimal("2700000"))
+
+    def test_total_deja_derive_est_repare_meme_sans_changement_de_frais(self):
+        """Cas du reçu REC20260010 (SUZANNE LENO) : l'échéancier avait été créé
+        au tarif d'inscription (50 000 + 2 650 000), puis le frais avait été
+        aligné sur la réinscription (30 000) sans toucher aux tranches — d'où un
+        total de 2 680 000 au lieu de 2 700 000. Le frais étant désormais déjà
+        correct, seule une réparation inconditionnelle peut rattraper l'écart."""
+        from paiements.views import _align_enrollment_fee
+
+        ech = EcheancierPaiement.objects.create(
+            eleve=self.eleve,
+            annee_scolaire="2026-2027",
+            nature_frais="REINSCRIPTION",
+            frais_inscription_du=Decimal("30000"),   # déjà aligné
+            tranche_1_due=Decimal("2650000"),        # calculée pour un frais de 50 000
+            tranche_2_due=Decimal("0"),
+            tranche_3_due=Decimal("0"),
+            date_echeance_inscription=date(2026, 7, 1),
+            date_echeance_tranche_1=date(2026, 10, 1),
+            date_echeance_tranche_2=date(2027, 1, 1),
+            date_echeance_tranche_3=date(2027, 4, 1),
+        )
+        self.assertEqual(
+            ech.frais_inscription_du + ech.tranche_1_due + ech.tranche_2_due + ech.tranche_3_due,
+            Decimal("2680000"),
+        )
+
+        _align_enrollment_fee(self.eleve, ech, "Réinscription + Tranche 1")
+        ech.refresh_from_db()
+
+        self.assertEqual(ech.frais_inscription_du, Decimal("30000"))
+        total = (
+            ech.frais_inscription_du + ech.tranche_1_due
+            + ech.tranche_2_due + ech.tranche_3_due
+        )
+        self.assertEqual(total, Decimal("2700000"))
