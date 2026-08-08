@@ -106,6 +106,45 @@ def _applicable_grille_for_eleve(eleve, annee_scolaire=None):
     return queryset.order_by("-annee_scolaire").first()
 
 
+def _rebalance_garde_prolongee(eleve, echeancier):
+    """Garantit que le total dû d'un élève en garde prolongée vaut exactement le
+    forfait annuel de son niveau.
+
+    Le forfait (2 700 000 maternelle/garderie, 2 800 000 primaire, 2 850 000
+    collège 10ème) est un montant GLOBAL, frais d'inscription/réinscription
+    compris. Dès que le frais bouge — parce que la grille devient enfin
+    trouvable, ou parce qu'on passe du tarif d'inscription à celui de
+    réinscription — les tranches doivent être rééquilibrées, sinon le total
+    dérive (2 730 000 si le frais monte, 2 680 000 s'il baisse).
+
+    Retourne la liste des champs modifiés (vide si rien à faire).
+    """
+    if not getattr(eleve, 'garde_prolongee', False):
+        return []
+
+    from eleves.tarification import (
+        calculer_montants_garde_prolongee, montant_scolarite_garde_prolongee,
+    )
+
+    niveau = getattr(getattr(eleve, 'classe', None), 'niveau', None)
+    forfait = montant_scolarite_garde_prolongee(niveau)
+    if forfait is None:
+        return []  # niveau non concerné par la garde prolongée
+
+    fi = Decimal(str(echeancier.frais_inscription_du or 0))
+    t1 = Decimal(str(echeancier.tranche_1_due or 0))
+    t2 = Decimal(str(echeancier.tranche_2_due or 0))
+    t3 = Decimal(str(echeancier.tranche_3_due or 0))
+    if fi + t1 + t2 + t3 == forfait:
+        return []  # déjà conforme
+
+    resultat = calculer_montants_garde_prolongee(niveau, fi, t1, t2, t3)
+    if resultat is None:
+        return []
+    echeancier.tranche_1_due, echeancier.tranche_2_due, echeancier.tranche_3_due = resultat
+    return ["tranche_1_due", "tranche_2_due", "tranche_3_due"]
+
+
 def _align_enrollment_fee(eleve, echeancier, preferred_type_name=None):
     """Aligne le frais dû sur inscription ou réinscription.
 
@@ -113,59 +152,41 @@ def _align_enrollment_fee(eleve, echeancier, preferred_type_name=None):
     frais. Avant le premier paiement validé, le type actuellement sélectionné
     sert de préférence. Cela corrige les échéanciers précréés avec le tarif
     d'inscription alors que l'élève effectue une réinscription.
+
+    Pour les élèves en garde prolongée, les tranches sont ensuite rééquilibrées
+    afin que le total global reste égal au forfait annuel.
     """
-    preference = _enrollment_preference_for_eleve(eleve, preferred_type_name)
-    if preference is None:
-        return echeancier
-
-    expected_nature = 'REINSCRIPTION' if preference else 'INSCRIPTION'
     update_fields = []
-    if getattr(echeancier, 'nature_frais', 'INSCRIPTION') != expected_nature:
-        echeancier.nature_frais = expected_nature
-        update_fields.append('nature_frais')
+    preference = _enrollment_preference_for_eleve(eleve, preferred_type_name)
 
-    grille = _applicable_grille_for_eleve(eleve, echeancier.annee_scolaire)
-    if not grille:
-        if update_fields:
-            echeancier.save(update_fields=update_fields + ["date_modification"])
-        return echeancier
+    if preference is not None:
+        expected_nature = 'REINSCRIPTION' if preference else 'INSCRIPTION'
+        if getattr(echeancier, 'nature_frais', 'INSCRIPTION') != expected_nature:
+            echeancier.nature_frais = expected_nature
+            update_fields.append('nature_frais')
 
-    expected_fee = (
-        Decimal(str(grille.frais_reinscription or 0))
-        if preference
-        else Decimal(str(grille.frais_inscription or 0))
-    )
-    current_fee = Decimal(str(echeancier.frais_inscription_du or 0))
-    configured_fees = {
-        Decimal(str(grille.frais_inscription or 0)),
-        Decimal(str(grille.frais_reinscription or 0)),
-        Decimal("0"),
-    }
-    # Ne pas écraser un montant personnalisé saisi manuellement dans l'échéancier.
-    if current_fee in configured_fees and current_fee != expected_fee:
-        echeancier.frais_inscription_du = expected_fee
-        update_fields.append("frais_inscription_du")
-
-        # Garde prolongée : le forfait annuel est un montant GLOBAL, frais
-        # d'inscription/réinscription compris. Modifier ce frais sans rééquilibrer
-        # les tranches ferait dépasser le forfait (ex. 2 700 000 -> 2 730 000).
-        if getattr(eleve, 'garde_prolongee', False):
-            from eleves.tarification import calculer_montants_garde_prolongee
-            niveau = getattr(getattr(eleve, 'classe', None), 'niveau', None)
-            resultat = calculer_montants_garde_prolongee(
-                niveau,
-                expected_fee,
-                echeancier.tranche_1_due,
-                echeancier.tranche_2_due,
-                echeancier.tranche_3_due,
+        grille = _applicable_grille_for_eleve(eleve, echeancier.annee_scolaire)
+        if grille:
+            expected_fee = (
+                Decimal(str(grille.frais_reinscription or 0))
+                if preference
+                else Decimal(str(grille.frais_inscription or 0))
             )
-            if resultat is not None:
-                (
-                    echeancier.tranche_1_due,
-                    echeancier.tranche_2_due,
-                    echeancier.tranche_3_due,
-                ) = resultat
-                update_fields += ["tranche_1_due", "tranche_2_due", "tranche_3_due"]
+            current_fee = Decimal(str(echeancier.frais_inscription_du or 0))
+            configured_fees = {
+                Decimal(str(grille.frais_inscription or 0)),
+                Decimal(str(grille.frais_reinscription or 0)),
+                Decimal("0"),
+            }
+            # Ne pas écraser un montant personnalisé saisi manuellement dans l'échéancier.
+            if current_fee in configured_fees and current_fee != expected_fee:
+                echeancier.frais_inscription_du = expected_fee
+                update_fields.append("frais_inscription_du")
+
+    # Garde prolongée : le total global doit toujours valoir exactement le
+    # forfait. Ce contrôle tourne même si le frais n'a pas bougé, pour réparer
+    # les échéanciers dont le total a déjà dérivé.
+    update_fields += _rebalance_garde_prolongee(eleve, echeancier)
 
     if update_fields:
         echeancier.save(update_fields=update_fields + ["date_modification"])
