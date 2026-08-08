@@ -4,83 +4,228 @@
 {% block title %}{{ titre_page }}{% endblock %}
 
 {% block content %}
-<div class="container-fluid py-3">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
-        <div>
-            <h2 class="mb-1"><i class="fas fa-school text-primary me-2"></i>{{ titre_page }}</h2>
-            <p class="text-muted mb-0">Biens de l'établissement et contributions papier RAM{% if annee_active %} — {{ annee_active }}{% endif %}</p>
-        </div>
-        <div class="d-flex gap-2">
-            <a href="{% url 'depenses:creer_bien' %}" class="btn btn-primary"><i class="fas fa-plus me-1"></i>Ajouter un bien</a>
-            <a href="{% url 'depenses:ajouter_papier_ram' %}" class="btn btn-success"><i class="fas fa-file-alt me-1"></i>Enregistrer RAM</a>
-        </div>
-    </div>
-
-    <div class="card mb-4 border-0 shadow-sm">
-        <div class="card-header bg-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0"><i class="fas fa-chair text-primary me-2"></i>Biens de l'établissement</h5>
-            <a href="{% url 'depenses:liste_biens' %}" class="btn btn-sm btn-outline-primary">Voir tous</a>
-        </div>
-        <div class="card-body">
-            <div class="row g-3 text-center">
-                <div class="col-6 col-lg"><div class="p-3 bg-light rounded"><small class="text-muted">Désignations</small><h3>{{ resume_biens.total_biens }}</h3></div></div>
-                <div class="col-6 col-lg"><div class="p-3 bg-light rounded"><small class="text-muted">Achetés</small><h3>{{ resume_biens.quantite_achetee }}</h3></div></div>
-                <div class="col-6 col-lg"><div class="p-3 bg-primary-subtle rounded"><small class="text-muted">Utilisés</small><h3 class="text-primary">{{ resume_biens.quantite_utilisee }}</h3></div></div>
-                <div class="col-6 col-lg"><div class="p-3 bg-danger-subtle rounded"><small class="text-muted">Gâtés</small><h3 class="text-danger">{{ resume_biens.quantite_gatee }}</h3></div></div>
-                <div class="col-6 col-lg"><div class="p-3 bg-success-subtle rounded"><small class="text-muted">Disponibles</small><h3 class="text-success">{{ resume_biens.quantite_disponible }}</h3></div></div>
-            </div>
-            <div class="alert alert-info mt-3 mb-0"><strong>Valeur totale des achats :</strong> {{ resume_biens.valeur_totale|intcomma }} GNF</div>
-        </div>
-    </div>
-
-    <div class="card mb-4 border-0 shadow-sm">
-        <div class="card-header bg-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0"><i class="fas fa-copy text-success me-2"></i>Papier RAM{% if annee_active %} — {{ annee_active }}{% endif %}</h5>
-            <a href="{% url 'depenses:gestion_papier_ram' %}" class="btn btn-sm btn-outline-success">Ouvrir le suivi</a>
-        </div>
-        <div class="card-body">
-            <div class="row g-3 text-center">
-                <div class="col-6 col-lg-2"><div class="p-3 bg-light rounded"><small class="text-muted">Élèves</small><h3>{{ resume_ram.total_eleves }}</h3></div></div>
-                <div class="col-6 col-lg-2"><div class="p-3 bg-success-subtle rounded"><small class="text-muted">Enregistrés</small><h3 class="text-success">{{ resume_ram.total_enregistres }}</h3></div></div>
-                <div class="col-6 col-lg-2"><div class="p-3 bg-warning-subtle rounded"><small class="text-muted">En attente</small><h3 class="text-warning">{{ resume_ram.total_en_attente }}</h3></div></div>
-                <div class="col-6 col-lg-2"><div class="p-3 bg-light rounded"><small class="text-muted">Paquets reçus</small><h3>{{ resume_ram.paquets_recus }}</h3></div></div>
-                <div class="col-6 col-lg-2"><div class="p-3 bg-light rounded"><small class="text-muted">Paiements</small><h3>{{ resume_ram.eleves_argent }}</h3></div></div>
-                <div class="col-6 col-lg-2"><div class="p-3 bg-light rounded"><small class="text-muted">Montant</small><h5>{{ resume_ram.montant_recu|intcomma }} GNF</h5></div></div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row g-4">
-        <div class="col-lg-7">
-            <div class="card h-100 border-0 shadow-sm">
-                <div class="card-header bg-white"><h5 class="mb-0">Dernières contributions RAM</h5></div>
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead><tr><th>Élève</th><th>Classe</th><th>Contribution</th><th>Date</th></tr></thead>
-                        <tbody>
-                        {% for item in dernieres_contributions %}
-                            <tr>
-                                <td>{{ item.eleve.nom_complet }}<br><small class="text-muted">{{ item.eleve.matricule }}</small></td>
-                                <td>{{ item.eleve.classe.nom }}</td>
-                                <td>{% if item.mode_contribution == 'PAPIER' %}<span class="badge bg-success">{{ item.nombre_paquets }} paquet{{ item.nombre_paquets|pluralize }}</span>{% else %}<span class="badge bg-primary">{{ item.montant_paye|intcomma }} GNF</span>{% endif %}</td>
-                                <td>{{ item.date_contribution|date:'d/m/Y' }}</td>
-                            </tr>
-                        {% empty %}<tr><td colspan="4" class="text-center text-muted py-4">Aucune contribution enregistrée.</td></tr>{% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-5">
-            <div class="card h-100 border-0 shadow-sm">
-                <div class="card-header bg-white"><h5 class="mb-0">Élèves en attente</h5></div>
-                <ul class="list-group list-group-flush">
-                    {% for eleve in eleves_en_attente %}
-                    <li class="list-group-item d-flex justify-content-between"><span>{{ eleve.nom_complet }}</span><small class="text-muted">{{ eleve.classe.nom }}</small></li>
-                    {% empty %}<li class="list-group-item text-center text-muted py-4">Aucun élève en attente.</li>{% endfor %}
-                </ul>
-            </div>
-        </div>
-    </div>
+<div class="rec-header mb-4">
+  <div class="rec-header-icon"><i class="fas fa-boxes-stacked"></i></div>
+  <div class="flex-grow-1">
+    <h1 class="h3 mb-1">{{ titre_page }}</h1>
+    <p class="text-muted mb-0">Biens de l'établissement et contributions papier RAM{% if annee_active %} — {{ annee_active }}{% endif %}</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{% url 'depenses:creer_bien' %}" class="btn btn-primary"><i class="fas fa-plus me-1"></i>Ajouter un bien</a>
+    <a href="{% url 'depenses:ajouter_papier_ram' %}" class="btn btn-success"><i class="fas fa-file-alt me-1"></i>Enregistrer RAM</a>
+  </div>
 </div>
+
+<!-- ===== Biens de l'établissement ===== -->
+<div class="rec-section-head">
+  <h2 class="rec-section-title"><i class="fas fa-chair me-2"></i>Biens de l'établissement</h2>
+  <a href="{% url 'depenses:liste_biens' %}" class="rec-shortcut"><i class="fas fa-list"></i>Voir tous</a>
+</div>
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-2">
+    <div class="rec-kpi">
+      <div class="rec-kpi-icon"><i class="fas fa-tags"></i></div>
+      <div class="rec-kpi-value">{{ resume_biens.total_biens }}</div>
+      <div class="rec-kpi-label">Désignations</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="rec-kpi">
+      <div class="rec-kpi-icon"><i class="fas fa-cart-shopping"></i></div>
+      <div class="rec-kpi-value">{{ resume_biens.quantite_achetee }}</div>
+      <div class="rec-kpi-label">Achetés</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="rec-kpi rec-kpi--primary">
+      <div class="rec-kpi-icon"><i class="fas fa-circle-check"></i></div>
+      <div class="rec-kpi-value">{{ resume_biens.quantite_utilisee }}</div>
+      <div class="rec-kpi-label">Utilisés</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="rec-kpi rec-kpi--danger">
+      <div class="rec-kpi-icon"><i class="fas fa-triangle-exclamation"></i></div>
+      <div class="rec-kpi-value">{{ resume_biens.quantite_gatee }}</div>
+      <div class="rec-kpi-label">Gâtés</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="rec-kpi rec-kpi--success">
+      <div class="rec-kpi-icon"><i class="fas fa-box-open"></i></div>
+      <div class="rec-kpi-value">{{ resume_biens.quantite_disponible }}</div>
+      <div class="rec-kpi-label">Disponibles</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="rec-kpi rec-kpi--warning">
+      <div class="rec-kpi-icon"><i class="fas fa-sack-dollar"></i></div>
+      <div class="rec-kpi-value">{{ resume_biens.valeur_totale|intcomma }} <small>GNF</small></div>
+      <div class="rec-kpi-label">Valeur totale</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Papier RAM ===== -->
+<div class="rec-section-head">
+  <h2 class="rec-section-title"><i class="fas fa-copy me-2"></i>Papier RAM{% if annee_active %} — {{ annee_active }}{% endif %}</h2>
+  <a href="{% url 'depenses:gestion_papier_ram' %}" class="rec-shortcut"><i class="fas fa-arrow-right"></i>Ouvrir le suivi</a>
+</div>
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-2">
+    <div class="rec-kpi">
+      <div class="rec-kpi-icon"><i class="fas fa-users"></i></div>
+      <div class="rec-kpi-value">{{ resume_ram.total_eleves }}</div>
+      <div class="rec-kpi-label">Élèves</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="rec-kpi rec-kpi--success">
+      <div class="rec-kpi-icon"><i class="fas fa-circle-check"></i></div>
+      <div class="rec-kpi-value">{{ resume_ram.total_enregistres }}</div>
+      <div class="rec-kpi-label">Enregistrés</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="rec-kpi rec-kpi--warning">
+      <div class="rec-kpi-icon"><i class="fas fa-hourglass-half"></i></div>
+      <div class="rec-kpi-value">{{ resume_ram.total_en_attente }}</div>
+      <div class="rec-kpi-label">En attente</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="rec-kpi">
+      <div class="rec-kpi-icon"><i class="fas fa-box"></i></div>
+      <div class="rec-kpi-value">{{ resume_ram.paquets_recus }}</div>
+      <div class="rec-kpi-label">Paquets reçus</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="rec-kpi rec-kpi--primary">
+      <div class="rec-kpi-icon"><i class="fas fa-hand-holding-dollar"></i></div>
+      <div class="rec-kpi-value">{{ resume_ram.eleves_argent }}</div>
+      <div class="rec-kpi-label">Paiements</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-2">
+    <div class="rec-kpi rec-kpi--warning">
+      <div class="rec-kpi-icon"><i class="fas fa-coins"></i></div>
+      <div class="rec-kpi-value">{{ resume_ram.montant_recu|intcomma }} <small>GNF</small></div>
+      <div class="rec-kpi-label">Montant reçu</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Activité récente ===== -->
+<h2 class="rec-section-title mb-3"><i class="fas fa-clock-rotate-left me-2"></i>Activité récente</h2>
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="rec-panel h-100">
+      <div class="rec-panel-head">Dernières contributions RAM</div>
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead><tr><th>Élève</th><th>Classe</th><th>Contribution</th><th>Date</th></tr></thead>
+          <tbody>
+          {% for item in dernieres_contributions %}
+              <tr>
+                  <td>{{ item.eleve.nom_complet }}<br><small class="text-muted">{{ item.eleve.matricule }}</small></td>
+                  <td>{{ item.eleve.classe.nom }}</td>
+                  <td>{% if item.mode_contribution == 'PAPIER' %}<span class="badge bg-success">{{ item.nombre_paquets }} paquet{{ item.nombre_paquets|pluralize }}</span>{% else %}<span class="badge bg-primary">{{ item.montant_paye|intcomma }} GNF</span>{% endif %}</td>
+                  <td>{{ item.date_contribution|date:'d/m/Y' }}</td>
+              </tr>
+          {% empty %}<tr><td colspan="4" class="text-center text-muted py-4">Aucune contribution enregistrée.</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="rec-panel h-100">
+      <div class="rec-panel-head">Élèves en attente</div>
+      <ul class="list-group list-group-flush">
+          {% for eleve in eleves_en_attente %}
+          <li class="list-group-item d-flex justify-content-between"><span>{{ eleve.nom_complet }}</span><small class="text-muted">{{ eleve.classe.nom }}</small></li>
+          {% empty %}<li class="list-group-item text-center text-muted py-4">Aucun élève en attente.</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* ===== En-tête (identique au hub Recouvrement) ===== */
+  .rec-header { display: flex; align-items: center; gap: 1rem; }
+  .rec-header-icon {
+    width: 56px; height: 56px; border-radius: 14px;
+    background: linear-gradient(135deg, #1657a8 0%, #0f3f7d 100%);
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem; flex: 0 0 auto;
+    box-shadow: 0 6px 16px rgba(22,87,168,.25);
+  }
+
+  /* ===== Titres de section ===== */
+  .rec-section-head {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 1rem; margin: 1.75rem 0 1rem; padding-bottom: .5rem;
+    border-bottom: 2px solid #eef1f5;
+  }
+  .rec-section-head:first-of-type { margin-top: 0; }
+  .rec-section-title {
+    font-size: 1.05rem; font-weight: 700; color: #2c3e50; margin: 0;
+    padding-bottom: .5rem; border-bottom: 2px solid #eef1f5;
+  }
+  .rec-section-head .rec-section-title { padding-bottom: 0; border-bottom: 0; margin-bottom: 0; }
+
+  /* ===== KPI ===== */
+  .rec-kpi {
+    background: #fff;
+    border-radius: 14px;
+    padding: 1.1rem 1rem 1rem;
+    height: 100%;
+    box-shadow: 0 2px 10px rgba(0,0,0,.06);
+    border-top: 4px solid #ccc;
+    transition: transform .25s ease, box-shadow .25s ease;
+  }
+  .rec-kpi:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,.1); }
+  .rec-kpi-icon {
+    width: 38px; height: 38px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.05rem; margin-bottom: .55rem;
+    background: rgba(0,0,0,.05); color: #6c757d;
+  }
+  .rec-kpi-value { font-size: 1.3rem; font-weight: 700; color: #24303f; line-height: 1.2; }
+  .rec-kpi-value small { font-size: .74rem; font-weight: 600; color: #8a95a3; }
+  .rec-kpi-label { font-size: .8rem; font-weight: 600; color: #495057; margin-top: .25rem; }
+  .rec-kpi--danger  { border-top-color: #dc3545; }
+  .rec-kpi--danger .rec-kpi-icon  { background: rgba(220,53,69,.12); color: #dc3545; }
+  .rec-kpi--warning { border-top-color: #ffc107; }
+  .rec-kpi--warning .rec-kpi-icon { background: rgba(255,193,7,.15); color: #b8860b; }
+  .rec-kpi--success { border-top-color: #28a745; }
+  .rec-kpi--success .rec-kpi-icon { background: rgba(40,167,69,.12); color: #28a745; }
+  .rec-kpi--primary { border-top-color: #007bff; }
+  .rec-kpi--primary .rec-kpi-icon { background: rgba(0,123,255,.12); color: #007bff; }
+
+  /* ===== Raccourci (lien pastille) ===== */
+  .rec-shortcut {
+    display: inline-flex; align-items: center; gap: .45rem;
+    background: #fff; border: 1px solid #e3e8ef; border-radius: 999px;
+    padding: .4rem .9rem; font-size: .82rem; font-weight: 600; color: #24303f;
+    text-decoration: none; transition: all .2s ease; white-space: nowrap;
+  }
+  .rec-shortcut i { color: #1657a8; }
+  .rec-shortcut:hover { background: #1657a8; color: #fff; border-color: #1657a8; }
+  .rec-shortcut:hover i { color: #fff; }
+
+  /* ===== Panneau (tableaux / listes) ===== */
+  .rec-panel {
+    background: #fff; border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.06);
+    overflow: hidden;
+  }
+  .rec-panel-head {
+    padding: 1rem 1.25rem; font-weight: 700; color: #24303f;
+    border-bottom: 1px solid #eef1f5;
+  }
+</style>
 {% endblock %}
