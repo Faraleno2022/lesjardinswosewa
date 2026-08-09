@@ -133,6 +133,12 @@ class Enseignant(SyncTrackedModel):
             raise ValidationError({
                 'salaire_fixe': f'Le salaire fixe est obligatoire pour les {self.get_type_enseignant_display().lower()}.'
             })
+
+    def save(self, *args, **kwargs):
+        # Les validateurs doivent aussi protéger les imports, scripts et API,
+        # pas uniquement les ModelForm de l'interface.
+        self.full_clean()
+        super().save(*args, **kwargs)
     
     def calculer_salaire_mensuel(self, heures_realisees=None):
         """
@@ -244,6 +250,18 @@ class AffectationClasse(SyncTrackedModel):
             raise ValidationError({
                 'date_fin': 'La date de fin ne peut pas être antérieure à la date de début.'
             })
+        if (
+            self.enseignant_id
+            and self.classe_id
+            and self.enseignant.ecole_id != self.classe.ecole_id
+        ):
+            raise ValidationError({
+                'classe': "La classe et l'enseignant doivent appartenir à la même école."
+            })
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 
 class PeriodeSalaire(SyncTrackedModel):
@@ -306,6 +324,10 @@ class PeriodeSalaire(SyncTrackedModel):
             'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
         ]
         return f"{mois_noms[self.mois]} {self.annee} - {self.ecole.nom}"
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
     
     @property
     def nom_periode(self):
@@ -465,7 +487,20 @@ class EtatSalaire(SyncTrackedModel):
     @property
     def peut_etre_valide(self):
         """Vérifie si l'état de salaire peut être validé"""
-        return not self.valide and not self.periode.cloturee
+        from calendar import monthrange
+        from datetime import date
+
+        dernier_jour = date(
+            self.periode.annee,
+            self.periode.mois,
+            monthrange(self.periode.annee, self.periode.mois)[1],
+        )
+        return (
+            not self.valide
+            and not self.periode.cloturee
+            and self.enseignant.statut == 'ACTIF'
+            and self.enseignant.date_embauche <= dernier_jour
+        )
     
     @property
     def peut_etre_paye(self):

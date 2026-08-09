@@ -12,8 +12,9 @@ from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
 from django.db.models import (
-    Q, F, Case, When, Value, DecimalField, ExpressionWrapper,
+    Q, F, Case, When, Value, DecimalField, ExpressionWrapper, Sum,
 )
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 
 from eleves.models import Classe
@@ -59,7 +60,7 @@ def filtrer_paiements(request):
         qs = qs.filter(statut=statut)
         libelles.append(f'Statut : {statut}')
     if annee:
-        qs = qs.filter(eleve__classe__annee_scolaire=annee)
+        qs = qs.filter(annee_scolaire=annee)
         libelles.append(f'Année : {annee}')
     if classe_id.isdigit():
         qs = qs.filter(eleve__classe_id=int(classe_id))
@@ -90,9 +91,27 @@ def filtrer_paiements(request):
                 + F('tranche_2_payee') + F('tranche_3_payee'))
         du_total = (F('frais_inscription_du') + F('tranche_1_due')
                     + F('tranche_2_due') + F('tranche_3_due'))
-        eche = EcheancierPaiement.objects.annotate(
-            _retard=ExpressionWrapper(exig - paye, output_field=DecimalField(max_digits=12, decimal_places=0)),
-            _reste=ExpressionWrapper(du_total - paye, output_field=DecimalField(max_digits=12, decimal_places=0)),
+        montant_field = DecimalField(max_digits=12, decimal_places=0)
+        eche = EcheancierPaiement.objects
+        if annee:
+            eche = eche.filter(annee_scolaire=annee)
+        else:
+            eche = eche.filter(annee_scolaire=F('eleve__classe__annee_scolaire'))
+        eche = eche.annotate(
+            _remises=Coalesce(
+                Sum(
+                    'eleve__paiements__remises__montant_remise',
+                    filter=Q(
+                        eleve__paiements__statut='VALIDE',
+                        eleve__paiements__annee_scolaire=F('annee_scolaire'),
+                    ),
+                ),
+                Value(Decimal('0')),
+                output_field=montant_field,
+            ),
+        ).annotate(
+            _retard=ExpressionWrapper(exig - paye - F('_remises'), output_field=montant_field),
+            _reste=ExpressionWrapper(du_total - paye - F('_remises'), output_field=montant_field),
         )
         if situation == 'retard':
             eche = eche.filter(_retard__gt=0)

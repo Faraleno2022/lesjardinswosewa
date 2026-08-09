@@ -206,8 +206,12 @@ class WhatsAppNoteRappelSender:
             echeancier = None
 
         if not echeancier:
+            annee_scolaire = getattr(
+                getattr(eleve, 'classe', None), 'annee_scolaire', ''
+            )
             montant_paye = Paiement.objects.filter(
                 eleve=eleve,
+                annee_scolaire=annee_scolaire,
                 statut='VALIDE'
             ).aggregate(total=Sum('montant'))['total'] or Decimal('0')
             return {
@@ -232,6 +236,7 @@ class WhatsAppNoteRappelSender:
         montant_paye = sum((paye or Decimal('0')) for _libelle, _du, paye, _date in postes)
         remises_total = PaiementRemise.objects.filter(
             paiement__eleve=eleve,
+            paiement__annee_scolaire=echeancier.annee_scolaire,
             paiement__statut='VALIDE'
         ).aggregate(total=Sum('montant_remise'))['total'] or Decimal('0')
 

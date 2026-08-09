@@ -83,3 +83,35 @@ def build_payment_allocation_history(echeancier, payments):
         allocations[payment.pk] = allocation
 
     return allocations, balances
+
+
+def allocate_discounts(echeancier, discounts, balances=None):
+    """Ventile les remises validées sur les tranches réellement concernées.
+
+    Les remises ne couvrent jamais l'inscription/réinscription. Les anciennes
+    remises sans information de tranche sont appliquées à T1, T2 puis T3 afin
+    de rester compatibles avec les données antérieures.
+    """
+    current_balances = dict(balances or remaining_balances(echeancier))
+    allocation = {key: Decimal('0') for key in ALLOCATION_KEYS}
+
+    for discount in discounts:
+        selected = [
+            f"tranche_{number}"
+            for number in getattr(discount, 'tranches_concernees_liste', [])
+            if number in (1, 2, 3)
+        ]
+        if not selected:
+            selected = ['tranche_1', 'tranche_2', 'tranche_3']
+
+        amount = max(Decimal('0'), as_decimal(getattr(discount, 'montant_remise', 0)))
+        for key in selected:
+            if amount <= 0:
+                break
+            available = max(Decimal('0'), as_decimal(current_balances.get(key, 0)))
+            take = min(amount, available)
+            allocation[key] += take
+            current_balances[key] = available - take
+            amount -= take
+
+    return allocation, current_balances
