@@ -71,7 +71,7 @@ def liste_eleves(request):
         school=user_school_obj if not user_is_admin(request.user) else None,
         with_payments=True,
         with_classes=True
-    )
+    ).filter(est_dans_corbeille=False)
 
     # Filtrer par année scolaire active
     if not user_is_admin(request.user) and user_school_obj:
@@ -535,7 +535,7 @@ def configurer_ecole(request, ecole_id: int):
 @login_required
 def detail_eleve(request, eleve_id):
     """Vue pour afficher les détails d'un élève"""
-    qs = Eleve.objects.select_related(
+    qs = Eleve.objects.filter(est_dans_corbeille=False).select_related(
         'classe', 'classe__ecole', 'responsable_principal', 'responsable_secondaire'
     ).prefetch_related('paiements', 'historique')
     if not user_is_admin(request.user):
@@ -805,7 +805,7 @@ def choix_apres_ajout_eleve(request, eleve_id):
 @login_required
 def modifier_eleve(request, eleve_id):
     """Vue pour modifier un élève existant"""
-    qs = Eleve.objects.all()
+    qs = Eleve.objects.filter(est_dans_corbeille=False)
     if not user_is_admin(request.user):
         qs = filter_by_user_school(qs, request.user, 'classe__ecole')
     
@@ -1451,181 +1451,103 @@ def export_tous_eleves_excel(request):
 
 @login_required
 def supprimer_eleve(request, eleve_id):
-    """Vue pour supprimer un élève avec ses paiements et abonnements (avec code de vérification)"""
-    # Permettre l'accès aux utilisateurs connectés (la sécurité est assurée par le code de vérification)
-    # Les permissions spécifiques (soft delete vs suppression définitive) sont gérées dans le traitement
-    
-    qs = Eleve.objects.all()
+    """Place un élève dans la corbeille après confirmation."""
+    qs = Eleve.objects.filter(est_dans_corbeille=False)
     if not user_is_admin(request.user):
         qs = filter_by_user_school(qs, request.user, 'classe__ecole')
-    
-    try:
-        eleve = qs.get(id=eleve_id)
-    except Eleve.DoesNotExist:
-        messages.error(request, f"L'élève avec l'ID {eleve_id} n'existe pas ou a déjà été supprimé.")
-        return redirect('eleves:liste_eleves')
+
+    eleve = get_object_or_404(qs, id=eleve_id)
 
     nom_complet = f"{eleve.prenom} {eleve.nom}"
     matricule = eleve.matricule
-    
-    # Vérifier la permission de suppression définitive
-    peut_supprimer_definitivement = user_is_admin(request.user) or (
-        hasattr(request.user, 'profil') and 
-        request.user.profil.peut_supprimer_eleves_definitivement
-    )
-    
-    # Compter les éléments associés
     paiements_count = eleve.paiements.count()
     abonnements_bus_count = eleve.abonnements_bus.count()
     abonnements_cantine_count = eleve.abonnements_cantine.count()
-    
+
     if request.method == 'POST':
-        # Vérifier le code de sécurité
-        code_verification = request.POST.get('code_verification', '').strip()
-        suppression_definitive = request.POST.get('suppression_definitive') == 'on'
-        
-        # Pour les admins, toujours activer la suppression définitive par défaut
-        if user_is_admin(request.user):
-            # Si l'admin n'a pas explicitement décoché, on force la suppression définitive
-            suppression_definitive = request.POST.get('suppression_definitive') != 'off'
-            # Log pour debug
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.info(f"Admin {request.user.username} - Suppression définitive: {suppression_definitive}")
-        
-        from django.conf import settings as django_settings
-        expected_code = django_settings.SECURITY_VERIFICATION_CODE
-        if not expected_code or code_verification != expected_code:
-            messages.error(request, "Code de vérification incorrect. Suppression annulée.")
-            return render(request, 'eleves/confirmer_suppression.html', {
-                'eleve': eleve,
-                'paiements_count': paiements_count,
-                'titre_page': f'Supprimer {nom_complet}'
-            })
-        
-        # Vérifier la permission pour suppression définitive
-        if suppression_definitive and not peut_supprimer_definitivement:
-            messages.error(request, "Vous n'avez pas la permission de supprimer définitivement un élève.")
-            return redirect('eleves:detail_eleve', eleve_id=eleve.id)
-        
-        # Procéder à la suppression avec le code correct
-        from django.db import transaction
         try:
             with transaction.atomic():
-                if suppression_definitive and peut_supprimer_definitivement:
-                    # Suppression définitive pour les utilisateurs autorisés
-                    # Collecter les informations avant suppression
-                    paiements_supprimes = []
-                    for paiement in eleve.paiements.all():
-                        paiements_supprimes.append(f"{paiement.numero_recu} - {paiement.montant} GNF")
-                    
-                    abonnements_bus_supprimes = []
-                    for abo in eleve.abonnements_bus.all():
-                        abonnements_bus_supprimes.append(f"{abo.get_periodicite_display()} - {abo.montant} GNF")
-                    
-                    abonnements_cantine_supprimes = []
-                    for abo in eleve.abonnements_cantine.all():
-                        abonnements_cantine_supprimes.append(f"{abo.get_periodicite_display()} - {abo.montant} GNF")
-                    
-                    # Créer l'entrée dans la corbeille avant suppression
-                    from administration.models import SystemLog
-                    SystemLog.objects.create(
-                        action='SUPPRESSION_DEFINITIVE',
-                        description=f"Suppression définitive de l'élève {nom_complet} (matricule: {matricule}) avec {paiements_count} paiement(s), {abonnements_bus_count} abonnement(s) bus et {abonnements_cantine_count} abonnement(s) cantine",
-                        user=request.user,
-                        ip_address=request.META.get('REMOTE_ADDR', ''),
-                        details={
-                            'eleve_id': eleve.id,
-                            'matricule': matricule,
-                            'nom_complet': nom_complet,
-                            'classe': str(eleve.classe),
-                            'paiements_supprimes': paiements_supprimes,
-                            'abonnements_bus_supprimes': abonnements_bus_supprimes,
-                            'abonnements_cantine_supprimes': abonnements_cantine_supprimes,
-                            'verification_code_used': True,
-                            'user_agent': request.META.get('HTTP_USER_AGENT', '')
-                        }
-                    )
-                    
-                    # Supprimer les paiements
-                    eleve.paiements.all().delete()
-                    
-                    # Supprimer les abonnements bus
-                    eleve.abonnements_bus.all().delete()
-                    
-                    # Supprimer les abonnements cantine
-                    eleve.abonnements_cantine.all().delete()
-                    
-                    # Supprimer l'élève définitivement
-                    eleve.delete()
-                    
-                    total_elements = paiements_count + abonnements_bus_count + abonnements_cantine_count
-                    messages.success(request, f"L'élève {nom_complet} et tous ses éléments associés ({total_elements} au total) ont été supprimés définitivement et sauvegardés dans la corbeille.")
-                else:
-                    # Soft delete - changer le statut au lieu de supprimer
-                    eleve.statut = 'EXCLU'
-                    eleve.save()
-
-                    # Créer l'historique
-                    HistoriqueEleve.objects.create(
-                        eleve=eleve,
-                        action='EXCLUSION',
-                        description=f"Exclusion de l'élève {nom_complet} avec {paiements_count} paiement(s)",
-                        utilisateur=request.user
-                    )
-
-                    # Log de l'activité
-                    JournalActivite.objects.create(
-                        user=request.user,
-                        action='SUPPRESSION',
-                        type_objet='ELEVE',
-                        objet_id=eleve.id,
-                        description=f"Exclusion de l'élève {nom_complet} (matricule: {matricule}) avec {paiements_count} paiement(s)",
-                        adresse_ip=request.META.get('REMOTE_ADDR', ''),
-                        user_agent=request.META.get('HTTP_USER_AGENT', '')
-                    )
-                    
-                    messages.success(request, f"L'élève {nom_complet} a été exclu (soft delete).")
-                    
+                eleve.placer_dans_corbeille(request.user)
+                HistoriqueEleve.objects.create(
+                    eleve=eleve,
+                    action='EXCLUSION',
+                    description=(
+                        f"Placement dans la corbeille de {nom_complet} "
+                        f"({paiements_count} paiement(s), {abonnements_bus_count} abonnement(s) bus, "
+                        f"{abonnements_cantine_count} abonnement(s) cantine)."
+                    ),
+                    utilisateur=request.user,
+                )
+                JournalActivite.objects.create(
+                    user=request.user,
+                    action='SUPPRESSION',
+                    type_objet='ELEVE',
+                    objet_id=eleve.id,
+                    description=f"{nom_complet} ({matricule}) placé dans la corbeille",
+                    adresse_ip=request.META.get('REMOTE_ADDR', ''),
+                    user_agent=request.META.get('HTTP_USER_AGENT', ''),
+                )
         except Exception as e:
             messages.error(request, f"Erreur lors de la suppression: {e}")
             return redirect('eleves:detail_eleve', eleve_id=eleve.id)
 
+        cache.clear()
+        messages.success(
+            request,
+            f"L'élève {nom_complet} a été placé dans la corbeille. Toutes ses données sont conservées.",
+        )
         return redirect('eleves:liste_eleves')
-    
-    # Afficher le formulaire de confirmation
+
     return render(request, 'eleves/confirmer_suppression.html', {
         'eleve': eleve,
         'paiements_count': paiements_count,
         'abonnements_bus_count': abonnements_bus_count,
         'abonnements_cantine_count': abonnements_cantine_count,
-        'peut_supprimer_definitivement': peut_supprimer_definitivement,
         'titre_page': f'Supprimer {nom_complet}'
     })
+
+
+@login_required
+def corbeille_eleves(request):
+    """Affiche les élèves archivés de l'école de l'utilisateur."""
+    eleves = Eleve.objects.filter(est_dans_corbeille=True).select_related(
+        'classe', 'classe__ecole', 'supprime_par',
+    )
+    if not user_is_admin(request.user):
+        eleves = filter_by_user_school(eleves, request.user, 'classe__ecole')
+    eleves = eleves.order_by('-supprime_le', 'nom', 'prenom')
+    page_obj = Paginator(eleves, 25).get_page(request.GET.get('page'))
+    return render(request, 'eleves/corbeille.html', {
+        'page_obj': page_obj,
+        'titre_page': 'Corbeille des élèves',
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def restaurer_eleve(request, eleve_id):
+    """Restaure un élève archivé, avec contrôle de l'école."""
+    qs = Eleve.objects.filter(est_dans_corbeille=True)
+    if not user_is_admin(request.user):
+        qs = filter_by_user_school(qs, request.user, 'classe__ecole')
+    eleve = get_object_or_404(qs, pk=eleve_id)
+    nom_complet = eleve.nom_complet
+    with transaction.atomic():
+        eleve.restaurer_depuis_corbeille()
+        HistoriqueEleve.objects.create(
+            eleve=eleve,
+            action='CHANGEMENT_STATUT',
+            description=f"Restauration de {nom_complet} depuis la corbeille.",
+            utilisateur=request.user,
+        )
+    cache.clear()
+    messages.success(request, f"L'élève {nom_complet} a été restauré.")
+    return redirect('eleves:corbeille_eleves')
 
 @login_required
 @require_http_methods(["POST"])
 def supprimer_eleves_masse(request):
-    """Vue pour supprimer définitivement plusieurs élèves en masse"""
-    # Vérifier la permission de suppression définitive
-    peut_supprimer_definitivement = user_is_admin(request.user) or (
-        hasattr(request.user, 'profil') and 
-        request.user.profil.peut_supprimer_eleves_definitivement
-    )
-    
-    if not peut_supprimer_definitivement:
-        messages.error(request, "Vous n'avez pas la permission de supprimer définitivement des élèves.")
-        return redirect('eleves:liste_eleves')
-    
-    # Vérifier le code de sécurité
-    code_verification = request.POST.get('code_verification', '').strip()
-    from django.conf import settings as django_settings
-    expected_code = django_settings.SECURITY_VERIFICATION_CODE
-    if not expected_code or code_verification != expected_code:
-        messages.error(request, "Code de vérification incorrect. Suppression annulée.")
-        return redirect('eleves:liste_eleves')
-    
-    # Récupérer les IDs des élèves
+    """Place plusieurs élèves dans la corbeille, sans perte de données."""
     eleve_ids_str = request.POST.get('eleve_ids', '')
     if not eleve_ids_str:
         messages.error(request, "Aucun élève sélectionné.")
@@ -1641,104 +1563,39 @@ def supprimer_eleves_masse(request):
         messages.error(request, "Aucun élève sélectionné.")
         return redirect('eleves:liste_eleves')
     
-    # Récupérer les élèves
-    qs = Eleve.objects.filter(id__in=eleve_ids)
+    qs = Eleve.objects.filter(id__in=eleve_ids, est_dans_corbeille=False)
     if not user_is_admin(request.user):
         qs = filter_by_user_school(qs, request.user, 'classe__ecole')
-    
+
     eleves = list(qs)
     if not eleves:
         messages.error(request, "Aucun élève trouvé avec les IDs fournis.")
         return redirect('eleves:liste_eleves')
-    
-    import logging
-    logger = logging.getLogger(__name__)
-    
+
     try:
         with transaction.atomic():
-            eleves_supprimes = []
-            total_paiements = 0
-            total_abonnements_bus = 0
-            total_abonnements_cantine = 0
-            
             for eleve in eleves:
-                nom_complet = f"{eleve.prenom} {eleve.nom}"
-                matricule = eleve.matricule
-                
-                paiements_count = eleve.paiements.count()
-                abonnements_bus_count = eleve.abonnements_bus.count()
-                abonnements_cantine_count = eleve.abonnements_cantine.count()
-                
-                # Collecter les informations avant suppression
-                paiements_supprimes = []
-                for paiement in eleve.paiements.all():
-                    paiements_supprimes.append(f"{paiement.numero_recu} - {paiement.montant} GNF")
-                
-                abonnements_bus_supprimes = []
-                for abo in eleve.abonnements_bus.all():
-                    abonnements_bus_supprimes.append(f"{abo.get_periodicite_display()} - {abo.montant} GNF")
-                
-                abonnements_cantine_supprimes = []
-                for abo in eleve.abonnements_cantine.all():
-                    abonnements_cantine_supprimes.append(f"{abo.get_periodicite_display()} - {abo.montant} GNF")
-                
-                eleves_supprimes.append({
-                    'eleve_id': eleve.id,
-                    'matricule': matricule,
-                    'nom_complet': nom_complet,
-                    'classe': str(eleve.classe),
-                    'paiements_supprimes': paiements_supprimes,
-                    'abonnements_bus_supprimes': abonnements_bus_supprimes,
-                    'abonnements_cantine_supprimes': abonnements_cantine_supprimes,
-                })
-                
-                total_paiements += paiements_count
-                total_abonnements_bus += abonnements_bus_count
-                total_abonnements_cantine += abonnements_cantine_count
-                
-                # Supprimer les éléments associés
-                eleve.paiements.all().delete()
-                eleve.abonnements_bus.all().delete()
-                eleve.abonnements_cantine.all().delete()
-                
-                # Supprimer l'élève
-                eleve.delete()
-                
-                logger.info(f"Suppression définitive en masse: {nom_complet} ({matricule}) par {request.user.username}")
-            
-            # Créer l'entrée dans la corbeille
-            from administration.models import SystemLog
-            SystemLog.objects.create(
-                action='SUPPRESSION_DEFINITIVE',
-                description=f"Suppression définitive en masse de {len(eleves_supprimes)} élève(s) avec {total_paiements} paiement(s), {total_abonnements_bus} abonnement(s) bus et {total_abonnements_cantine} abonnement(s) cantine",
-                user=request.user,
-                ip_address=request.META.get('REMOTE_ADDR', ''),
-                details={
-                    'type': 'suppression_masse',
-                    'nombre_eleves': len(eleves_supprimes),
-                    'eleves_supprimes': eleves_supprimes,
-                    'verification_code_used': True,
-                    'user_agent': request.META.get('HTTP_USER_AGENT', '')
-                }
-            )
-            
-            # Log dans le journal d'activité
-            noms = ', '.join([e['nom_complet'] for e in eleves_supprimes])
+                eleve.placer_dans_corbeille(request.user)
+                HistoriqueEleve.objects.create(
+                    eleve=eleve,
+                    action='EXCLUSION',
+                    description="Placement dans la corbeille par suppression en masse.",
+                    utilisateur=request.user,
+                )
+            noms = ', '.join(e.nom_complet for e in eleves)
             JournalActivite.objects.create(
                 user=request.user,
                 action='SUPPRESSION',
                 type_objet='ELEVE',
-                description=f"Suppression définitive en masse de {len(eleves_supprimes)} élève(s): {noms}",
+                description=f"Placement en corbeille de {len(eleves)} élève(s): {noms}",
                 adresse_ip=request.META.get('REMOTE_ADDR', ''),
                 user_agent=request.META.get('HTTP_USER_AGENT', '')
             )
-            
-            messages.success(request, f"{len(eleves_supprimes)} élève(s) ont été supprimés définitivement avec toutes leurs données associées.")
-            
+        cache.clear()
+        messages.success(request, f"{len(eleves)} élève(s) ont été placés dans la corbeille.")
     except Exception as e:
-        logger.error(f"Erreur lors de la suppression en masse: {e}")
         messages.error(request, f"Erreur lors de la suppression en masse: {e}")
-    
+
     return redirect('eleves:liste_eleves')
 
 
@@ -3308,8 +3165,62 @@ def generer_ticket_bus_pdf(request, eleve_id):
 
 
 @login_required
+def generer_ticket_cantine_pdf(request, eleve_id):
+    """Génère la carte d'abonnement cantine d'un élève."""
+    from bus.models import AbonnementCantine
+    from reportlab.lib.units import mm
+
+    eleve_qs = Eleve.objects.filter(est_dans_corbeille=False).select_related(
+        'classe', 'classe__ecole', 'responsable_principal',
+    )
+    if not user_is_admin(request.user):
+        eleve_qs = filter_by_user_school(eleve_qs, request.user, 'classe__ecole')
+    eleve = get_object_or_404(eleve_qs, pk=eleve_id)
+    abonnement = AbonnementCantine.objects.filter(
+        eleve=eleve, statut='ACTIF',
+    ).order_by('-date_debut').first()
+    if not abonnement:
+        messages.warning(request, "Cet élève n'a pas d'abonnement cantine actif.")
+        return redirect('eleves:detail_eleve', eleve_id=eleve.id)
+
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="carte_cantine_{eleve.matricule}.pdf"'
+    width, height = 86 * mm, 54 * mm
+    c = canvas.Canvas(response, pagesize=(width, height))
+    try:
+        pdfmetrics.registerFont(TTFont('Arial', 'C:/Windows/Fonts/arial.ttf'))
+        pdfmetrics.registerFont(TTFont('Arial-Bold', 'C:/Windows/Fonts/arialbd.ttf'))
+        main_font, main_font_bold = 'Arial', 'Arial-Bold'
+    except Exception:
+        main_font, main_font_bold = 'Helvetica', 'Helvetica-Bold'
+    _dessiner_ticket_cantine(
+        c, eleve, abonnement, 0, 0, width, height, main_font, main_font_bold,
+    )
+    c.showPage()
+    c.save()
+    return response
+
+
+def _positions_huit_cartes_a4(page_width, page_height, card_width, card_height):
+    """Retourne une grille centrée de 2 colonnes x 4 lignes sur A4."""
+    from reportlab.lib.units import mm
+    h_spacing = 5 * mm
+    v_spacing = 5 * mm
+    margin_x = (page_width - (2 * card_width) - h_spacing) / 2
+    margin_y = (page_height - (4 * card_height) - (3 * v_spacing)) / 2
+    return [
+        (
+            margin_x + col * (card_width + h_spacing),
+            page_height - margin_y - (row + 1) * card_height - row * v_spacing,
+        )
+        for row in range(4)
+        for col in range(2)
+    ]
+
+
+@login_required
 def generer_tickets_retrait_classe_pdf(request, classe_id):
-    """Génère tous les tickets de retrait pour une classe (primaire/maternelle) en un seul PDF"""
+    """Génère les cartes de retrait, 8 par feuille A4."""
     classe = get_object_or_404(Classe, id=classe_id)
     
     # Vérifier les permissions
@@ -3335,7 +3246,7 @@ def generer_tickets_retrait_classe_pdf(request, classe_id):
         messages.warning(request, "Aucun élève actif trouvé dans cette classe.")
         return redirect('eleves:liste_eleves')
     
-    # Créer le PDF avec tous les tickets (2 par page)
+    # Créer le PDF avec 8 cartes par page A4.
     response = HttpResponse(content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="tickets_retrait_{classe.nom}.pdf"'
     
@@ -3358,19 +3269,15 @@ def generer_tickets_retrait_classe_pdf(request, classe_id):
     # Dimensions d'un ticket
     ticket_width = 86*mm
     ticket_height = 54*mm
-    margin = 10*mm
-    
-    # Position pour 2 tickets par page (un en haut, un en bas)
-    positions = [
-        (margin, height_page - margin - ticket_height),  # Haut
-        (margin, height_page - margin - 2*ticket_height - 15*mm),  # Bas
-    ]
+    positions = _positions_huit_cartes_a4(
+        width_page, height_page, ticket_width, ticket_height,
+    )
     
     ticket_count = 0
     
     for eleve in eleves:
         # Calculer la position du ticket
-        pos_index = ticket_count % 2
+        pos_index = ticket_count % 8
         x_offset, y_offset = positions[pos_index]
         
         # Dessiner un ticket
@@ -3378,8 +3285,7 @@ def generer_tickets_retrait_classe_pdf(request, classe_id):
         
         ticket_count += 1
         
-        # Nouvelle page tous les 2 tickets
-        if ticket_count % 2 == 0 and ticket_count < eleves.count():
+        if ticket_count % 8 == 0 and ticket_count < eleves.count():
             c.showPage()
     
     c.showPage()
@@ -3390,7 +3296,7 @@ def generer_tickets_retrait_classe_pdf(request, classe_id):
 
 @login_required
 def generer_tickets_bus_classe_pdf(request, classe_id):
-    """Génère tous les tickets bus pour une classe en un seul PDF"""
+    """Génère les cartes bus, 8 par feuille A4."""
     from bus.models import AbonnementBus
     
     classe = get_object_or_404(Classe, id=classe_id)
@@ -3417,7 +3323,7 @@ def generer_tickets_bus_classe_pdf(request, classe_id):
         messages.warning(request, "Aucun élève avec abonnement bus actif trouvé dans cette classe.")
         return redirect('eleves:liste_eleves')
     
-    # Créer le PDF avec tous les tickets (2 par page)
+    # Créer le PDF avec 8 cartes par page A4.
     response = HttpResponse(content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="tickets_bus_{classe.nom}.pdf"'
     
@@ -3440,13 +3346,9 @@ def generer_tickets_bus_classe_pdf(request, classe_id):
     # Dimensions d'un ticket
     ticket_width = 86*mm
     ticket_height = 54*mm
-    margin = 10*mm
-    
-    # Position pour 2 tickets par page
-    positions = [
-        (margin, height_page - margin - ticket_height),  # Haut
-        (margin, height_page - margin - 2*ticket_height - 15*mm),  # Bas
-    ]
+    positions = _positions_huit_cartes_a4(
+        width_page, height_page, ticket_width, ticket_height,
+    )
     
     ticket_count = 0
     
@@ -3461,7 +3363,7 @@ def generer_tickets_bus_classe_pdf(request, classe_id):
             continue
         
         # Calculer la position du ticket
-        pos_index = ticket_count % 2
+        pos_index = ticket_count % 8
         x_offset, y_offset = positions[pos_index]
         
         # Dessiner un ticket
@@ -3469,13 +3371,74 @@ def generer_tickets_bus_classe_pdf(request, classe_id):
         
         ticket_count += 1
         
-        # Nouvelle page tous les 2 tickets
-        if ticket_count % 2 == 0 and ticket_count < eleves.count():
+        if ticket_count % 8 == 0 and ticket_count < eleves.count():
             c.showPage()
     
     c.showPage()
     c.save()
     
+    return response
+
+
+@login_required
+def generer_tickets_cantine_classe_pdf(request, classe_id):
+    """Génère les cartes cantine actives, 8 par feuille A4."""
+    from bus.models import AbonnementCantine
+    from reportlab.lib.units import mm
+    from reportlab.lib.pagesizes import A4
+
+    classe = get_object_or_404(Classe, id=classe_id)
+    if not user_is_admin(request.user):
+        ecole = user_school(request.user)
+        if not ecole or classe.ecole_id != ecole.id:
+            messages.error(request, "Vous n'avez pas accès à cette classe.")
+            return redirect('eleves:liste_eleves')
+
+    abonnements = list(
+        AbonnementCantine.objects.filter(
+            eleve__classe=classe,
+            eleve__statut='ACTIF',
+            eleve__est_dans_corbeille=False,
+            statut='ACTIF',
+        ).select_related(
+            'eleve', 'eleve__classe', 'eleve__classe__ecole',
+            'eleve__responsable_principal',
+        ).order_by('eleve__nom', 'eleve__prenom', '-date_debut')
+    )
+    # Une seule carte par élève : l'abonnement actif le plus récent.
+    uniques = {}
+    for abonnement in abonnements:
+        uniques.setdefault(abonnement.eleve_id, abonnement)
+    abonnements = list(uniques.values())
+    if not abonnements:
+        messages.warning(request, "Aucun abonnement cantine actif dans cette classe.")
+        return redirect('eleves:liste_eleves')
+
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="cartes_cantine_{classe.nom}.pdf"'
+    page_width, page_height = A4
+    card_width, card_height = 86 * mm, 54 * mm
+    positions = _positions_huit_cartes_a4(
+        page_width, page_height, card_width, card_height,
+    )
+    c = canvas.Canvas(response, pagesize=A4)
+    try:
+        pdfmetrics.registerFont(TTFont('Arial', 'C:/Windows/Fonts/arial.ttf'))
+        pdfmetrics.registerFont(TTFont('Arial-Bold', 'C:/Windows/Fonts/arialbd.ttf'))
+        main_font, main_font_bold = 'Arial', 'Arial-Bold'
+    except Exception:
+        main_font, main_font_bold = 'Helvetica', 'Helvetica-Bold'
+
+    for index, abonnement in enumerate(abonnements):
+        x, y = positions[index % 8]
+        _dessiner_ticket_cantine(
+            c, abonnement.eleve, abonnement, x, y,
+            card_width, card_height, main_font, main_font_bold,
+        )
+        if (index + 1) % 8 == 0 and index + 1 < len(abonnements):
+            c.showPage()
+    c.showPage()
+    c.save()
     return response
 
 
@@ -3922,6 +3885,24 @@ def _dessiner_ticket_retrait(c, eleve, x, y, width, height, main_font, main_font
     c.drawCentredString(x+width/2, y+6, f"Généré le {timezone.now().strftime('%d/%m/%Y à %H:%M')}")
     
     c.restoreState()
+
+
+def _dessiner_ticket_cantine(c, eleve, abonnement, x, y, width, height, main_font, main_font_bold):
+    """Dessine une carte cantine au même format que la carte bus."""
+    validite = '-'
+    if abonnement.date_debut and abonnement.date_expiration:
+        validite = f"{abonnement.date_debut:%d/%m} - {abonnement.date_expiration:%d/%m/%Y}"
+    rows = [
+        ('Matricule', eleve.matricule),
+        ('Classe', eleve.classe.nom),
+        ('Repas', abonnement.get_type_repas_display()),
+        ('Périodicité', abonnement.get_periodicite_display()),
+        ('Validité', validite),
+    ]
+    return _dessiner_ticket_carte(
+        c, eleve, x, y, width, height, main_font, main_font_bold,
+        'CARTE CANTINE', '#b45309', '#fef3c7', rows, 'CANTINE',
+    )
 
 
 def _dessiner_ticket_bus(c, eleve, abonnement, x, y, width, height, main_font, main_font_bold):
