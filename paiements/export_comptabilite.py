@@ -78,7 +78,13 @@ def _collecter_donnees(request):
                default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
     )
     remises_expr = Coalesce(
-        Sum('eleve__paiements__remises__montant_remise', filter=Q(eleve__paiements__statut='VALIDE')),
+        Sum(
+            'eleve__paiements__remises__montant_remise',
+            filter=Q(
+                eleve__paiements__statut='VALIDE',
+                eleve__paiements__annee_scolaire=F('annee_scolaire'),
+            ),
+        ),
         Value(0), output_field=DecimalField(max_digits=12, decimal_places=0),
     )
     remises_applicables = Least(remises_expr, exigible_expr)
@@ -91,7 +97,11 @@ def _collecter_donnees(request):
         output_field=DecimalField(max_digits=12, decimal_places=0),
     )
     retards = (EcheancierPaiement.objects
-               .filter(eleve__classe_id__in=classes_ids, eleve__statut='ACTIF')
+               .filter(
+                   eleve__classe_id__in=classes_ids,
+                   eleve__statut='ACTIF',
+                   annee_scolaire=F('eleve__classe__annee_scolaire'),
+               )
                .select_related('eleve', 'eleve__classe')
                .annotate(retard=retard_expr, exigible=exigible_expr)
                .filter(retard__gt=0)

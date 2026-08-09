@@ -902,7 +902,19 @@ def calculer_salaires(request, periode_id):
                 return redirect('salaires:etats_salaire')
 
             calculs_effectues = 0
-            for enseignant in enseignants_eligibles(periode).select_for_update():
+            enseignants = list(
+                enseignants_eligibles(periode).select_for_update()
+            )
+            ids_eligibles = [enseignant.id for enseignant in enseignants]
+            # Retirer les brouillons devenus inéligibles afin qu'un ancien état
+            # ne puisse pas être validé après une démission ou une correction
+            # de date d'embauche. Les états déjà validés/payés restent archivés.
+            periode.etats_salaire.filter(
+                valide=False,
+                paye=False,
+            ).exclude(enseignant_id__in=ids_eligibles).delete()
+
+            for enseignant in enseignants:
                 _, modifie = calculer_etat_salaire(
                     enseignant, periode, request.user
                 )

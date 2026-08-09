@@ -22,9 +22,9 @@ class ModePaiementAdmin(admin.ModelAdmin):
 
 @admin.register(Paiement)
 class PaiementAdmin(admin.ModelAdmin):
-    list_display = ("numero_recu", "eleve", "type_paiement", "mode_paiement", "montant", "date_paiement", "statut")
+    list_display = ("numero_recu", "eleve", "annee_scolaire", "type_paiement", "mode_paiement", "montant", "date_paiement", "statut")
     search_fields = ("numero_recu", "eleve__nom", "eleve__prenom", "eleve__matricule")
-    list_filter = ("statut", "type_paiement", "mode_paiement")
+    list_filter = ("statut", "annee_scolaire", "type_paiement", "mode_paiement")
     date_hierarchy = "date_paiement"
 
     def save_model(self, request, obj, form, change):

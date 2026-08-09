@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from django.db.models import Count, Sum
+from django.db.models import Count, F, Sum
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.utils import timezone
@@ -81,7 +81,10 @@ def _rapport_data(request):
     echeanciers = filter_by_user_school(
         EcheancierPaiement.objects.select_related(
             "eleve", "eleve__classe", "eleve__classe__ecole"
-        ).filter(eleve__statut="ACTIF"),
+        ).filter(
+            eleve__statut="ACTIF",
+            annee_scolaire=F('eleve__classe__annee_scolaire'),
+        ),
         request.user,
         "eleve__classe__ecole",
     )
@@ -89,7 +92,11 @@ def _rapport_data(request):
         echeanciers = echeanciers.filter(eleve__classe=classe_selectionnee)
 
     paiements_couverture = filter_by_user_school(
-        Paiement.objects.filter(statut="VALIDE", date_paiement__lte=date_fin),
+        Paiement.objects.filter(
+            statut="VALIDE",
+            date_paiement__lte=date_fin,
+            annee_scolaire=F('eleve__classe__annee_scolaire'),
+        ),
         request.user,
         "eleve__classe__ecole",
     )
@@ -102,7 +109,11 @@ def _rapport_data(request):
 
     remises_couverture = filter_by_user_school(
         PaiementRemise.objects.filter(
-            paiement__statut="VALIDE", paiement__date_paiement__lte=date_fin
+            paiement__statut="VALIDE",
+            paiement__date_paiement__lte=date_fin,
+            paiement__annee_scolaire=F(
+                'paiement__eleve__classe__annee_scolaire'
+            ),
         ),
         request.user,
         "paiement__eleve__classe__ecole",

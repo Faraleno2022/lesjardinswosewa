@@ -4,6 +4,7 @@ Envoie des messages aux parents pour les paiements en retard
 """
 
 from django.db import models
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.template.loader import render_to_string
 from decimal import Decimal
@@ -113,6 +114,15 @@ Contactez-nous IMMÉDIATEMENT pour éviter toute interruption de la scolarité.
         date_limite = aujourd_hui - timedelta(days=jours_grace)
         
         # Récupérer les échéanciers avec des impayés
+        total_du = (
+            models.F('frais_inscription_du') + models.F('tranche_1_due')
+            + models.F('tranche_2_due') + models.F('tranche_3_due')
+        )
+        total_paye = (
+            models.F('frais_inscription_paye') + models.F('tranche_1_payee')
+            + models.F('tranche_2_payee') + models.F('tranche_3_payee')
+        )
+        montant_field = models.DecimalField(max_digits=12, decimal_places=0)
         echeanciers_retard = EcheancierPaiement.objects.filter(
             models.Q(
                 date_echeance_inscription__lt=date_limite,
@@ -130,6 +140,27 @@ Contactez-nous IMMÉDIATEMENT pour éviter toute interruption de la scolarité.
                 date_echeance_tranche_3__lt=date_limite,
                 tranche_3_payee__lt=models.F('tranche_3_due')
             )
+        ).filter(
+            annee_scolaire=models.F('eleve__classe__annee_scolaire')
+        ).annotate(
+            _remises_valides=Coalesce(
+                models.Sum(
+                    'eleve__paiements__remises__montant_remise',
+                    filter=models.Q(
+                        eleve__paiements__statut='VALIDE',
+                        eleve__paiements__annee_scolaire=models.F('annee_scolaire'),
+                    ),
+                ),
+                models.Value(Decimal('0')),
+                output_field=montant_field,
+            ),
+        ).annotate(
+            _solde_effectif=models.ExpressionWrapper(
+                total_du - total_paye - models.F('_remises_valides'),
+                output_field=montant_field,
+            ),
+        ).filter(
+            _solde_effectif__gt=0,
         ).select_related('eleve', 'eleve__classe')
         
         return echeanciers_retard

@@ -486,6 +486,23 @@ class Eleve(SyncTrackedModel):
     @property
     def nom_complet(self):
         return f"{self.prenom} {self.nom}"
+
+    @property
+    def echeancier(self):
+        """Échéancier de l'année scolaire actuelle de la classe.
+
+        La relation est volontairement exposée sous le même nom que l'ancien
+        ``OneToOneField`` afin de préserver les vues et templates historiques.
+        Contrairement à l'ancien comportement, un échéancier d'une année
+        précédente n'est jamais retourné pour la nouvelle année.
+        """
+        if not self.pk:
+            return None
+        annee_scolaire = getattr(getattr(self, 'classe', None), 'annee_scolaire', None)
+        queryset = self.echeanciers.all()
+        if annee_scolaire:
+            return queryset.filter(annee_scolaire=annee_scolaire).first()
+        return queryset.order_by('-annee_scolaire', '-date_creation').first()
     
     @property
     def age(self):
