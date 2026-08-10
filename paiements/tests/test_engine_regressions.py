@@ -1,9 +1,11 @@
 from datetime import date
 from decimal import Decimal
+from io import StringIO
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.core.management import call_command
 from django.test import TestCase
 
 from eleves.models import Classe, Ecole, Eleve, Responsable
@@ -360,3 +362,50 @@ class MoteurPaiementRegressionsTests(TestCase):
         # bord ne doit jamais repartir en base élève par élève.
         with self.assertNumQueries(2):
             calculer_situations_echeanciers(lot, date(2026, 2, 1))
+
+    def _simuler_inflation_hors_scolarite(self, montant):
+        """Reproduit l'état d'une base antérieure aux catégories comptables.
+
+        ``update`` court-circuite volontairement les signaux : l'échéancier
+        garde un encaissement qu'aucun paiement de scolarité ne justifie.
+        """
+        cantine = TypePaiement.objects.create(
+            nom='Cantine mensuelle', categorie='CANTINE'
+        )
+        self.creer_paiement(montant, statut='VALIDE', type_paiement=cantine)
+        EcheancierPaiement.objects.filter(pk=self.echeancier.pk).update(
+            tranche_1_payee=Decimal(montant), statut='PAYE_PARTIEL'
+        )
+
+    def test_recalcul_efface_un_encaissement_hors_scolarite_historique(self):
+        self._simuler_inflation_hors_scolarite('300000')
+
+        call_command(
+            'recalculer_echeanciers', '--reconstruire', stdout=StringIO()
+        )
+
+        self.echeancier.refresh_from_db()
+        self.assertEqual(self.echeancier.total_paye, Decimal('0'))
+        self.assertEqual(self.echeancier.tranche_1_payee, Decimal('0'))
+
+    def test_recalcul_en_dry_run_ne_touche_pas_la_base(self):
+        self._simuler_inflation_hors_scolarite('300000')
+
+        call_command(
+            'recalculer_echeanciers', '--reconstruire', '--dry-run',
+            stdout=StringIO(),
+        )
+
+        self.echeancier.refresh_from_db()
+        self.assertEqual(self.echeancier.tranche_1_payee, Decimal('300000'))
+
+    def test_recalcul_prudent_conserve_un_solde_importe_sans_paiement(self):
+        # Sans --reconstruire, un solde d'ouverture importé reste protégé.
+        EcheancierPaiement.objects.filter(pk=self.echeancier.pk).update(
+            tranche_1_payee=Decimal('250000'), statut='PAYE_PARTIEL'
+        )
+
+        call_command('recalculer_echeanciers', stdout=StringIO())
+
+        self.echeancier.refresh_from_db()
+        self.assertEqual(self.echeancier.tranche_1_payee, Decimal('250000'))
