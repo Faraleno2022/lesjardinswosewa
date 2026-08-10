@@ -5,6 +5,8 @@ from decimal import Decimal
 
 from paiements.models import EcheancierPaiement
 from paiements.notifications import send_retard_notification
+from paiements.calculs import filtre_types_scolarite
+from paiements.services import calculer_situation_echeancier
 
 
 class Command(BaseCommand):
@@ -24,43 +26,26 @@ class Command(BaseCommand):
         classe_id = options.get('classe_id')
         min_solde = options.get('min_solde') or 1
 
-        montant_field = DecimalField(max_digits=12, decimal_places=0)
-        solde_brut_expr = (
-            F('frais_inscription_du') + F('tranche_1_due') + F('tranche_2_due') + F('tranche_3_due')
-            - (F('frais_inscription_paye') + F('tranche_1_payee') + F('tranche_2_payee') + F('tranche_3_payee'))
-        )
-        qs = (
-            EcheancierPaiement.objects.select_related('eleve', 'eleve__classe', 'eleve__classe__ecole')
-            .filter(annee_scolaire=F('eleve__classe__annee_scolaire'))
-            .annotate(
-                remises_valides=Coalesce(
-                    Sum(
-                        'eleve__paiements__remises__montant_remise',
-                        filter=Q(
-                            eleve__paiements__statut='VALIDE',
-                            eleve__paiements__annee_scolaire=F('annee_scolaire'),
-                        ),
-                    ),
-                    Value(Decimal('0')),
-                    output_field=montant_field,
-                ),
-            )
-            .annotate(solde=ExpressionWrapper(
-                solde_brut_expr - F('remises_valides'),
-                output_field=montant_field,
-            ))
-            .filter(solde__gte=min_solde)
-        )
+        qs = EcheancierPaiement.objects.select_related(
+            'eleve', 'eleve__classe', 'eleve__classe__ecole'
+        ).filter(annee_scolaire=F('eleve__classe__annee_scolaire'))
         if ecole_id:
             qs = qs.filter(eleve__classe__ecole_id=ecole_id)
         if classe_id:
             qs = qs.filter(eleve__classe_id=classe_id)
 
-        total = qs.count()
+        eligibles = []
+        for ech in qs:
+            situation = calculer_situation_echeancier(ech)
+            if situation['retard'] >= min_solde:
+                ech.solde = situation['retard']
+                eligibles.append(ech)
+
+        total = len(eligibles)
         envoyes = 0
         self.stdout.write(self.style.NOTICE(f"Éligibles: {total}. Traitement max: {limit}. Dry-run: {dry_run}"))
 
-        for ech in qs[:limit]:
+        for ech in eligibles[:limit]:
             eleve = ech.eleve
             if dry_run:
                 self.stdout.write(f"[DRY] {eleve.nom_complet} ({eleve.matricule}) - solde={ech.solde}")

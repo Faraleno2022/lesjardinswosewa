@@ -13,6 +13,8 @@ import logging
 
 from .models import EcheancierPaiement, Paiement
 from .allocation import build_payment_allocation_history
+from .calculs import est_type_scolarite, filtre_types_scolarite
+from .services import calculer_situation_echeancier
 from eleves.models import Eleve
 
 logger = logging.getLogger(__name__)
@@ -161,11 +163,12 @@ def recu_public_pdf(request, paiement_id):
             _auto_validate_echeancier_for_eleve,
             _enrollment_preference_for_eleve,
         )
-        _auto_validate_echeancier_for_eleve(
-            paiement.eleve,
-            annee_scolaire=paiement.annee_scolaire,
-            strict=True,
-        )
+        if est_type_scolarite(paiement.type_paiement):
+            _auto_validate_echeancier_for_eleve(
+                paiement.eleve,
+                annee_scolaire=paiement.annee_scolaire,
+                strict=True,
+            )
         
         # Calcul total remises
         remises_total = paiement.remises.aggregate(total=Sum('montant_remise')).get('total') or 0
@@ -179,18 +182,11 @@ def recu_public_pdf(request, paiement_id):
         ).first()
         if ech:
             ech.refresh_from_db()
-        total_du = ech.total_du if ech else Decimal('0')
-        total_paye = ech.total_paye if ech else Decimal('0')
-        remises_valides = (
-            Paiement.objects.filter(
-                eleve=paiement.eleve,
-                annee_scolaire=paiement.annee_scolaire,
-                statut='VALIDE',
-            )
-            .aggregate(total=Sum('remises__montant_remise'))
-            .get('total') or Decimal('0')
-        )
-        solde_restant = max(Decimal('0'), total_du - total_paye - remises_valides)
+        situation = calculer_situation_echeancier(ech) if ech else None
+        total_du = situation['total_du'] if situation else Decimal('0')
+        total_paye = situation['encaisse'] if situation else Decimal('0')
+        remises_valides = situation['remises'] if situation else Decimal('0')
+        solde_restant = situation['reste'] if situation else Decimal('0')
 
         current_allocation = None
         if ech:
@@ -200,6 +196,7 @@ def recu_public_pdf(request, paiement_id):
                     annee_scolaire=paiement.annee_scolaire,
                     statut='VALIDE',
                 )
+                .filter(filtre_types_scolarite())
                 .order_by('date_paiement', 'date_creation', 'id')
             )
             allocations, _ = build_payment_allocation_history(
@@ -409,7 +406,7 @@ def note_rappel_public_pdf(request, eleve_id):
                 eleve=eleve,
                 annee_scolaire=annee_scolaire,
                 statut='VALIDE',
-            ).aggregate(total=Sum('montant'))['total'] or Decimal('0')
+            ).filter(filtre_types_scolarite()).aggregate(total=Sum('montant'))['total'] or Decimal('0')
             reste_a_payer = max(montant_total - montant_paye, Decimal('0'))
         
         # Préparer le buffer et le canvas

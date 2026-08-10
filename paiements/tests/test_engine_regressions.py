@@ -21,6 +21,8 @@ from paiements.views import (
     _valider_paiement_impl,
     ensure_echeancier_for_eleve,
 )
+from paiements.reporting import repartir_encaissements
+from paiements.services import calculer_situation_echeancier
 
 
 class MoteurPaiementRegressionsTests(TestCase):
@@ -76,10 +78,13 @@ class MoteurPaiementRegressionsTests(TestCase):
             date_echeance_tranche_3=date(2026, 5, 5),
         )
 
-    def creer_paiement(self, montant, statut='EN_ATTENTE', numero=None, annee='2025-2026'):
+    def creer_paiement(
+        self, montant, statut='EN_ATTENTE', numero=None, annee='2025-2026',
+        type_paiement=None,
+    ):
         return Paiement.objects.create(
             eleve=self.eleve,
-            type_paiement=self.type_paiement,
+            type_paiement=type_paiement or self.type_paiement,
             mode_paiement=self.mode,
             numero_recu=numero or '',
             montant=Decimal(montant),
@@ -197,3 +202,95 @@ class MoteurPaiementRegressionsTests(TestCase):
     def test_montant_negatif_est_refuse_hors_formulaire(self):
         with self.assertRaises(ValidationError):
             self.creer_paiement('-1')
+
+    def test_trop_percu_valide_est_refuse_hors_formulaire(self):
+        with self.assertRaises(ValidationError):
+            self.creer_paiement('1000001', statut='VALIDE')
+
+    def test_cantine_ne_solde_jamais_la_scolarite(self):
+        cantine = TypePaiement.objects.create(
+            nom='Cantine mensuelle', categorie='CANTINE'
+        )
+        paiement = self.creer_paiement(
+            '1000000', statut='VALIDE', type_paiement=cantine
+        )
+
+        _auto_validate_echeancier_for_eleve(
+            self.eleve,
+            preserve_recorded=False,
+            annee_scolaire='2025-2026',
+            strict=True,
+        )
+        self.echeancier.refresh_from_db()
+
+        self.assertEqual(paiement.montant, Decimal('1000000'))
+        self.assertEqual(self.echeancier.total_paye, Decimal('0'))
+        self.assertNotEqual(self.echeancier.statut, 'PAYE_COMPLET')
+
+    def test_un_paiement_hors_scolarite_se_valide_sans_echeancier(self):
+        self.echeancier.delete()
+        fournitures = TypePaiement.objects.create(
+            nom='Fournitures scolaires', categorie='FOURNITURES'
+        )
+        paiement = self.creer_paiement(
+            '150000', type_paiement=fournitures
+        )
+
+        _valider_paiement_impl(paiement, self.user)
+
+        paiement.refresh_from_db()
+        self.assertEqual(paiement.statut, 'VALIDE')
+        self.assertFalse(
+            EcheancierPaiement.objects.filter(
+                eleve=self.eleve, annee_scolaire='2025-2026'
+            ).exists()
+        )
+
+    def test_modification_directe_recalcule_un_paiement_valide(self):
+        paiement = self.creer_paiement('400000', statut='VALIDE')
+        self.echeancier.refresh_from_db()
+        self.assertEqual(self.echeancier.total_paye, Decimal('400000'))
+
+        paiement.montant = Decimal('250000')
+        paiement.save(update_fields=['montant', 'date_modification'])
+        self.echeancier.refresh_from_db()
+
+        self.assertEqual(self.echeancier.total_paye, Decimal('250000'))
+
+    def test_ventilation_rapport_utilise_le_vrai_frais_admission(self):
+        self.echeancier.frais_inscription_du = Decimal('50000')
+        self.echeancier.tranche_1_due = Decimal('100000')
+        self.echeancier.save()
+        paiement = self.creer_paiement('70000', statut='VALIDE')
+
+        repartition = repartir_encaissements([paiement])
+
+        self.assertEqual(repartition['frais_inscription'], Decimal('50000'))
+        self.assertEqual(repartition['scolarite'], Decimal('20000'))
+        self.assertEqual(repartition['autres'], Decimal('0'))
+
+    def test_remise_tranche_future_ne_masque_pas_admission_en_retard(self):
+        self.echeancier.frais_inscription_du = Decimal('100000')
+        self.echeancier.tranche_1_due = Decimal('0')
+        self.echeancier.tranche_3_due = Decimal('100000')
+        self.echeancier.date_echeance_inscription = date(2025, 9, 30)
+        self.echeancier.date_echeance_tranche_3 = date(2026, 5, 5)
+        self.echeancier.save()
+        paiement = self.creer_paiement('1', statut='VALIDE')
+        remise = RemiseReduction.objects.create(
+            nom='Remise troisième tranche', type_remise='MONTANT_FIXE',
+            valeur=Decimal('100000'), motif='SOCIALE',
+            date_debut=date(2025, 1, 1), date_fin=date(2026, 12, 31),
+        )
+        PaiementRemise.objects.create(
+            paiement=paiement, remise=remise,
+            montant_remise=Decimal('100000'), motif='GESTE_COMMERCIAL',
+            tranches_concernees='3', base_calcul='TRANCHES_DUES',
+        )
+
+        situation = calculer_situation_echeancier(
+            self.echeancier, date_reference=date(2026, 1, 1)
+        )
+
+        self.assertEqual(situation['retard'], Decimal('99999'))
+        self.assertEqual(situation['restes_par_poste']['tranche_3'], Decimal('0'))

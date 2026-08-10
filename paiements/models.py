@@ -24,8 +24,30 @@ def _audit_json_value(value):
 
 class TypePaiement(SyncTrackedModel):
     """Modèle pour les types de paiements"""
+    CATEGORIE_CHOICES = [
+        ('AUTO', 'Détection automatique (compatibilité)'),
+        ('SCOLARITE', 'Scolarité / inscription'),
+        ('CANTINE', 'Cantine'),
+        ('TRANSPORT', 'Transport / bus'),
+        ('FOURNITURES', 'Fournitures scolaires'),
+        ('UNIFORME', 'Uniforme'),
+        ('ACTIVITES', 'Activités'),
+        ('AUTRE', 'Autre'),
+    ]
+
     nom = models.CharField(max_length=100, unique=True, verbose_name="Nom du type")
     description = models.TextField(blank=True, null=True, verbose_name="Description")
+    categorie = models.CharField(
+        max_length=20,
+        choices=CATEGORIE_CHOICES,
+        default='AUTO',
+        db_index=True,
+        verbose_name="Catégorie comptable",
+        help_text=(
+            "Seuls les types de catégorie Scolarité alimentent l'échéancier "
+            "des frais scolaires."
+        ),
+    )
     actif = models.BooleanField(default=True, verbose_name="Actif")
     
     class Meta:
@@ -34,6 +56,16 @@ class TypePaiement(SyncTrackedModel):
     
     def __str__(self):
         return self.nom
+
+    @property
+    def categorie_effective(self):
+        from .calculs import categorie_effective
+        return categorie_effective(self)
+
+    @property
+    def est_scolarite(self):
+        from .calculs import est_type_scolarite
+        return est_type_scolarite(self)
 
 class ModePaiement(SyncTrackedModel):
     """Modèle pour les modes de paiements"""
@@ -124,6 +156,47 @@ class Paiement(SyncTrackedModel):
     
     def __str__(self):
         return f"{self.numero_recu} - {self.eleve.nom_complet} - {self.montant:,.0f} GNF"
+
+    def clean(self):
+        super().clean()
+        if self.montant is None or Decimal(str(self.montant)) <= 0:
+            raise ValidationError({'montant': 'Le montant doit être supérieur à zéro.'})
+        if not (
+            self.eleve_id and self.type_paiement_id
+            and self.annee_scolaire and self.statut == 'VALIDE'
+        ):
+            return
+
+        from .calculs import est_type_scolarite, filtre_types_scolarite
+        if not est_type_scolarite(self.type_paiement):
+            return
+        echeancier = EcheancierPaiement.objects.filter(
+            eleve_id=self.eleve_id,
+            annee_scolaire=self.annee_scolaire,
+        ).first()
+        if not echeancier:
+            return
+        autres = Paiement.objects.filter(
+            eleve_id=self.eleve_id,
+            annee_scolaire=self.annee_scolaire,
+            statut='VALIDE',
+        ).filter(filtre_types_scolarite()).exclude(pk=self.pk)
+        total_autres = autres.aggregate(total=Sum('montant'))['total'] or Decimal('0')
+        remises = PaiementRemise.objects.filter(
+            paiement__eleve_id=self.eleve_id,
+            paiement__annee_scolaire=self.annee_scolaire,
+        ).filter(filtre_types_scolarite('paiement__type_paiement')).filter(
+            models.Q(paiement__statut='VALIDE') | models.Q(paiement_id=self.pk)
+        ).aggregate(total=Sum('montant_remise'))['total'] or Decimal('0')
+        couverture = total_autres + Decimal(str(self.montant)) + remises
+        if couverture > echeancier.total_du:
+            maximum = max(Decimal('0'), echeancier.total_du - total_autres - remises)
+            raise ValidationError({
+                'montant': (
+                    "Le paiement dépasserait le solde annuel. "
+                    f"Montant maximum autorisé : {maximum:,.0f} GNF."
+                )
+            })
     
     AUDIT_FIELDS = (
         'eleve_id', 'type_paiement_id', 'mode_paiement_id', 'montant',
@@ -153,6 +226,7 @@ class Paiement(SyncTrackedModel):
         ANNEE_SCOLAIRE_VALIDATOR(self.annee_scolaire)
         if self.montant is None or Decimal(str(self.montant)) <= 0:
             raise ValidationError({'montant': 'Le montant doit être supérieur à zéro.'})
+        self.clean()
         if year_was_missing and kwargs.get('update_fields') is not None:
             kwargs['update_fields'] = set(kwargs['update_fields']) | {'annee_scolaire'}
 
@@ -406,18 +480,28 @@ class EcheancierPaiement(SyncTrackedModel):
     
     @property
     def total_remises_valides(self):
-        """Total des remises appliquées sur des paiements validés de l'élève."""
-        total = (
+        """Part réellement utilisable des remises validées sur les tranches.
+
+        Une remise ne couvre jamais l'inscription/réinscription et ne peut pas
+        dépasser le reste dû de ses tranches cibles. Cette propriété conserve
+        ainsi la même règle que les vues, reçus, exports et relances.
+        """
+        from .allocation import allocate_discounts
+        from .calculs import filtre_types_scolarite
+
+        remises = (
             PaiementRemise.objects
             .filter(
                 paiement__eleve_id=self.eleve_id,
                 paiement__annee_scolaire=self.annee_scolaire,
                 paiement__statut='VALIDE',
             )
-            .aggregate(total=Sum('montant_remise'))
-            .get('total') or 0
+            .filter(filtre_types_scolarite('paiement__type_paiement'))
+            .select_related('paiement')
+            .order_by('paiement__date_paiement', 'paiement_id', 'id')
         )
-        return Decimal(total)
+        allocation, _ = allocate_discounts(self, remises)
+        return sum(allocation.values(), Decimal('0'))
 
     @property
     def solde_restant(self):
@@ -453,7 +537,8 @@ class RemiseReduction(SyncTrackedModel):
     valeur = models.DecimalField(
         max_digits=10, decimal_places=2,
         verbose_name="Valeur",
-        help_text="Pourcentage (ex: 10.50) ou montant en GNF"
+        help_text="Pourcentage (ex: 10.50) ou montant en GNF",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     motif = models.CharField(max_length=20, choices=MOTIF_CHOICES, verbose_name="Motif")
     description = models.TextField(blank=True, null=True, verbose_name="Description")
@@ -470,6 +555,25 @@ class RemiseReduction(SyncTrackedModel):
     class Meta:
         verbose_name = "Remise/Réduction"
         verbose_name_plural = "Remises/Réductions"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(valeur__gte=0),
+                name='remise_reduction_valeur_non_negative',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        valeur = Decimal(str(self.valeur or 0))
+        if valeur < 0:
+            errors['valeur'] = "La valeur ne peut pas être négative."
+        if self.type_remise == 'POURCENTAGE' and valeur > 100:
+            errors['valeur'] = "Une remise en pourcentage ne peut pas dépasser 100 %."
+        if self.date_debut and self.date_fin and self.date_debut > self.date_fin:
+            errors['date_fin'] = "La date de fin doit suivre la date de début."
+        if errors:
+            raise ValidationError(errors)
     
     def __str__(self):
         if self.type_remise == 'POURCENTAGE':
@@ -519,7 +623,8 @@ class PaiementRemise(SyncTrackedModel):
     remise = models.ForeignKey(RemiseReduction, on_delete=models.CASCADE)
     montant_remise = models.DecimalField(
         max_digits=10, decimal_places=0,
-        verbose_name="Montant de la remise (GNF)"
+        verbose_name="Montant de la remise (GNF)",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     # blank=True uniquement pour les lignes créées avant l'ajout du champ :
     # le formulaire d'application, lui, exige toujours un motif.
@@ -551,6 +656,12 @@ class PaiementRemise(SyncTrackedModel):
         verbose_name = "Remise appliquée"
         verbose_name_plural = "Remises appliquées"
         unique_together = ['paiement', 'remise']
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(montant_remise__gte=0),
+                name='paiement_remise_montant_non_negatif',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.paiement.numero_recu} - {self.remise.nom} - {self.montant_remise:,.0f} GNF"
