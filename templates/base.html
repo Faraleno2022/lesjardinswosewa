@@ -14,8 +14,10 @@
     <link rel="canonical" href="{% block canonical_url %}{{ request.build_absolute_uri }}{% endblock %}">
 
     {# Open Graph (Facebook, WhatsApp, LinkedIn, etc.) #}
+    {# Le nom du site suit le domaine servi : un lien de lesjardinswosewa.com
+       partagé sur WhatsApp ou Facebook doit annoncer l'école, pas le logiciel. #}
     <meta property="og:type" content="website">
-    <meta property="og:site_name" content="Myschool">
+    <meta property="og:site_name" content="{% block og_site_name %}{% if 'lesjardinswosewa' in request.get_host %}Les Jardins Wosewa{% else %}Myschool{% endif %}{% endblock %}">
     <meta property="og:title" content="{% block og_title %}{{ self.title|default:'Myschool' }}{% endblock %}">
     <meta property="og:description" content="{% block og_description %}Gestion scolaire moderne — automatisation des inscriptions, paiements, notes et bulletins.{% endblock %}">
     <meta property="og:url" content="{% block og_url %}{{ request.build_absolute_uri }}{% endblock %}">
