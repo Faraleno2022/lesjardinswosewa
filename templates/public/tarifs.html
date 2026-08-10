@@ -2,6 +2,9 @@
 
 {% block title %}Tarifs - MySchoolGN Guinée{% endblock %}
 {% block meta_description %}Tarifs MySchoolGN : Starter, Pro et installation offline pour les écoles guinéennes. Contactez FARA LENO pour une offre adaptée.{% endblock %}
+{% comment %}Page commerciale du logiciel : sur le domaine de l'école, elle ne doit pas
+   être indexée, sinon Google référence « Tarifs MySchoolGN » sous lesjardinswosewa.com.{% endcomment %}
+{% block meta_robots %}{% if site.est_ecole %}noindex,follow{% else %}index,follow{% endif %}{% endblock %}
 
 {% block content %}
 <section class="container py-5">

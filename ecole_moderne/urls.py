@@ -21,6 +21,7 @@ from django.conf.urls.static import static
 from django.http import HttpResponse
 from django.views.generic import TemplateView, RedirectView
 from .static_views import serve_static_no_cache
+from .identite_site import identite_pour_hote
 from .activation_views import activer_licence
 from .desktop_views import arreter_application
 from utilisateurs.license_api import activate_license, verify_license
@@ -60,18 +61,21 @@ def sitemap_xml(request):
     base = f"{request.scheme}://{request.get_host()}"
     urls = [
         (f"{base}/", "1.0"),
-        (f"{base}/fonctionnalites/", "0.9"),
         (f"{base}/rapport-scolaire/", "0.8"),
-        (f"{base}/contact/", "0.8"),
-        (f"{base}/demo/", "0.8"),
-        (f"{base}/tarifs/", "0.6"),
     ]
-    # Les pages de campus ne concernent que le site de l'école : le domaine du
-    # logiciel n'a pas à les annoncer.
-    if 'lesjardinswosewa' in request.get_host():
+    if identite_pour_hote(request.get_host())['est_ecole']:
+        # Site de l'école : les pages de campus lui appartiennent, les pages
+        # commerciales du logiciel (tarifs, démo…) n'ont rien à y faire.
         urls += [
             (f"{base}/campus/conakry/", "0.9"),
             (f"{base}/campus/siguiri/", "0.9"),
+        ]
+    else:
+        urls += [
+            (f"{base}/fonctionnalites/", "0.9"),
+            (f"{base}/contact/", "0.8"),
+            (f"{base}/demo/", "0.8"),
+            (f"{base}/tarifs/", "0.6"),
         ]
     items = "\n".join(
         f"  <url><loc>{loc}</loc><changefreq>weekly</changefreq><priority>{priority}</priority></url>"
