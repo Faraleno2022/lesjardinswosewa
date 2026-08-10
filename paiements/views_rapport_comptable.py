@@ -12,7 +12,7 @@ from utilisateurs.permissions import can_view_reports
 from utilisateurs.utils import filter_by_user_school, user_school
 
 from .models import EcheancierPaiement, Paiement, Relance
-from .services import calculer_situation_echeancier
+from .services import calculer_situations_echeanciers
 
 
 def _parse_date(value, default):
@@ -20,20 +20,6 @@ def _parse_date(value, default):
         return datetime.strptime(value, "%Y-%m-%d").date() if value else default
     except (TypeError, ValueError):
         return default
-
-
-def _montant_exigible(echeancier, date_reference):
-    postes = (
-        (echeancier.date_echeance_inscription, echeancier.frais_inscription_du),
-        (echeancier.date_echeance_tranche_1, echeancier.tranche_1_due),
-        (echeancier.date_echeance_tranche_2, echeancier.tranche_2_due),
-        (echeancier.date_echeance_tranche_3, echeancier.tranche_3_due),
-    )
-    return sum(
-        (montant or Decimal("0"))
-        for echeance, montant in postes
-        if echeance and echeance < date_reference
-    )
 
 
 def _rapport_data(request):
@@ -93,15 +79,14 @@ def _rapport_data(request):
         echeanciers = echeanciers.filter(eleve__classe=classe_selectionnee)
 
     retards = []
-    for echeancier in echeanciers.order_by(
-        "eleve__classe__nom", "eleve__nom", "eleve__prenom"
-    ):
-        situation = calculer_situation_echeancier(
-            echeancier,
-            date_reference=date_fin,
-            date_limite=date_fin,
-        )
-        montant_retard = situation['retard']
+    echeanciers = list(
+        echeanciers.order_by("eleve__classe__nom", "eleve__nom", "eleve__prenom")
+    )
+    situations = calculer_situations_echeanciers(
+        echeanciers, date_reference=date_fin, date_limite=date_fin
+    )
+    for echeancier in echeanciers:
+        montant_retard = situations[echeancier.pk]['retard']
         if montant_retard > 0:
             retards.append({
                 "echeancier": echeancier,

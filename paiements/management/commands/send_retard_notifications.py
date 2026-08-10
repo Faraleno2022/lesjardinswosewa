@@ -1,12 +1,9 @@
 from django.core.management.base import BaseCommand
-from django.db.models import F, ExpressionWrapper, DecimalField, Q, Sum, Value
-from django.db.models.functions import Coalesce
-from decimal import Decimal
+from django.db.models import F
 
 from paiements.models import EcheancierPaiement
 from paiements.notifications import send_retard_notification
-from paiements.calculs import filtre_types_scolarite
-from paiements.services import calculer_situation_echeancier
+from paiements.services import calculer_situations_echeanciers
 
 
 class Command(BaseCommand):
@@ -34,9 +31,11 @@ class Command(BaseCommand):
         if classe_id:
             qs = qs.filter(eleve__classe_id=classe_id)
 
+        echeanciers = list(qs)
+        situations = calculer_situations_echeanciers(echeanciers)
         eligibles = []
-        for ech in qs:
-            situation = calculer_situation_echeancier(ech)
+        for ech in echeanciers:
+            situation = situations[ech.pk]
             if situation['retard'] >= min_solde:
                 ech.solde = situation['retard']
                 eligibles.append(ech)

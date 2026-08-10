@@ -22,6 +22,7 @@ from eleves.utils_annee import get_debut_periode_reporting
 from paiements.models import Paiement, PaiementRemise, EcheancierPaiement, TypePaiement
 from paiements.calculs import filtre_types_scolarite
 from paiements.reporting import repartir_encaissements
+from paiements.services import calculer_situations_echeanciers
 from bus.models import AbonnementBus
 from depenses.models import Depense
 from salaires.models import Enseignant, EtatSalaire
@@ -721,43 +722,25 @@ def collecter_donnees_journalieres(date_rapport, user=None):
         if eleves_concernes_ids:
             # Répartition par classe: accumuler par classe
             par_classe = {}
-            qs_ech = EcheancierPaiement.objects.filter(
-                eleve_id__in=list(eleves_concernes_ids),
-                annee_scolaire=annee_scolaire
-            ).values(
-                'eleve_id', 'annee_scolaire', 'eleve__classe_id', 'eleve__classe__nom',
-                'frais_inscription_du', 'tranche_1_due', 'tranche_2_due', 'tranche_3_due',
-                'frais_inscription_paye', 'tranche_1_payee', 'tranche_2_payee', 'tranche_3_payee'
+            echeanciers = list(
+                EcheancierPaiement.objects.filter(
+                    eleve_id__in=list(eleves_concernes_ids),
+                    annee_scolaire=annee_scolaire,
+                ).select_related('eleve', 'eleve__classe')
             )
-            paiements_cumules = Paiement.objects.filter(
-                eleve_id__in=list(eleves_concernes_ids),
-                annee_scolaire=annee_scolaire,
-                date_paiement__lte=date_rapport,
-                statut='VALIDE',
-            ).filter(filtre_types_scolarite()).values('eleve_id').annotate(total=Sum('montant'))
-            paye_par_eleve = {row['eleve_id']: row['total'] or Decimal('0') for row in paiements_cumules}
-            remises_cumulees = PaiementRemise.objects.filter(
-                paiement__eleve_id__in=list(eleves_concernes_ids),
-                paiement__annee_scolaire=annee_scolaire,
-                paiement__date_paiement__lte=date_rapport,
-                paiement__statut='VALIDE',
-            ).filter(
-                filtre_types_scolarite('paiement__type_paiement')
-            ).values('paiement__eleve_id').annotate(total=Sum('montant_remise'))
-            remises_par_eleve = {
-                row['paiement__eleve_id']: row['total'] or Decimal('0')
-                for row in remises_cumulees
-            }
-            for row in qs_ech:
-                classe_id = row.get('eleve__classe_id')
-                classe_nom = row.get('eleve__classe__nom') or 'Classe'
-                du = (row.get('frais_inscription_du') or Decimal('0')) \
-                     + (row.get('tranche_1_due') or Decimal('0')) \
-                     + (row.get('tranche_2_due') or Decimal('0')) \
-                     + (row.get('tranche_3_due') or Decimal('0'))
-                paye = min(du, paye_par_eleve.get(row['eleve_id'], Decimal('0')))
-                remises_eleve = remises_par_eleve.get(row['eleve_id'], Decimal('0'))
-                solde = max(Decimal('0'), du - paye - remises_eleve)
+            # Même service que les tableaux de bord : une remise reste bornée
+            # aux tranches qu'elle vise, elle n'est jamais déduite en bloc.
+            situations = calculer_situations_echeanciers(
+                echeanciers, date_reference=date_rapport, date_limite=date_rapport
+            )
+            for echeancier in echeanciers:
+                situation = situations[echeancier.pk]
+                classe = getattr(echeancier.eleve, 'classe', None)
+                classe_id = classe.id if classe else None
+                classe_nom = getattr(classe, 'nom', None) or 'Classe'
+                du = situation['total_du']
+                paye = situation['encaisse']
+                solde = situation['reste']
 
                 # Totaux généraux
                 total_du_concernes += du

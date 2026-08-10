@@ -22,7 +22,10 @@ from paiements.views import (
     ensure_echeancier_for_eleve,
 )
 from paiements.reporting import repartir_encaissements
-from paiements.services import calculer_situation_echeancier
+from paiements.services import (
+    calculer_situation_echeancier,
+    calculer_situations_echeanciers,
+)
 
 
 class MoteurPaiementRegressionsTests(TestCase):
@@ -294,3 +297,66 @@ class MoteurPaiementRegressionsTests(TestCase):
 
         self.assertEqual(situation['retard'], Decimal('99999'))
         self.assertEqual(situation['restes_par_poste']['tranche_3'], Decimal('0'))
+
+    def _creer_eleve_avec_echeancier(self, suffixe, paye):
+        eleve = Eleve.objects.create(
+            matricule=f'PAY-LOT-{suffixe}',
+            prenom='Eleve',
+            nom=f'Lot{suffixe}',
+            sexe='M',
+            date_naissance=date(2014, 1, 1),
+            classe=self.classe,
+            date_inscription=date(2025, 9, 1),
+            responsable_principal=self.responsable,
+        )
+        echeancier = EcheancierPaiement.objects.create(
+            eleve=eleve,
+            annee_scolaire='2025-2026',
+            frais_inscription_du=Decimal('0'),
+            tranche_1_due=Decimal('1000000'),
+            tranche_2_due=Decimal('0'),
+            tranche_3_due=Decimal('0'),
+            date_echeance_inscription=date(2025, 9, 30),
+            date_echeance_tranche_1=date(2026, 1, 10),
+            date_echeance_tranche_2=date(2026, 3, 5),
+            date_echeance_tranche_3=date(2026, 5, 5),
+        )
+        if paye:
+            Paiement.objects.create(
+                eleve=eleve,
+                type_paiement=self.type_paiement,
+                mode_paiement=self.mode,
+                numero_recu='',
+                montant=Decimal(paye),
+                annee_scolaire='2025-2026',
+                date_paiement=date(2025, 10, 1),
+                statut='VALIDE',
+                cree_par=self.user,
+            )
+        echeancier.refresh_from_db()
+        return echeancier
+
+    def test_calcul_groupe_donne_le_meme_resultat_que_le_calcul_unitaire(self):
+        lot = [self.echeancier] + [
+            self._creer_eleve_avec_echeancier(index, index * 100000)
+            for index in range(1, 4)
+        ]
+        reference = date(2026, 2, 1)
+
+        groupe = calculer_situations_echeanciers(lot, reference)
+
+        for echeancier in lot:
+            unitaire = calculer_situation_echeancier(echeancier, reference)
+            self.assertEqual(groupe[echeancier.pk], unitaire)
+
+    def test_calcul_groupe_ne_multiplie_pas_les_requetes(self):
+        # Les montants restent sous le total dû : le trop-perçu est refusé.
+        lot = [self.echeancier] + [
+            self._creer_eleve_avec_echeancier(index, (index % 9) * 100000)
+            for index in range(4, 12)
+        ]
+
+        # Deux requêtes quel que soit le nombre d'échéanciers : le tableau de
+        # bord ne doit jamais repartir en base élève par élève.
+        with self.assertNumQueries(2):
+            calculer_situations_echeanciers(lot, date(2026, 2, 1))
