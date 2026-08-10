@@ -11,7 +11,8 @@ from eleves.utils_annee import get_debut_periode_reporting
 from utilisateurs.permissions import can_view_reports
 from utilisateurs.utils import filter_by_user_school, user_school
 
-from .models import EcheancierPaiement, Paiement, PaiementRemise, Relance
+from .models import EcheancierPaiement, Paiement, Relance
+from .services import calculer_situation_echeancier
 
 
 def _parse_date(value, default):
@@ -31,7 +32,7 @@ def _montant_exigible(echeancier, date_reference):
     return sum(
         (montant or Decimal("0"))
         for echeance, montant in postes
-        if echeance and echeance <= date_reference
+        if echeance and echeance < date_reference
     )
 
 
@@ -91,57 +92,16 @@ def _rapport_data(request):
     if classe_selectionnee:
         echeanciers = echeanciers.filter(eleve__classe=classe_selectionnee)
 
-    paiements_couverture = filter_by_user_school(
-        Paiement.objects.filter(
-            statut="VALIDE",
-            date_paiement__lte=date_fin,
-            annee_scolaire=F('eleve__classe__annee_scolaire'),
-        ),
-        request.user,
-        "eleve__classe__ecole",
-    )
-    if classe_selectionnee:
-        paiements_couverture = paiements_couverture.filter(eleve__classe=classe_selectionnee)
-    paye_par_eleve = {
-        ligne["eleve_id"]: ligne["total"] or Decimal("0")
-        for ligne in paiements_couverture.values("eleve_id").annotate(total=Sum("montant"))
-    }
-
-    remises_couverture = filter_by_user_school(
-        PaiementRemise.objects.filter(
-            paiement__statut="VALIDE",
-            paiement__date_paiement__lte=date_fin,
-            paiement__annee_scolaire=F(
-                'paiement__eleve__classe__annee_scolaire'
-            ),
-        ),
-        request.user,
-        "paiement__eleve__classe__ecole",
-    )
-    if classe_selectionnee:
-        remises_couverture = remises_couverture.filter(
-            paiement__eleve__classe=classe_selectionnee
-        )
-    remises_par_eleve = {
-        ligne["paiement__eleve_id"]: ligne["total"] or Decimal("0")
-        for ligne in remises_couverture.values("paiement__eleve_id").annotate(
-            total=Sum("montant_remise")
-        )
-    }
-
     retards = []
     for echeancier in echeanciers.order_by(
         "eleve__classe__nom", "eleve__nom", "eleve__prenom"
     ):
-        exigible = _montant_exigible(echeancier, date_fin)
-        montant_paye = max(
-            echeancier.total_paye,
-            paye_par_eleve.get(echeancier.eleve_id, Decimal("0")),
+        situation = calculer_situation_echeancier(
+            echeancier,
+            date_reference=date_fin,
+            date_limite=date_fin,
         )
-        couverture = montant_paye + remises_par_eleve.get(
-            echeancier.eleve_id, Decimal("0")
-        )
-        montant_retard = max(Decimal("0"), exigible - couverture)
+        montant_retard = situation['retard']
         if montant_retard > 0:
             retards.append({
                 "echeancier": echeancier,

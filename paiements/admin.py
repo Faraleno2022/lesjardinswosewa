@@ -8,9 +8,9 @@ from .models import (
 
 @admin.register(TypePaiement)
 class TypePaiementAdmin(admin.ModelAdmin):
-    list_display = ("nom", "actif")
+    list_display = ("nom", "categorie", "actif")
     search_fields = ("nom",)
-    list_filter = ("actif",)
+    list_filter = ("categorie", "actif")
 
 
 @admin.register(ModePaiement)

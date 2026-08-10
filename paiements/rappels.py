@@ -12,6 +12,8 @@ from datetime import datetime, timedelta
 import logging
 
 from .models import EcheancierPaiement, Relance, ConfigurationPaiement
+from .calculs import filtre_types_scolarite
+from .services import calculer_situation_echeancier
 from eleves.models import Eleve
 
 logger = logging.getLogger(__name__)
@@ -113,57 +115,25 @@ Contactez-nous IMMÉDIATEMENT pour éviter toute interruption de la scolarité.
         aujourd_hui = timezone.now().date()
         date_limite = aujourd_hui - timedelta(days=jours_grace)
         
-        # Récupérer les échéanciers avec des impayés
-        total_du = (
-            models.F('frais_inscription_du') + models.F('tranche_1_due')
-            + models.F('tranche_2_due') + models.F('tranche_3_due')
-        )
-        total_paye = (
-            models.F('frais_inscription_paye') + models.F('tranche_1_payee')
-            + models.F('tranche_2_payee') + models.F('tranche_3_payee')
-        )
-        montant_field = models.DecimalField(max_digits=12, decimal_places=0)
-        echeanciers_retard = EcheancierPaiement.objects.filter(
-            models.Q(
-                date_echeance_inscription__lt=date_limite,
-                frais_inscription_paye__lt=models.F('frais_inscription_du')
-            ) |
-            models.Q(
-                date_echeance_tranche_1__lt=date_limite,
-                tranche_1_payee__lt=models.F('tranche_1_due')
-            ) |
-            models.Q(
-                date_echeance_tranche_2__lt=date_limite,
-                tranche_2_payee__lt=models.F('tranche_2_due')
-            ) |
-            models.Q(
-                date_echeance_tranche_3__lt=date_limite,
-                tranche_3_payee__lt=models.F('tranche_3_due')
-            )
-        ).filter(
+        base = EcheancierPaiement.objects.filter(
             annee_scolaire=models.F('eleve__classe__annee_scolaire')
-        ).annotate(
-            _remises_valides=Coalesce(
-                models.Sum(
-                    'eleve__paiements__remises__montant_remise',
-                    filter=models.Q(
-                        eleve__paiements__statut='VALIDE',
-                        eleve__paiements__annee_scolaire=models.F('annee_scolaire'),
-                    ),
-                ),
-                models.Value(Decimal('0')),
-                output_field=montant_field,
-            ),
-        ).annotate(
-            _solde_effectif=models.ExpressionWrapper(
-                total_du - total_paye - models.F('_remises_valides'),
-                output_field=montant_field,
-            ),
-        ).filter(
-            _solde_effectif__gt=0,
         ).select_related('eleve', 'eleve__classe')
-        
-        return echeanciers_retard
+        ids = []
+        for echeancier in base:
+            situation = calculer_situation_echeancier(echeancier, aujourd_hui)
+            dates = {
+                'inscription': echeancier.date_echeance_inscription,
+                'tranche_1': echeancier.date_echeance_tranche_1,
+                'tranche_2': echeancier.date_echeance_tranche_2,
+                'tranche_3': echeancier.date_echeance_tranche_3,
+            }
+            if any(
+                echeance and echeance < date_limite
+                and situation['restes_par_poste'][poste] > 0
+                for poste, echeance in dates.items()
+            ):
+                ids.append(echeancier.pk)
+        return base.filter(pk__in=ids)
     
     def calculer_niveau_rappel(self, eleve_id):
         """
