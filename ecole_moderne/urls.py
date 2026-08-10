@@ -66,6 +66,13 @@ def sitemap_xml(request):
         (f"{base}/demo/", "0.8"),
         (f"{base}/tarifs/", "0.6"),
     ]
+    # Les pages de campus ne concernent que le site de l'école : le domaine du
+    # logiciel n'a pas à les annoncer.
+    if 'lesjardinswosewa' in request.get_host():
+        urls += [
+            (f"{base}/campus/conakry/", "0.9"),
+            (f"{base}/campus/siguiri/", "0.9"),
+        ]
     items = "\n".join(
         f"  <url><loc>{loc}</loc><changefreq>weekly</changefreq><priority>{priority}</priority></url>"
         for loc, priority in urls
@@ -90,6 +97,10 @@ urlpatterns = [
     path('index/', TemplateView.as_view(template_name='home.html'), name='index'),
     path('robots.txt', robots_txt, name='robots_txt'),
     path('sitemap.xml', sitemap_xml, name='sitemap_xml'),
+    # Pages locales des deux campus (référencement « école privée Conakry »,
+    # « école Siguiri ») : leur canonical pointe vers lesjardinswosewa.com.
+    path('campus/conakry/', TemplateView.as_view(template_name='public/campus_conakry.html'), name='campus_conakry'),
+    path('campus/siguiri/', TemplateView.as_view(template_name='public/campus_siguiri.html'), name='campus_siguiri'),
     path('fonctionnalites/', TemplateView.as_view(template_name='public/fonctionnalites.html'), name='fonctionnalites'),
     path('tarifs/', TemplateView.as_view(template_name='public/tarifs.html'), name='tarifs'),
     path('contact/', TemplateView.as_view(template_name='public/contact.html'), name='contact'),

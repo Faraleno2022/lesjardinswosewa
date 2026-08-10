@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}École privée à Kipé, Conakry — Les Jardins Wosewa (Maternelle, Primaire, Collège, Lycée){% endblock %}
+{% block meta_description %}Les Jardins Wosewa à Conakry : école privée située au Carrefour Métal Guinée, Kipé T2, commune de Ratoma. Crèche, maternelle, primaire, collège et lycée, programme franco-guinéen.{% endblock %}
+{% block og_title %}Les Jardins Wosewa — Campus de Conakry (Kipé T2, Ratoma){% endblock %}
+{% block og_description %}École privée à Kipé T2, Conakry : de la crèche au lycée, programme franco-guinéen, garderie jusqu'à 17h.{% endblock %}
+{% block twitter_title %}Les Jardins Wosewa — Campus de Conakry{% endblock %}
+{% block twitter_description %}École privée à Kipé T2, Conakry : de la crèche au lycée, programme franco-guinéen.{% endblock %}
+
+{# Le domaine du logiciel sert les mêmes gabarits : on désigne explicitement
+   la version de référence pour éviter tout contenu dupliqué entre domaines. #}
+{% block canonical_url %}https://www.lesjardinswosewa.com/campus/conakry/{% endblock %}
+{% block og_url %}https://www.lesjardinswosewa.com/campus/conakry/{% endblock %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "School",
+  "name": "Groupe Scolaire Privé Les Jardins Wosewa — Campus de Conakry",
+  "description": "École privée à Kipé T2, Conakry, proposant la crèche, la maternelle, le primaire, le collège et le lycée selon un programme franco-guinéen.",
+  "url": "https://www.lesjardinswosewa.com/campus/conakry/",
+  "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "Carrefour Métal Guinée, Kipé T2",
+    "addressLocality": "Conakry",
+    "addressRegion": "Ratoma",
+    "addressCountry": "GN"
+  },
+  "telephone": ["+224622751518", "+224623480586", "+224660199851"],
+  "email": "lesjardinswosewa.gui23@gmail.com",
+  "openingHours": "Mo-Fr 07:45-17:00",
+  "parentOrganization": {
+    "@type": "School",
+    "name": "Groupe Scolaire Privé Les Jardins Wosewa",
+    "url": "https://www.lesjardinswosewa.com/"
+  }
+}
+</script>
+{% endblock %}
+
+{% block breadcrumb %}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .campus { --c-blue: #1657a8; --c-blue-dark: #0f3f7d; --c-orange: #f28c1e; --c-muted: #5b6979; }
+  .campus-hero {
+    background: linear-gradient(135deg, var(--c-blue) 0%, var(--c-blue-dark) 100%);
+    color: #fff; border-radius: 1rem; padding: 2.5rem;
+  }
+  .campus-hero h1 { font-weight: 800; line-height: 1.2; }
+  .campus-card {
+    background: #fff; border: 1px solid #e3ebf5; border-left: 5px solid var(--c-blue);
+    border-radius: .9rem; padding: 1.6rem; height: 100%;
+  }
+  .campus-card--orange { border-left-color: var(--c-orange); }
+  .campus-card h2 { font-size: 1.15rem; font-weight: 700; color: var(--c-blue); margin-bottom: .85rem; }
+  .campus-card--orange h2 { color: #c26a06; }
+  .campus-card p, .campus-card li { color: var(--c-muted); line-height: 1.7; }
+  .campus-section-title { color: var(--c-blue); font-weight: 800; margin-bottom: 1rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="campus container py-4">
+
+  <nav aria-label="Fil d'Ariane" class="mb-3">
+    <ol class="breadcrumb small mb-0">
+      <li class="breadcrumb-item"><a href="{% url 'home' %}">Accueil</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Campus de Conakry</li>
+    </ol>
+  </nav>
+
+  <section class="campus-hero mb-4">
+    <h1 class="h2 mb-2">École privée à Kipé, Conakry — Les Jardins Wosewa</h1>
+    <p class="mb-0 opacity-75">
+      Carrefour Métal Guinée, Kipé T2 — Commune de Ratoma, Conakry.
+      De la crèche au lycée, dans un programme d'enseignement franco-guinéen.
+    </p>
+  </section>
+
+  <div class="row g-4 mb-4">
+    <div class="col-lg-7">
+      <h2 class="h4 campus-section-title">Une école de proximité à Ratoma</h2>
+      <p class="text-muted" style="line-height:1.8;">
+        Le campus de Conakry des Jardins Wosewa accueille les enfants du quartier de Kipé et des
+        communes environnantes, au Carrefour Métal Guinée. L'établissement couvre l'ensemble du
+        parcours scolaire, de la crèche jusqu'au lycée, ce qui permet à une famille de scolariser
+        ses enfants au même endroit pendant toute leur scolarité.
+      </p>
+      <p class="text-muted" style="line-height:1.8;">
+        L'enseignement suit le programme franco-guinéen. Les cours académiques s'accompagnent
+        d'activités pratiques, artistiques, culturelles et numériques, dans un cadre encadré et
+        sécurisé. Une garderie permet aux parents qui travaillent de récupérer leur enfant
+        jusqu'à 17h.
+      </p>
+    </div>
+    <div class="col-lg-5">
+      <div class="campus-card">
+        <h2><i class="fas fa-location-dot me-2"></i>Nous trouver et nous joindre</h2>
+        <ul class="list-unstyled mb-0">
+          <li class="mb-3">
+            <strong>Adresse</strong><br>
+            <span class="text-muted">Carrefour Métal Guinée, Kipé T2<br>Commune de Ratoma, Conakry</span>
+          </li>
+          <li class="mb-3">
+            <strong>Téléphone</strong><br>
+            <a href="tel:+224622751518" class="text-decoration-none">622 75 15 18</a> ·
+            <a href="tel:+224623480586" class="text-decoration-none">623 48 05 86</a> ·
+            <a href="tel:+224660199851" class="text-decoration-none">660 19 98 51</a>
+          </li>
+          <li class="mb-0">
+            <strong>E-mail</strong><br>
+            <a href="mailto:lesjardinswosewa.gui23@gmail.com" class="text-decoration-none">lesjardinswosewa.gui23@gmail.com</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="h4 campus-section-title">Cycles accueillis à Conakry</h2>
+  <div class="row g-3 mb-4">
+    <div class="col-md-6 col-lg-3">
+      <div class="campus-card">
+        <h2 class="h6">Crèche et maternelle</h2>
+        <p class="mb-0 small">Crèche, toute petite section, petite, moyenne et grande section : éveil, socialisation et premiers apprentissages.</p>
+      </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+      <div class="campus-card campus-card--orange">
+        <h2 class="h6">Primaire</h2>
+        <p class="mb-0 small">De la 1ère à la 6ème année : lire, écrire, compter et raisonner.</p>
+      </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+      <div class="campus-card">
+        <h2 class="h6">Collège</h2>
+        <p class="mb-0 small">De la 7ème à la 10ème année, avec préparation au BEPC.</p>
+      </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+      <div class="campus-card campus-card--orange">
+        <h2 class="h6">Lycée</h2>
+        <p class="mb-0 small">De la 11ème à la Terminale : séries littéraire, scientifique et sciences expérimentales.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-lg-6">
+      <div class="campus-card">
+        <h2><i class="fas fa-clock me-2"></i>Horaires</h2>
+        <ul class="mb-0">
+          <li>Maternelle&nbsp;: 7h45 – 12h00</li>
+          <li>Primaire&nbsp;: 7h45 – 14h00</li>
+          <li>Garderie&nbsp;: 7h45 – 17h00</li>
+          <li>Du lundi au vendredi</li>
+        </ul>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="campus-card campus-card--orange">
+        <h2><i class="fas fa-folder-open me-2"></i>Inscription</h2>
+        <ul class="mb-0">
+          <li>Copie de l'extrait d'acte de naissance</li>
+          <li>Carnet de vaccination pour les tout-petits</li>
+          <li>Quatre photos d'identité</li>
+          <li>Livret scolaire (obligatoire à partir du primaire)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex flex-wrap gap-2">
+    <a href="{% url 'contact' %}" class="btn btn-primary"><i class="fas fa-envelope me-2"></i>Nous contacter</a>
+    <a href="{% url 'campus_siguiri' %}" class="btn btn-outline-primary"><i class="fas fa-location-dot me-2"></i>Voir le campus de Siguiri</a>
+    <a href="{% url 'home' %}#inscriptions" class="btn btn-outline-secondary"><i class="fas fa-file-invoice me-2"></i>Frais de scolarité</a>
+  </div>
+
+</div>
+{% endblock %}
