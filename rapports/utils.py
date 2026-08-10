@@ -17,6 +17,7 @@ from eleves.models import Eleve, Ecole
 from paiements.models import Paiement, EcheancierPaiement, PaiementRemise
 from paiements.calculs import filtre_types_scolarite
 from paiements.reporting import repartir_encaissements
+from paiements.services import calculer_situations_echeanciers
 from depenses.models import Depense
 from salaires.models import Enseignant, EtatSalaire
 from utilisateurs.utils import user_is_admin, user_is_superadmin, user_school
@@ -266,51 +267,26 @@ def collecter_donnees_periode(debut, fin, type_periode, user=None):
         except Exception:
             remises_par_classe_map = {}
         if eleves_concernes_ids:
-            qs_ech = EcheancierPaiement.objects.filter(
-                eleve_id__in=list(eleves_concernes_ids),
-                annee_scolaire__in=list(annees_couvertes)
-            ).values(
-                'eleve_id', 'annee_scolaire', 'eleve__classe_id', 'eleve__classe__nom',
-                'frais_inscription_du', 'tranche_1_due', 'tranche_2_due', 'tranche_3_due',
-                'frais_inscription_paye', 'tranche_1_payee', 'tranche_2_payee', 'tranche_3_payee'
-            )
             date_fin = fin.date() if hasattr(fin, 'date') else fin
-            paiements_cumules = Paiement.objects.filter(
-                eleve_id__in=list(eleves_concernes_ids),
-                annee_scolaire__in=list(annees_couvertes),
-                date_paiement__lte=date_fin,
-                statut='VALIDE',
-            ).filter(filtre_types_scolarite()).values(
-                'eleve_id', 'annee_scolaire'
-            ).annotate(total=Sum('montant'))
-            paye_map = {
-                (item['eleve_id'], item['annee_scolaire']): item['total'] or Decimal('0')
-                for item in paiements_cumules
-            }
-            remises_cumulees = PaiementRemise.objects.filter(
-                paiement__eleve_id__in=list(eleves_concernes_ids),
-                paiement__annee_scolaire__in=list(annees_couvertes),
-                paiement__date_paiement__lte=date_fin,
-                paiement__statut='VALIDE',
-            ).filter(
-                filtre_types_scolarite('paiement__type_paiement')
-            ).values(
-                'paiement__eleve_id', 'paiement__annee_scolaire'
-            ).annotate(total=Sum('montant_remise'))
-            remise_map = {
-                (item['paiement__eleve_id'], item['paiement__annee_scolaire']): item['total'] or Decimal('0')
-                for item in remises_cumulees
-            }
-            for row in qs_ech:
-                classe_id = row.get('eleve__classe_id')
-                classe_nom = row.get('eleve__classe__nom') or 'Classe'
-                du = (row.get('frais_inscription_du') or Decimal('0')) \
-                     + (row.get('tranche_1_due') or Decimal('0')) \
-                     + (row.get('tranche_2_due') or Decimal('0')) \
-                     + (row.get('tranche_3_due') or Decimal('0'))
-                cle = (row['eleve_id'], row['annee_scolaire'])
-                paye = min(du, paye_map.get(cle, Decimal('0')))
-                solde = max(Decimal('0'), du - paye - remise_map.get(cle, Decimal('0')))
+            echeanciers = list(
+                EcheancierPaiement.objects.filter(
+                    eleve_id__in=list(eleves_concernes_ids),
+                    annee_scolaire__in=list(annees_couvertes),
+                ).select_related('eleve', 'eleve__classe')
+            )
+            # Même service que les tableaux de bord : une remise reste bornée
+            # aux tranches qu'elle vise, elle n'est jamais déduite en bloc.
+            situations = calculer_situations_echeanciers(
+                echeanciers, date_reference=date_fin, date_limite=date_fin
+            )
+            for echeancier in echeanciers:
+                situation = situations[echeancier.pk]
+                classe = getattr(echeancier.eleve, 'classe', None)
+                classe_id = classe.id if classe else None
+                classe_nom = getattr(classe, 'nom', None) or 'Classe'
+                du = situation['total_du']
+                paye = situation['encaisse']
+                solde = situation['reste']
 
                 total_du_concernes += du
                 reste_a_payer += solde

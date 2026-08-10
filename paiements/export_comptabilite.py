@@ -22,7 +22,7 @@ from django.http import HttpResponse
 from eleves.models import Classe, Eleve
 from utilisateurs.utils import filter_by_user_school, user_school
 from .models import Paiement, EcheancierPaiement, Relance
-from .services import calculer_situation_echeancier
+from .services import calculer_situations_echeanciers
 
 
 def _fmt_gnf(v):
@@ -76,12 +76,14 @@ def _collecter_donnees(request):
                     )
                     .select_related('eleve', 'eleve__classe'))
     retards = []
+    echeanciers = list(echeanciers)
+    situations = calculer_situations_echeanciers(
+        echeanciers,
+        date_reference=today,
+        date_limite=today if au else None,
+    )
     for echeancier in echeanciers:
-        situation = calculer_situation_echeancier(
-            echeancier,
-            date_reference=today,
-            date_limite=today if au else None,
-        )
+        situation = situations[echeancier.pk]
         if situation['retard'] > 0:
             echeancier.retard = situation['retard']
             echeancier.exigible = situation['exigible']

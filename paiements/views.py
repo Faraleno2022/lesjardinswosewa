@@ -51,7 +51,7 @@ from .calculs import (
     filtre_types_scolarite,
     normaliser_libelle,
 )
-from .services import calculer_situation_echeancier
+from .services import calculer_situations_echeanciers
 from .remise_forms import PaiementRemiseForm, CalculateurRemiseForm
 from utilisateurs.utils import user_is_admin, user_is_superadmin, filter_by_user_school, user_school
 from utilisateurs.permissions import has_permission, get_user_permissions, can_add_payments, can_modify_payments, can_delete_payments, can_validate_payments, can_view_reports, can_apply_discounts
@@ -910,9 +910,9 @@ def _compute_stats(user):
             annee_scolaire=F('eleve__classe__annee_scolaire'),
         )
         _qs_retard = filter_by_user_school(_qs_retard, user, 'eleve__classe__ecole')
+        situations = calculer_situations_echeanciers(_qs_retard, today)
         eleves_retard_count = sum(
-            1 for echeancier in _qs_retard
-            if calculer_situation_echeancier(echeancier, today)['retard'] > 0
+            1 for etat in situations.values() if etat['retard'] > 0
         )
     except Exception:
         eleves_retard_count = 0
@@ -969,11 +969,18 @@ def tableau_bord_paiements(request):
 
     situations_echeanciers = {}
 
-    def _situation(echeancier):
-        if echeancier.pk not in situations_echeanciers:
-            situations_echeanciers[echeancier.pk] = calculer_situation_echeancier(
-                echeancier, today
+    def _precharger_situations(echeanciers):
+        """Calcule en lot : deux requêtes pour tout le tableau de bord."""
+        manquants = [
+            ech for ech in echeanciers if ech.pk not in situations_echeanciers
+        ]
+        if manquants:
+            situations_echeanciers.update(
+                calculer_situations_echeanciers(manquants, today)
             )
+
+    def _situation(echeancier):
+        _precharger_situations([echeancier])
         return situations_echeanciers[echeancier.pk]
 
     # Top élèves en retard, avec remises appliquées uniquement à leurs tranches.
@@ -985,8 +992,10 @@ def tableau_bord_paiements(request):
         )
     )
     retard_qs = filter_by_user_school(retard_qs, request.user, 'eleve__classe__ecole')
+    retard_echeanciers = list(retard_qs)
+    _precharger_situations(retard_echeanciers)
     eleves_en_retard = []
-    for echeancier in retard_qs:
+    for echeancier in retard_echeanciers:
         retard = _situation(echeancier)['retard']
         if retard > 0:
             echeancier.retard_db = retard
@@ -1049,7 +1058,9 @@ def tableau_bord_paiements(request):
             ),
         ]
 
-    for echeancier in echeanciers_direction_qs:
+    echeanciers_direction = list(echeanciers_direction_qs)
+    _precharger_situations(echeanciers_direction)
+    for echeancier in echeanciers_direction:
         situation = _situation(echeancier)
         remises = int(situation['remises'])
         components = _component_values(echeancier)
@@ -1215,20 +1226,6 @@ def liste_paiements(request):
     if situation in ('retard', 'reste', 'solde'):
         from django.utils import timezone as _tz2
         _today = _tz2.localdate() if hasattr(_tz2, 'localdate') else date.today()
-        exig = (
-            Case(When(date_echeance_inscription__lt=_today, then=F('frais_inscription_du')),
-                 default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
-            + Case(When(date_echeance_tranche_1__lt=_today, then=F('tranche_1_due')),
-                   default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
-            + Case(When(date_echeance_tranche_2__lt=_today, then=F('tranche_2_due')),
-                   default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
-            + Case(When(date_echeance_tranche_3__lt=_today, then=F('tranche_3_due')),
-                   default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
-        )
-        paye_eche = (F('frais_inscription_paye') + F('tranche_1_payee')
-                     + F('tranche_2_payee') + F('tranche_3_payee'))
-        du_total = (F('frais_inscription_du') + F('tranche_1_due')
-                    + F('tranche_2_due') + F('tranche_3_due'))
         eche_qs = EcheancierPaiement.objects
         situation_year = annee_filtre or annee_active
         if situation_year:
@@ -1236,8 +1233,10 @@ def liste_paiements(request):
         else:
             eche_qs = eche_qs.filter(annee_scolaire=F('eleve__classe__annee_scolaire'))
         eleve_ids_situation = []
-        for echeancier in eche_qs:
-            etat = calculer_situation_echeancier(echeancier, _today)
+        echeanciers_situation = list(eche_qs)
+        situations = calculer_situations_echeanciers(echeanciers_situation, _today)
+        for echeancier in echeanciers_situation:
+            etat = situations[echeancier.pk]
             if situation == 'retard' and etat['retard'] > 0:
                 eleve_ids_situation.append(echeancier.eleve_id)
             elif situation == 'reste' and etat['reste'] > 0:
@@ -2699,9 +2698,11 @@ def envoyer_notifs_retards(request):
         'eleve', 'eleve__classe'
     ).filter(annee_scolaire=F('eleve__classe__annee_scolaire'))
     qs = filter_by_user_school(qs, request.user, 'eleve__classe__ecole')
+    echeanciers = list(qs)
+    situations = calculer_situations_echeanciers(echeanciers, today)
     eligibles = []
-    for ech in qs:
-        retard = calculer_situation_echeancier(ech, today)['retard']
+    for ech in echeanciers:
+        retard = situations[ech.pk]['retard']
         if retard > 0:
             ech.retard = retard
             eligibles.append(ech)
@@ -4788,9 +4789,11 @@ def rapport_retards(request):
     # Sécurité: restreindre aux échéanciers de l'école de l'utilisateur
     qs = filter_by_user_school(qs, request.user, 'eleve__classe__ecole')
     qs = qs.filter(annee_scolaire=F('eleve__classe__annee_scolaire'))
+    echeanciers = list(qs)
+    situations = calculer_situations_echeanciers(echeanciers, today)
     items = []
-    for echeancier in qs:
-        situation = calculer_situation_echeancier(echeancier, today)
+    for echeancier in echeanciers:
+        situation = situations[echeancier.pk]
         if situation['retard'] > 0:
             echeancier.retard = situation['retard']
             echeancier.exigible = situation['exigible']
@@ -4961,9 +4964,11 @@ def _echeanciers_impayes_utilisateur(user, classe=None, limite=None):
     echeanciers = echeanciers.order_by(
         'eleve__classe__nom', 'eleve__nom', 'eleve__prenom'
     )
+    echeanciers = list(echeanciers)
+    situations = calculer_situations_echeanciers(echeanciers)
     resultat = []
     for echeancier in echeanciers:
-        situation = calculer_situation_echeancier(echeancier)
+        situation = situations[echeancier.pk]
         total_du = situation['total_du']
         couverture = situation['encaisse'] + situation['remises']
         reste = situation['reste']

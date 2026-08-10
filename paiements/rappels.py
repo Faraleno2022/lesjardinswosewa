@@ -12,8 +12,7 @@ from datetime import datetime, timedelta
 import logging
 
 from .models import EcheancierPaiement, Relance, ConfigurationPaiement
-from .calculs import filtre_types_scolarite
-from .services import calculer_situation_echeancier
+from .services import calculer_situations_echeanciers
 from eleves.models import Eleve
 
 logger = logging.getLogger(__name__)
@@ -119,8 +118,10 @@ Contactez-nous IMMÉDIATEMENT pour éviter toute interruption de la scolarité.
             annee_scolaire=models.F('eleve__classe__annee_scolaire')
         ).select_related('eleve', 'eleve__classe')
         ids = []
-        for echeancier in base:
-            situation = calculer_situation_echeancier(echeancier, aujourd_hui)
+        echeanciers = list(base)
+        situations = calculer_situations_echeanciers(echeanciers, aujourd_hui)
+        for echeancier in echeanciers:
+            situation = situations[echeancier.pk]
             dates = {
                 'inscription': echeancier.date_echeance_inscription,
                 'tranche_1': echeancier.date_echeance_tranche_1,

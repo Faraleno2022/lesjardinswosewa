@@ -17,7 +17,7 @@ from django.http import HttpResponse
 from eleves.models import Classe
 from utilisateurs.utils import filter_by_user_school
 from .models import Paiement, EcheancierPaiement, ModePaiement, TypePaiement
-from .services import calculer_situation_echeancier
+from .services import calculer_situations_echeanciers
 
 
 def _fmt_gnf(v):
@@ -81,8 +81,10 @@ def filtrer_paiements(request):
         else:
             eche = eche.filter(annee_scolaire=F('eleve__classe__annee_scolaire'))
         eleve_ids = []
-        for echeancier in eche:
-            etat = calculer_situation_echeancier(echeancier, today)
+        echeanciers = list(eche)
+        situations = calculer_situations_echeanciers(echeanciers, today)
+        for echeancier in echeanciers:
+            etat = situations[echeancier.pk]
             if situation == 'retard' and etat['retard'] > 0:
                 eleve_ids.append(echeancier.eleve_id)
             elif situation == 'reste' and etat['reste'] > 0:

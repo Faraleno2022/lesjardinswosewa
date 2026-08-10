@@ -29,11 +29,34 @@ def repartir_encaissements(paiements):
         else:
             resultat['autres'] += Decimal(str(paiement.montant or 0))
 
+    # Deux requêtes pour tout le rapport : un rapport de période couvre
+    # facilement plusieurs centaines d'élèves payeurs.
+    eleve_ids = {cle[0] for cle in groupes}
+    annees = {cle[1] for cle in groupes}
+    echeanciers = {
+        (ech.eleve_id, ech.annee_scolaire): ech
+        for ech in EcheancierPaiement.objects.filter(
+            eleve_id__in=eleve_ids, annee_scolaire__in=annees
+        )
+    }
+    historiques = defaultdict(list)
+    if eleve_ids:
+        historique_qs = (
+            Paiement.objects.filter(
+                eleve_id__in=eleve_ids,
+                annee_scolaire__in=annees,
+                statut='VALIDE',
+            )
+            .select_related('type_paiement')
+            .order_by('date_paiement', 'date_creation', 'id')
+        )
+        for encaissement in historique_qs:
+            if est_type_scolarite(encaissement.type_paiement):
+                cle = (encaissement.eleve_id, encaissement.annee_scolaire)
+                historiques[cle].append(encaissement)
+
     for (eleve_id, annee_scolaire), selection in groupes.items():
-        echeancier = EcheancierPaiement.objects.filter(
-            eleve_id=eleve_id,
-            annee_scolaire=annee_scolaire,
-        ).first()
+        echeancier = echeanciers.get((eleve_id, annee_scolaire))
         if not echeancier:
             # Repli sans double comptage pour les données historiques orphelines.
             for paiement in selection:
@@ -47,16 +70,7 @@ def repartir_encaissements(paiements):
                     resultat['scolarite'] += montant
             continue
 
-        historique = (
-            Paiement.objects.filter(
-                eleve_id=eleve_id,
-                annee_scolaire=annee_scolaire,
-                statut='VALIDE',
-            )
-            .select_related('type_paiement')
-            .order_by('date_paiement', 'date_creation', 'id')
-        )
-        historique = [p for p in historique if est_type_scolarite(p.type_paiement)]
+        historique = historiques.get((eleve_id, annee_scolaire), [])
         allocations, _ = build_payment_allocation_history(echeancier, historique)
         admission_key = (
             'reinscription'

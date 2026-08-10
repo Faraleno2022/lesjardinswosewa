@@ -185,7 +185,6 @@ def recu_public_pdf(request, paiement_id):
         situation = calculer_situation_echeancier(ech) if ech else None
         total_du = situation['total_du'] if situation else Decimal('0')
         total_paye = situation['encaisse'] if situation else Decimal('0')
-        remises_valides = situation['remises'] if situation else Decimal('0')
         solde_restant = situation['reste'] if situation else Decimal('0')
 
         current_allocation = None
