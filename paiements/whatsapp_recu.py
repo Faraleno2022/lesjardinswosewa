@@ -14,6 +14,8 @@ from django.db.models import Sum
 from django.utils import timezone
 
 from .models import Paiement, PaiementRemise
+from .calculs import filtre_types_scolarite
+from .services import calculer_situation_echeancier
 from eleves.models import Eleve
 
 logger = logging.getLogger(__name__)
@@ -206,10 +208,14 @@ class WhatsAppNoteRappelSender:
             echeancier = None
 
         if not echeancier:
+            annee_scolaire = getattr(
+                getattr(eleve, 'classe', None), 'annee_scolaire', ''
+            )
             montant_paye = Paiement.objects.filter(
                 eleve=eleve,
+                annee_scolaire=annee_scolaire,
                 statut='VALIDE'
-            ).aggregate(total=Sum('montant'))['total'] or Decimal('0')
+            ).filter(filtre_types_scolarite()).aggregate(total=Sum('montant'))['total'] or Decimal('0')
             return {
                 'montant_total': Decimal('0'),
                 'montant_paye': montant_paye,
@@ -223,26 +229,22 @@ class WhatsAppNoteRappelSender:
             }
 
         postes = [
-            (echeancier.libelle_frais_admission, echeancier.frais_inscription_du, echeancier.frais_inscription_paye, echeancier.date_echeance_inscription),
-            ("1ère tranche", echeancier.tranche_1_due, echeancier.tranche_1_payee, echeancier.date_echeance_tranche_1),
-            ("2ème tranche", echeancier.tranche_2_due, echeancier.tranche_2_payee, echeancier.date_echeance_tranche_2),
-            ("3ème tranche", echeancier.tranche_3_due, echeancier.tranche_3_payee, echeancier.date_echeance_tranche_3),
+            ('inscription', echeancier.libelle_frais_admission, echeancier.date_echeance_inscription),
+            ('tranche_1', "1ère tranche", echeancier.date_echeance_tranche_1),
+            ('tranche_2', "2ème tranche", echeancier.date_echeance_tranche_2),
+            ('tranche_3', "3ème tranche", echeancier.date_echeance_tranche_3),
         ]
-        montant_total = sum((du or Decimal('0')) for _libelle, du, _paye, _date in postes)
-        montant_paye = sum((paye or Decimal('0')) for _libelle, _du, paye, _date in postes)
-        remises_total = PaiementRemise.objects.filter(
-            paiement__eleve=eleve,
-            paiement__statut='VALIDE'
-        ).aggregate(total=Sum('montant_remise'))['total'] or Decimal('0')
-
-        montant_couvert = min(montant_total, montant_paye + remises_total)
-        reste_a_payer = max(montant_total - montant_couvert, Decimal('0'))
-        exigible = sum((du or Decimal('0')) for _libelle, du, _paye, echeance in postes if echeance and echeance < today)
-        retard_reel = max(exigible - montant_couvert, Decimal('0'))
+        situation = calculer_situation_echeancier(echeancier, today)
+        montant_total = situation['total_du']
+        montant_paye = situation['encaisse']
+        remises_total = situation['remises']
+        montant_couvert = montant_paye + remises_total
+        reste_a_payer = situation['reste']
+        retard_reel = situation['retard']
 
         prochains = []
-        for libelle, du, paye, echeance in postes:
-            reste_poste = max((du or Decimal('0')) - (paye or Decimal('0')), Decimal('0'))
+        for cle, libelle, echeance in postes:
+            reste_poste = situation['restes_par_poste'][cle]
             if reste_poste > 0:
                 prochains.append({
                     'libelle': libelle,

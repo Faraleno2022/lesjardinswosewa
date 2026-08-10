@@ -8,11 +8,46 @@ from decimal import Decimal
 from eleves.models import Classe
 from eleves.utils_annee import get_annee_active
 from paiements.models import Paiement
+from paiements.calculs import filtre_types_scolarite, normaliser_libelle
 from utilisateurs.utils import user_is_admin, user_school
 from rapports.utils import _draw_header_and_watermark
 
 # ReportLab
 # ReportLab: fera l'objet d'un import différé dans la vue PDF
+
+
+def _paiements_fallback_par_poste(eleve, annee_scolaire=None):
+    """Totalise les reçus sans compter plusieurs fois un paiement combiné.
+
+    Sans échéancier la ventilation d'un reçu combiné est indémontrable : son
+    montant est conservé dans le total, mais pas inventé dans plusieurs
+    colonnes de tranches.
+    """
+    paiements = Paiement.objects.filter(eleve=eleve, statut='VALIDE').filter(
+        filtre_types_scolarite()
+    )
+    if annee_scolaire:
+        paiements = paiements.filter(annee_scolaire=annee_scolaire)
+    postes = {
+        'inscription': Decimal('0'),
+        'tranche_1': Decimal('0'),
+        'tranche_2': Decimal('0'),
+        'tranche_3': Decimal('0'),
+    }
+    total = Decimal('0')
+    for paiement in paiements.select_related('type_paiement'):
+        montant = Decimal(str(paiement.montant or 0))
+        total += montant
+        nom = normaliser_libelle(paiement.type_paiement.nom)
+        cibles = []
+        if 'inscription' in nom:
+            cibles.append('inscription')
+        for numero in (1, 2, 3):
+            if f'tranche {numero}' in nom or f'tranche{numero}' in nom:
+                cibles.append(f'tranche_{numero}')
+        if len(cibles) == 1:
+            postes[cibles[0]] += montant
+    return postes, total
 
 
 def _annee_vers_dates(annee_scolaire: str):
@@ -155,20 +190,13 @@ def export_tranches_par_classe_pdf(request):
                 total_paye = (insc or 0) + (t1 or 0) + (t2 or 0) + (t3 or 0)
                 reste = (total_du or 0) - (total_paye or 0)
             else:
-                # Fallback: somme depuis Paiement validé
-                paiements = Paiement.objects.filter(eleve=e, statut='VALIDE')
-                if annee_scolaire:
-                    an_deb, an_fin = _annee_vers_dates(annee_scolaire)
-                    start = date(an_deb, 9, 1)
-                    end = date(an_fin, 8, 31)
-                    paiements = paiements.filter(date_paiement__range=(start, end))
-                insc = paiements.filter(type_paiement__nom__icontains='inscription').aggregate(total=Sum('montant'))['total'] or 0
-                t1 = paiements.filter(type_paiement__nom__icontains='tranche 1').aggregate(total=Sum('montant'))['total'] or 0
-                t2 = paiements.filter(type_paiement__nom__icontains='tranche 2').aggregate(total=Sum('montant'))['total'] or 0
-                t3 = paiements.filter(type_paiement__nom__icontains='tranche 3').aggregate(total=Sum('montant'))['total'] or 0
+                postes, total_paye = _paiements_fallback_par_poste(e, annee_scolaire)
+                insc = postes['inscription']
+                t1 = postes['tranche_1']
+                t2 = postes['tranche_2']
+                t3 = postes['tranche_3']
                 # Sans échéancier, on ne connaît pas le dû exact; on met 0 et reste = 0
                 total_du = Decimal('0')
-                total_paye = (insc or 0) + (t1 or 0) + (t2 or 0) + (t3 or 0)
                 reste = Decimal('0')
 
             # Construire le nom de l'élève sans déclencher d'erreur si un attribut manque
@@ -309,18 +337,12 @@ def export_tranches_par_classe_excel(request):
                 total_paye = (insc or 0) + (t1 or 0) + (t2 or 0) + (t3 or 0)
                 reste = (total_du or 0) - (total_paye or 0)
             else:
-                paiements = Paiement.objects.filter(eleve=e, statut='VALIDE')
-                if annee_scolaire:
-                    an_deb, an_fin = annee_vers_dates(annee_scolaire)
-                    start = date(an_deb, 9, 1)
-                    end = date(an_fin, 8, 31)
-                    paiements = paiements.filter(date_paiement__range=(start, end))
-                insc = paiements.filter(type_paiement__nom__icontains='inscription').aggregate(total=Sum('montant'))['total'] or 0
-                t1 = paiements.filter(type_paiement__nom__icontains='tranche 1').aggregate(total=Sum('montant'))['total'] or 0
-                t2 = paiements.filter(type_paiement__nom__icontains='tranche 2').aggregate(total=Sum('montant'))['total'] or 0
-                t3 = paiements.filter(type_paiement__nom__icontains='tranche 3').aggregate(total=Sum('montant'))['total'] or 0
+                postes, total_paye = _paiements_fallback_par_poste(e, annee_scolaire)
+                insc = postes['inscription']
+                t1 = postes['tranche_1']
+                t2 = postes['tranche_2']
+                t3 = postes['tranche_3']
                 total_du = Decimal('0')
-                total_paye = (insc or 0) + (t1 or 0) + (t2 or 0) + (t3 or 0)
                 reste = Decimal('0')
 
             ws.append([

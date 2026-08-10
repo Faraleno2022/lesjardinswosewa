@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from django.db.models import Count, Sum
+from django.db.models import Count, F, Sum
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.utils import timezone
@@ -11,7 +11,8 @@ from eleves.utils_annee import get_debut_periode_reporting
 from utilisateurs.permissions import can_view_reports
 from utilisateurs.utils import filter_by_user_school, user_school
 
-from .models import EcheancierPaiement, Paiement, PaiementRemise, Relance
+from .models import EcheancierPaiement, Paiement, Relance
+from .services import calculer_situations_echeanciers
 
 
 def _parse_date(value, default):
@@ -19,20 +20,6 @@ def _parse_date(value, default):
         return datetime.strptime(value, "%Y-%m-%d").date() if value else default
     except (TypeError, ValueError):
         return default
-
-
-def _montant_exigible(echeancier, date_reference):
-    postes = (
-        (echeancier.date_echeance_inscription, echeancier.frais_inscription_du),
-        (echeancier.date_echeance_tranche_1, echeancier.tranche_1_due),
-        (echeancier.date_echeance_tranche_2, echeancier.tranche_2_due),
-        (echeancier.date_echeance_tranche_3, echeancier.tranche_3_due),
-    )
-    return sum(
-        (montant or Decimal("0"))
-        for echeance, montant in postes
-        if echeance and echeance <= date_reference
-    )
 
 
 def _rapport_data(request):
@@ -81,56 +68,25 @@ def _rapport_data(request):
     echeanciers = filter_by_user_school(
         EcheancierPaiement.objects.select_related(
             "eleve", "eleve__classe", "eleve__classe__ecole"
-        ).filter(eleve__statut="ACTIF"),
+        ).filter(
+            eleve__statut="ACTIF",
+            annee_scolaire=F('eleve__classe__annee_scolaire'),
+        ),
         request.user,
         "eleve__classe__ecole",
     )
     if classe_selectionnee:
         echeanciers = echeanciers.filter(eleve__classe=classe_selectionnee)
 
-    paiements_couverture = filter_by_user_school(
-        Paiement.objects.filter(statut="VALIDE", date_paiement__lte=date_fin),
-        request.user,
-        "eleve__classe__ecole",
-    )
-    if classe_selectionnee:
-        paiements_couverture = paiements_couverture.filter(eleve__classe=classe_selectionnee)
-    paye_par_eleve = {
-        ligne["eleve_id"]: ligne["total"] or Decimal("0")
-        for ligne in paiements_couverture.values("eleve_id").annotate(total=Sum("montant"))
-    }
-
-    remises_couverture = filter_by_user_school(
-        PaiementRemise.objects.filter(
-            paiement__statut="VALIDE", paiement__date_paiement__lte=date_fin
-        ),
-        request.user,
-        "paiement__eleve__classe__ecole",
-    )
-    if classe_selectionnee:
-        remises_couverture = remises_couverture.filter(
-            paiement__eleve__classe=classe_selectionnee
-        )
-    remises_par_eleve = {
-        ligne["paiement__eleve_id"]: ligne["total"] or Decimal("0")
-        for ligne in remises_couverture.values("paiement__eleve_id").annotate(
-            total=Sum("montant_remise")
-        )
-    }
-
     retards = []
-    for echeancier in echeanciers.order_by(
-        "eleve__classe__nom", "eleve__nom", "eleve__prenom"
-    ):
-        exigible = _montant_exigible(echeancier, date_fin)
-        montant_paye = max(
-            echeancier.total_paye,
-            paye_par_eleve.get(echeancier.eleve_id, Decimal("0")),
-        )
-        couverture = montant_paye + remises_par_eleve.get(
-            echeancier.eleve_id, Decimal("0")
-        )
-        montant_retard = max(Decimal("0"), exigible - couverture)
+    echeanciers = list(
+        echeanciers.order_by("eleve__classe__nom", "eleve__nom", "eleve__prenom")
+    )
+    situations = calculer_situations_echeanciers(
+        echeanciers, date_reference=date_fin, date_limite=date_fin
+    )
+    for echeancier in echeanciers:
+        montant_retard = situations[echeancier.pk]['retard']
         if montant_retard > 0:
             retards.append({
                 "echeancier": echeancier,

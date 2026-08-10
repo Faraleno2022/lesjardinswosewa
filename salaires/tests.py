@@ -256,6 +256,49 @@ class MoteurPaieTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn('salaire_fixe', form.errors)
 
+    def test_salaire_negatif_est_refuse_hors_formulaire(self):
+        with self.assertRaises(ValidationError):
+            self.creer_fixe(salaire='-100000')
+
+    def test_recalcul_supprime_un_brouillon_devenu_ineligible(self):
+        enseignant = self.creer_fixe()
+        self.calculer()
+        self.assertTrue(
+            EtatSalaire.objects.filter(
+                enseignant=enseignant, periode=self.periode
+            ).exists()
+        )
+
+        enseignant.statut = 'DEMISSIONNAIRE'
+        enseignant.save(update_fields=['statut'])
+        self.calculer()
+
+        self.assertFalse(
+            EtatSalaire.objects.filter(
+                enseignant=enseignant, periode=self.periode
+            ).exists()
+        )
+
+    def test_un_brouillon_ineligible_ne_peut_pas_etre_valide(self):
+        enseignant = self.creer_fixe()
+        etat = EtatSalaire.objects.create(
+            enseignant=enseignant,
+            periode=self.periode,
+            salaire_base=Decimal('1000000'),
+            salaire_net=Decimal('1000000'),
+            calcule_par=self.user,
+        )
+        enseignant.statut = 'DEMISSIONNAIRE'
+        enseignant.save(update_fields=['statut'])
+
+        response = self.client.post(
+            reverse('salaires:valider_etat_salaire', args=[etat.id])
+        )
+
+        self.assertEqual(response.status_code, 302)
+        etat.refresh_from_db()
+        self.assertFalse(etat.valide)
+
     def test_retenue_superieure_au_brut_est_refusee(self):
         enseignant = self.creer_fixe()
         etat = EtatSalaire.objects.create(

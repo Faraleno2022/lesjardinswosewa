@@ -1,8 +1,9 @@
 from django.core.management.base import BaseCommand
-from django.db.models import F, ExpressionWrapper, DecimalField, Q
+from django.db.models import F
 
 from paiements.models import EcheancierPaiement
 from paiements.notifications import send_retard_notification
+from paiements.services import calculer_situations_echeanciers
 
 
 class Command(BaseCommand):
@@ -22,25 +23,28 @@ class Command(BaseCommand):
         classe_id = options.get('classe_id')
         min_solde = options.get('min_solde') or 1
 
-        solde_expr = (
-            F('frais_inscription_du') + F('tranche_1_due') + F('tranche_2_due') + F('tranche_3_due')
-            - (F('frais_inscription_paye') + F('tranche_1_payee') + F('tranche_2_payee') + F('tranche_3_payee'))
-        )
-        qs = (
-            EcheancierPaiement.objects.select_related('eleve', 'eleve__classe', 'eleve__classe__ecole')
-            .annotate(solde=ExpressionWrapper(solde_expr, output_field=DecimalField(max_digits=10, decimal_places=0)))
-            .filter(solde__gte=min_solde)
-        )
+        qs = EcheancierPaiement.objects.select_related(
+            'eleve', 'eleve__classe', 'eleve__classe__ecole'
+        ).filter(annee_scolaire=F('eleve__classe__annee_scolaire'))
         if ecole_id:
             qs = qs.filter(eleve__classe__ecole_id=ecole_id)
         if classe_id:
             qs = qs.filter(eleve__classe_id=classe_id)
 
-        total = qs.count()
+        echeanciers = list(qs)
+        situations = calculer_situations_echeanciers(echeanciers)
+        eligibles = []
+        for ech in echeanciers:
+            situation = situations[ech.pk]
+            if situation['retard'] >= min_solde:
+                ech.solde = situation['retard']
+                eligibles.append(ech)
+
+        total = len(eligibles)
         envoyes = 0
         self.stdout.write(self.style.NOTICE(f"Éligibles: {total}. Traitement max: {limit}. Dry-run: {dry_run}"))
 
-        for ech in qs[:limit]:
+        for ech in eligibles[:limit]:
             eleve = ech.eleve
             if dry_run:
                 self.stdout.write(f"[DRY] {eleve.nom_complet} ({eleve.matricule}) - solde={ech.solde}")
