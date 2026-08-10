@@ -237,6 +237,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'utilisateurs.context_processors.user_context',
+                'ecole_moderne.identite_site.identite_site',
             ],
         },
     },
