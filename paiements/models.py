@@ -651,6 +651,13 @@ class PaiementRemise(SyncTrackedModel):
         default='',
         verbose_name="Base de calcul retenue",
     )
+    # Vrai quand le montant du reçu a été diminué d'autant. Sans cette trace,
+    # rouvrir l'écran de remise déduirait une seconde fois la même remise :
+    # le montant brut du reçu ne serait plus reconstituable.
+    deduite_du_paiement = models.BooleanField(
+        default=False,
+        verbose_name="Déduite du montant du reçu",
+    )
 
     class Meta:
         verbose_name = "Remise appliquée"

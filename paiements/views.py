@@ -96,6 +96,76 @@ def _echeancier_for_payment(paiement, *, for_update=False):
     )
 
 
+def _montant_brut_paiement(paiement):
+    """Montant du reçu avant toute déduction de remise.
+
+    Une remise déjà déduite a diminué ``paiement.montant``. La rejouer sur ce
+    montant net la retrancherait une seconde fois : on repart donc toujours du
+    brut, que l'on reconstitue en réintégrant les remises marquées comme
+    déduites.
+    """
+    deja_deduit = (
+        PaiementRemise.objects.filter(
+            paiement=paiement, deduite_du_paiement=True
+        ).aggregate(total=Sum('montant_remise'))['total']
+        or Decimal('0')
+    )
+    return Decimal(str(paiement.montant or 0)) + deja_deduit
+
+
+def _enveloppe_remise_disponible(paiement, echeancier, montant_brut=None):
+    """Remise encore acceptable sur ce paiement, en GNF.
+
+    Une remise s'ajoute aux encaissements pour couvrir le total dû : la somme
+    des deux ne peut jamais le dépasser. L'enveloppe retire donc du total dû
+    les encaissements de scolarité de l'année (en attente comme validés, ce
+    reçu compris, ramené à son montant brut) et les remises portées par les
+    *autres* paiements — celles de ce paiement étant sur le point d'être
+    remplacées.
+
+    Retourne ``None`` quand aucun échéancier chiffré n'existe : il n'y a alors
+    pas de plafond opposable et le calcul historique s'applique.
+    """
+    if not echeancier or echeancier.total_du <= 0:
+        return None
+
+    encaisse = (
+        Paiement.objects.filter(
+            eleve=paiement.eleve,
+            annee_scolaire=paiement.annee_scolaire,
+            statut__in=('EN_ATTENTE', 'VALIDE'),
+        ).filter(filtre_types_scolarite()).aggregate(total=Sum('montant'))['total']
+        or Decimal('0')
+    )
+    remises_autres = (
+        PaiementRemise.objects.filter(
+            paiement__eleve=paiement.eleve,
+            paiement__annee_scolaire=paiement.annee_scolaire,
+            paiement__statut__in=('EN_ATTENTE', 'VALIDE'),
+        ).exclude(paiement=paiement).filter(
+            filtre_types_scolarite('paiement__type_paiement')
+        ).aggregate(total=Sum('montant_remise'))['total']
+        or Decimal('0')
+    )
+    # Le reçu compte pour son brut : c'est l'état à partir duquel l'opération
+    # en cours va recalculer aussi bien la remise que le montant encaissé.
+    if montant_brut is not None:
+        encaisse = encaisse - Decimal(str(paiement.montant or 0)) + montant_brut
+
+    total_du = Decimal(str(echeancier.total_du))
+    marge = total_du - encaisse - remises_autres
+    return {
+        # Remise acceptable si le reçu garde son montant brut.
+        'disponible': max(Decimal('0'), marge),
+        # Signé : négatif quand l'année est déjà sur-couverte, cas qu'une
+        # déduction sur le reçu ne rattrape pas (elle échange du cash contre
+        # de la remise sans changer la couverture totale).
+        'marge': marge,
+        'encaisse': encaisse,
+        'total_du': total_du,
+    }
+
+
 def _enrollment_preference_from_type(type_name: str):
     """Retourne True pour réinscription, False pour inscription, sinon None."""
     normalized = _normalize_payment_type_name(type_name)
@@ -1968,12 +2038,61 @@ def ajouter_paiement(request, eleve_id:int=None):
                             'show_partial_confirmation': True,
                         })
                 else:
-                    # Montant supérieur au montant standard: autoriser.
-                    # Raison: pour les types combinés et même pour certaines tranches,
-                    # on souhaite permettre que l'excédent soit alloué à la tranche suivante
-                    # (allocation intelligente lors de la validation). Les contrôles
-                    # anti-surpaiement par groupe et le plafond global empêcheront tout excès réel.
-                    pass
+                    # Montant supérieur au montant attendu : l'excédent glisse sur
+                    # les postes suivants (inscription -> T1 -> T2 -> T3). Les
+                    # contrôles par type ci-dessous sont neutralisés par
+                    # allow_sequential_overflow, et le plafond annuel global laisse
+                    # évidemment passer un reçu qui solde l'année. Sans confirmation
+                    # explicite, un « Réinscription + Tranche 1 » peut donc couvrir
+                    # toute la scolarité sans que le caissier s'en aperçoive.
+                    if not request.POST.get('confirmation_paiement_excedent'):
+                        from django.utils.safestring import mark_safe
+                        excedent = montant_saisi - montant_attendu
+                        repartition, _, non_affecte = allocate_amount_sequentially(
+                            montant_saisi, remaining_balances(ech)
+                        )
+                        libelles = {
+                            'inscription': ech.libelle_frais_admission,
+                            'tranche_1': '1ère tranche',
+                            'tranche_2': '2ème tranche',
+                            'tranche_3': '3ème tranche',
+                        }
+                        details = [
+                            {
+                                'libelle': libelles[cle],
+                                'montant': int(repartition.get(cle, 0) or 0),
+                            }
+                            for cle in ('inscription', 'tranche_1', 'tranche_2', 'tranche_3')
+                            if int(repartition.get(cle, 0) or 0) > 0
+                        ]
+                        recap = " + ".join(
+                            f"{ligne['libelle']} : {ligne['montant']:,} GNF"
+                            for ligne in details
+                        )
+                        message_html = mark_safe(
+                            f'<span style="color: #f39c12; font-weight: bold; font-size: 1.1em;">'
+                            f'⚠️ ATTENTION: Le montant saisi ({montant_saisi:,} GNF) dépasse '
+                            f'le montant standard pour {type_description} '
+                            f'({montant_attendu:,} GNF).</span><br>'
+                            f'<strong>Excédent:</strong> {excedent:,} GNF, qui sera imputé '
+                            f'aux postes suivants.<br>'
+                            f'<strong>Répartition prévue:</strong> {recap}<br>'
+                            f'<strong>Confirmez-vous ce reçu ?</strong>'
+                        )
+                        messages.warning(request, message_html)
+                        return render(request, 'paiements/form_paiement.html', {
+                            'titre_page': titre_page,
+                            'action': action,
+                            'form': form,
+                            'eleve': eleve,
+                            'show_excess_confirmation': True,
+                            'montant_attendu': montant_attendu,
+                            'montant_saisi': montant_saisi,
+                            'type_description': type_description,
+                            'excedent': excedent,
+                            'repartition_excedent': details,
+                            'excedent_non_affecte': int(non_affecte or 0),
+                        })
 
             # Un excédent est autorisé tant que le solde annuel le permet: il sera
             # affecté automatiquement aux postes suivants jusqu'à la tranche 3.
@@ -4507,9 +4626,67 @@ def appliquer_remise_paiement(request, paiement_id:int):
             source = restes
         return sum(int(source.get(cle, 0) or 0) for cle in cles)
 
+    # Les tranches affichées ignorent les paiements en attente (les champs
+    # *_payee ne bougent qu'à la validation). Sans ce plafond, l'écran propose
+    # une base de remise que le contrôle final refusera systématiquement.
+    montant_brut = _montant_brut_paiement(paiement)
+    plafond = _enveloppe_remise_disponible(paiement, ech, montant_brut)
+
+    # Déduire la remise du reçu échange du cash contre de la remise : la
+    # couverture totale de l'année ne bouge pas. C'est donc possible tant que
+    # celle-ci ne dépasse pas déjà le total dû, la seule autre limite étant que
+    # le reçu doit rester strictement positif.
+    annee_sur_couverte = plafond is not None and plafond['marge'] < 0
+    remise_max_avec_reduction = (
+        0 if (plafond is None or annee_sur_couverte) else int(montant_brut)
+    )
+
+    def _contexte(form):
+        try:
+            remises_existantes = list(paiement.remises.select_related('remise').all())
+        except Exception:
+            remises_existantes = []
+        return {
+            'paiement': paiement,
+            'form': form,
+            'remises_existantes': remises_existantes,
+            'tranches_info': tranches_info,
+            'next_url': next_url,
+            'plafond_actif': plafond is not None,
+            'remise_max_disponible': int(plafond['disponible']) if plafond else 0,
+            'remise_max_avec_reduction': remise_max_avec_reduction,
+            'annee_sur_couverte': annee_sur_couverte,
+            'montant_paiement': int(montant_brut),
+            'total_du_annee': int(plafond['total_du']) if plafond else 0,
+            'total_encaisse_annee': int(plafond['encaisse']) if plafond else 0,
+        }
+
     if request.method == 'POST':
         form = PaiementRemiseForm(request.POST, paiement=paiement)
         if form.is_valid():
+            reduire = bool(form.cleaned_data.get('reduire_paiement'))
+
+            if annee_sur_couverte:
+                messages.error(
+                    request,
+                    "Aucune remise possible sur ce reçu : les encaissements "
+                    f"enregistrés ({plafond['encaisse']:,.0f} GNF) dépassent déjà "
+                    f"le total dû de l'année ({plafond['total_du']:,.0f} GNF). "
+                    "Corrigez d'abord les montants encaissés.",
+                )
+                return render(request, 'paiements/appliquer_remise.html', _contexte(form))
+
+            if plafond is not None and not reduire and plafond['disponible'] <= 0:
+                messages.error(
+                    request,
+                    "Aucune remise ne peut s'ajouter à ce reçu : les encaissements "
+                    f"enregistrés ({plafond['encaisse']:,.0f} GNF) couvrent déjà "
+                    f"le total dû de l'année ({plafond['total_du']:,.0f} GNF). "
+                    "Cochez « Déduire la remise du montant du reçu » pour "
+                    "l'appliquer en net.",
+                )
+                return render(request, 'paiements/appliquer_remise.html', _contexte(form))
+
             remises = form.cleaned_data.get('remises') or []
             motif = form.cleaned_data.get('motif') or ''
             pct_str = form.cleaned_data.get('pourcentage_scolarite') or ''
@@ -4522,17 +4699,7 @@ def appliquer_remise_paiement(request, paiement_id:int):
             # Si aucune remise n'est sélectionnée, ne rien modifier et afficher une erreur
             if not remises and pct_value <= 0:
                 messages.error(request, "Aucune remise sélectionnée. Aucune modification n'a été effectuée.")
-                try:
-                    remises_existantes = list(paiement.remises.select_related('remise').all())
-                except Exception:
-                    remises_existantes = []
-                context = {
-                    'paiement': paiement,
-                    'form': form,
-                    'remises_existantes': remises_existantes,
-                    'tranches_info': tranches_info,
-                }
-                return render(request, 'paiements/appliquer_remise.html', context)
+                return render(request, 'paiements/appliquer_remise.html', _contexte(form))
 
             # Avertissement serveur quand 100% est sélectionné (affiché même sans JS)
             if pct_value == 100:
@@ -4550,6 +4717,14 @@ def appliquer_remise_paiement(request, paiement_id:int):
                 PaiementRemise.objects.filter(paiement=paiement).delete()
                 created = 0
                 budget_remise = max(Decimal('0'), Decimal(str(base_retenue or 0)))
+                if plafond is not None:
+                    # Ne jamais accorder plus que ce que le total dû peut absorber.
+                    # Avec déduction, le reçu baisse d'autant : seule sa valeur
+                    # limite la remise.
+                    budget_remise = min(
+                        budget_remise,
+                        montant_brut if reduire else plafond['disponible'],
+                    )
                 for remise in remises:
                     try:
                         montant_remise = min(
@@ -4568,6 +4743,7 @@ def appliquer_remise_paiement(request, paiement_id:int):
                         motif=motif,
                         tranches_concernees=tranches_str,
                         base_calcul=base_calcul,
+                        deduite_du_paiement=reduire,
                     )
                     budget_remise -= montant_remise
                     created += 1
@@ -4617,9 +4793,41 @@ def appliquer_remise_paiement(request, paiement_id:int):
                         motif=motif,
                         tranches_concernees=tranches_str,
                         base_calcul=base_calcul,
+                        deduite_du_paiement=reduire,
                     )
                     budget_remise -= montant_remise_pct
                     created += 1
+
+                total_accorde = (
+                    PaiementRemise.objects.filter(paiement=paiement)
+                    .aggregate(total=Sum('montant_remise'))['total']
+                    or Decimal('0')
+                )
+                # Le reçu repart toujours de son brut : décocher la déduction
+                # restaure le montant d'origine, la cocher le ramène au net.
+                montant_cible = (
+                    montant_brut - total_accorde if reduire else montant_brut
+                )
+                if reduire and montant_cible <= 0:
+                    transaction.set_rollback(True)
+                    messages.error(
+                        request,
+                        "La remise couvre la totalité du reçu "
+                        f"({montant_brut:,.0f} GNF). Un paiement ne peut pas "
+                        "tomber à zéro : supprimez-le plutôt que de le réduire.",
+                    )
+                    return _retour_detail()
+                if montant_cible != Decimal(str(paiement.montant or 0)):
+                    paiement.montant = montant_cible
+                    paiement._audit_user = (
+                        request.user if request.user.is_authenticated else None
+                    )
+                    paiement._audit_reason = (
+                        f"Reçu ramené au net : remise de {total_accorde:,.0f} GNF déduite"
+                        if reduire
+                        else "Reçu restauré à son montant brut : remise non déduite"
+                    )
+                    paiement.save()
 
                 echeancier_verrouille = _echeancier_for_payment(
                     paiement, for_update=True
@@ -4665,27 +4873,22 @@ def appliquer_remise_paiement(request, paiement_id:int):
                         f"montant dû. Remise maximale encore disponible : {disponible:,.0f} GNF.",
                     )
                     return _retour_detail()
-            messages.success(request, f"Remises appliquées: {created}.")
+            if reduire and total_accorde > 0:
+                messages.success(
+                    request,
+                    f"Remises appliquées: {created}. Reçu ramené à "
+                    f"{paiement.montant:,.0f} GNF, remise de "
+                    f"{total_accorde:,.0f} GNF déduite.",
+                )
+            else:
+                messages.success(request, f"Remises appliquées: {created}.")
             return _retour_detail()
         else:
             messages.error(request, "Veuillez corriger les erreurs du formulaire de remises.")
     else:
         form = PaiementRemiseForm(paiement=paiement)
 
-    # Remises déjà liées au paiement (pour affichage et cases cochées)
-    try:
-        remises_existantes = list(paiement.remises.select_related('remise').all())
-    except Exception:
-        remises_existantes = []
-
-    context = {
-        'paiement': paiement,
-        'form': form,
-        'remises_existantes': remises_existantes,
-        'tranches_info': tranches_info,
-        'next_url': next_url,
-    }
-    return render(request, 'paiements/appliquer_remise.html', context)
+    return render(request, 'paiements/appliquer_remise.html', _contexte(form))
 
 @login_required
 def calculateur_remise(request):
@@ -4711,18 +4914,44 @@ def annuler_remise_paiement(request, paiement_id:int, remise_id:int=None):
         pk=paiement_id,
     )
     try:
+        with transaction.atomic():
+            lignes = PaiementRemise.objects.filter(paiement=paiement)
+            if remise_id:
+                lignes = lignes.filter(id=remise_id)
+            # Une remise déduite avait diminué le reçu : la supprimer sans
+            # rendre ce montant laisserait un encaissement amputé sans
+            # contrepartie. Suppression et restitution vont donc ensemble.
+            a_restituer = (
+                lignes.filter(deduite_du_paiement=True)
+                .aggregate(total=Sum('montant_remise'))['total']
+                or Decimal('0')
+            )
+            lignes.delete()
+            if a_restituer > 0:
+                paiement.montant = Decimal(str(paiement.montant or 0)) + a_restituer
+                paiement._audit_user = (
+                    request.user if request.user.is_authenticated else None
+                )
+                paiement._audit_reason = (
+                    f"Reçu restauré à son brut : remise de {a_restituer:,.0f} GNF annulée"
+                )
+                paiement.save()
+            if paiement.statut == 'VALIDE':
+                _auto_validate_echeancier_for_eleve(
+                    paiement.eleve,
+                    preserve_recorded=False,
+                    annee_scolaire=paiement.annee_scolaire,
+                    strict=True,
+                )
         if remise_id:
-            PaiementRemise.objects.filter(paiement=paiement, id=remise_id).delete()
             messages.success(request, "Remise supprimée.")
         else:
-            PaiementRemise.objects.filter(paiement=paiement).delete()
             messages.success(request, "Toutes les remises de ce paiement ont été supprimées.")
-        if paiement.statut == 'VALIDE':
-            _auto_validate_echeancier_for_eleve(
-                paiement.eleve,
-                preserve_recorded=False,
-                annee_scolaire=paiement.annee_scolaire,
-                strict=True,
+        if a_restituer > 0:
+            messages.info(
+                request,
+                f"Le reçu est revenu à {paiement.montant:,.0f} GNF, "
+                "montant avant déduction de la remise.",
             )
     except Exception:
         messages.error(request, "Impossible d'annuler la remise.")
