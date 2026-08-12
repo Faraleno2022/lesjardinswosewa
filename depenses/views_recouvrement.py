@@ -1,9 +1,9 @@
 """Vues des modules de recouvrement.
 
-Cuisine, Documents et Versements partagent la même structure : une liste avec
-saisie intégrée, un tableau de bord et deux exports. Ils sont donc pilotés par
-une configuration commune (`MODULES`) plutôt que par trois jeux de vues
-identiques. L'informatique, plus riche, a ses propres vues.
+Entrées, Cuisine, Documents et Versements partagent la même structure : une
+liste avec saisie intégrée, un tableau de bord et deux exports. Ils sont donc
+pilotés par une configuration commune (`MODULES`) plutôt que par autant de jeux
+de vues identiques. L'informatique, plus riche, a ses propres vues.
 """
 import io
 from datetime import date, timedelta
@@ -21,18 +21,44 @@ from salaires.models import AffectationClasse, Enseignant, EtatSalaire
 from utilisateurs.utils import filter_by_user_school, user_is_superadmin, user_school
 
 from .forms_recouvrement import (
-    AbonnementInformatiqueForm, DepenseCuisineForm, DepenseDocumentForm, VersementForm,
+    AbonnementInformatiqueForm, DepenseCuisineForm, DepenseDocumentForm, EntreeForm,
+    VersementForm,
 )
 from .models import Depense
 from .models_recouvrement import (
-    AbonnementInformatique, DepenseCuisine, DepenseDocument, Versement,
+    AbonnementInformatique, DepenseCuisine, DepenseDocument, Entree, Versement,
 )
 
 # --------------------------------------------------------------------------
 # Configuration des modules simples
+#
+# `colonnes_extra` : colonnes propres au module, ajoutées après l'intitulé dans
+# les listes et les exports. Les autres modules n'en déclarent aucune.
 # --------------------------------------------------------------------------
 
 MODULES = {
+    'entree': {
+        'modele': Entree,
+        'formulaire': EntreeForm,
+        'titre': "Entrées de montants",
+        'singulier': 'entrée',
+        'icone': 'fas fa-arrow-down-to-line',
+        'couleur': 'success',
+        'champ_libelle': 'source',
+        'entete_libelle': 'Provenance',
+        'sens': 'entree',
+        'colonnes_extra': [
+            ('type_entree_libelle', "Type d'entrée"),
+            ('mode_paiement_libelle', "Mode d'encaissement"),
+            ('reference', 'Référence'),
+        ],
+        'champs_recherche': ['source', 'reference'],
+        'filtre_choix': {
+            'champ': 'type_entree',
+            'label': "Type d'entrée",
+            'choix': Entree.TYPE_CHOICES,
+        },
+    },
     'cuisine': {
         'modele': DepenseCuisine,
         'formulaire': DepenseCuisineForm,
@@ -83,19 +109,29 @@ def _queryset(cle, user):
 
 
 def _filtrer_periode(qs, request, cle):
-    """Applique les filtres de recherche et de période communs aux modules."""
+    """Applique les filtres de recherche, de période et de type aux modules."""
+    cfg = _config(cle)
     recherche = (request.GET.get('q') or '').strip()
     debut = (request.GET.get('date_debut') or '').strip()
     fin = (request.GET.get('date_fin') or '').strip()
+    type_choisi = (request.GET.get('type') or '').strip()
 
     if recherche:
-        champ = _config(cle)['champ_libelle']
-        qs = qs.filter(Q(**{f'{champ}__icontains': recherche}) | Q(observation__icontains=recherche))
+        champs = cfg.get('champs_recherche') or [cfg['champ_libelle']]
+        condition = Q(observation__icontains=recherche)
+        for champ in champs:
+            condition |= Q(**{f'{champ}__icontains': recherche})
+        qs = qs.filter(condition)
     if debut:
         qs = qs.filter(date__gte=debut)
     if fin:
         qs = qs.filter(date__lte=fin)
-    return qs, {'q': recherche, 'date_debut': debut, 'date_fin': fin}
+
+    filtre_choix = cfg.get('filtre_choix')
+    if filtre_choix and type_choisi:
+        qs = qs.filter(**{filtre_choix['champ']: type_choisi})
+
+    return qs, {'q': recherche, 'date_debut': debut, 'date_fin': fin, 'type': type_choisi}
 
 
 def _totaux(qs):
@@ -119,7 +155,7 @@ def hub_recouvrement(request):
 
     cartes = []
     total_sorties = total_entrees = 0
-    total_sorties_mois = 0
+    total_sorties_mois = total_entrees_mois = 0
 
     for cle, cfg in MODULES.items():
         qs = _queryset(cle, request.user)
@@ -130,6 +166,7 @@ def hub_recouvrement(request):
             total_sorties_mois += total_mois
         else:
             total_entrees += total
+            total_entrees_mois += total_mois
         cartes.append({
             'cle': cle, 'titre': cfg['titre'], 'icone': cfg['icone'],
             'couleur': cfg['couleur'], 'sens': cfg['sens'],
@@ -142,6 +179,7 @@ def hub_recouvrement(request):
         AbonnementInformatique.objects.all(), request.user, 'ecole')
     total_abo, nombre_abo = _totaux(abonnements)
     total_entrees += total_abo
+    total_entrees_mois += _totaux(abonnements.filter(date__gte=debut_mois))[0]
     expirant = abonnements.filter(
         date_fin__gte=aujourdhui,
         date_fin__lte=aujourdhui + timedelta(days=AbonnementInformatique.SEUIL_ALERTE_JOURS),
@@ -169,8 +207,9 @@ def hub_recouvrement(request):
     total_sorties += total_depenses
     total_sorties_mois += total_depenses_mois
 
-    # Versements : mis en avant à part dans le bandeau de synthèse (ce sont des entrées)
+    # Versements et entrées : mis en avant à part dans le bandeau de synthèse
     total_versements = next((c['total'] for c in cartes if c['cle'] == 'versement'), 0)
+    carte_entree = next((c for c in cartes if c['cle'] == 'entree'), None)
 
     contexte = {
         'titre_page': 'Recouvrement',
@@ -180,6 +219,7 @@ def hub_recouvrement(request):
             'total_mois': int(total_depenses_mois), 'nombre_mois': nombre_depenses_mois,
         },
         'total_versements': total_versements,
+        'carte_entree': carte_entree,
         'carte_informatique': {
             'total': total_abo, 'nombre': nombre_abo,
             'expirant': expirant, 'expires': expires,
@@ -192,6 +232,7 @@ def hub_recouvrement(request):
         'total_sorties': total_sorties,
         'total_sorties_mois': total_sorties_mois,
         'total_entrees': total_entrees,
+        'total_entrees_mois': total_entrees_mois,
         'solde': total_entrees - total_sorties,
         'mois_courant': debut_mois,
     }
@@ -297,6 +338,21 @@ def tableau_bord_module(request, cle):
     for poste in par_poste:
         poste['libelle'] = poste.pop(champ)
 
+    # Répartition par catégorie, pour les modules qui en déclarent une (Entrées)
+    filtre_choix = cfg.get('filtre_choix')
+    par_categorie = []
+    if filtre_choix:
+        libelles = dict(filtre_choix['choix'])
+        par_categorie = [
+            {
+                'libelle': libelles.get(ligne[filtre_choix['champ']], ligne[filtre_choix['champ']]),
+                'total': ligne['total'], 'nombre': ligne['nombre'],
+            }
+            for ligne in qs.values(filtre_choix['champ'])
+                           .annotate(total=Sum('montant'), nombre=Count('id'))
+                           .order_by('-total')
+        ]
+
     return render(request, 'depenses/recouvrement/tableau_bord.html', {
         'titre_page': f"Tableau de bord — {cfg['titre']}",
         'cle': cle, 'cfg': cfg,
@@ -305,6 +361,8 @@ def tableau_bord_module(request, cle):
         'total_annee': total_annee,
         'moyenne': int(total / nombre) if nombre else 0,
         'par_mois': par_mois, 'par_poste': par_poste,
+        'par_categorie': par_categorie,
+        'titre_categorie': filtre_choix['label'] if filtre_choix else '',
         'dernieres': qs.select_related('cree_par')[:10],
     })
 
@@ -314,27 +372,46 @@ def tableau_bord_module(request, cle):
 # --------------------------------------------------------------------------
 
 def _lignes_export(cle, request):
+    """Entêtes et lignes de l'export.
+
+    Le montant occupe toujours l'avant-dernière colonne et l'observation la
+    dernière : les colonnes propres au module s'insèrent entre l'intitulé et le
+    montant.
+    """
     cfg = _config(cle)
     qs, filtres = _filtrer_periode(_queryset(cle, request.user), request, cle)
     champ = cfg['champ_libelle']
+    extras = cfg.get('colonnes_extra', [])
+
+    entetes = (
+        ['Date', cfg['entete_libelle']]
+        + [entete for _, entete in extras]
+        + ['Montant (GNF)', 'Observation']
+    )
     lignes = [
-        [op.date.strftime('%d/%m/%Y'), getattr(op, champ), int(op.montant), op.observation or '']
+        [
+            op.date.strftime('%d/%m/%Y'),
+            getattr(op, champ),
+            *[getattr(op, attribut) or '' for attribut, _ in extras],
+            int(op.montant),
+            op.observation or '',
+        ]
         for op in qs
     ]
-    return cfg, lignes, filtres
+    return cfg, entetes, lignes, filtres
 
 
 @login_required
 def export_excel_module(request, cle):
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
 
-    cfg, lignes, _ = _lignes_export(cle, request)
+    cfg, entetes, lignes, _ = _lignes_export(cle, request)
     classeur = Workbook()
     feuille = classeur.active
     feuille.title = cfg['titre'][:31]
 
-    entetes = ['Date', cfg['entete_libelle'], 'Montant (GNF)', 'Observation']
     feuille.append(entetes)
     for cellule in feuille[1]:
         cellule.font = Font(bold=True, color='FFFFFF')
@@ -344,14 +421,15 @@ def export_excel_module(request, cle):
     for ligne in lignes:
         feuille.append(ligne)
 
-    total = sum(l[2] for l in lignes)
+    total = sum(l[-2] for l in lignes)
     feuille.append([])
-    feuille.append(['', 'TOTAL', total, ''])
-    feuille.cell(row=feuille.max_row, column=2).font = Font(bold=True)
-    feuille.cell(row=feuille.max_row, column=3).font = Font(bold=True)
+    feuille.append([''] * (len(entetes) - 3) + ['TOTAL', total, ''])
+    for colonne in (len(entetes) - 2, len(entetes) - 1):
+        feuille.cell(row=feuille.max_row, column=colonne).font = Font(bold=True)
 
-    for colonne, largeur in zip('ABCD', (14, 42, 18, 40)):
-        feuille.column_dimensions[colonne].width = largeur
+    largeurs = [14, 42] + [20] * (len(entetes) - 4) + [18, 40]
+    for i, largeur in enumerate(largeurs, start=1):
+        feuille.column_dimensions[get_column_letter(i)].width = largeur
 
     flux = io.BytesIO()
     classeur.save(flux)
@@ -367,17 +445,20 @@ def export_excel_module(request, cle):
 @login_required
 def export_pdf_module(request, cle):
     from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.styles import getSampleStyleSheet
     from reportlab.lib.units import cm
     from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-    cfg, lignes, filtres = _lignes_export(cle, request)
+    cfg, entetes, lignes, filtres = _lignes_export(cle, request)
     ecole = user_school(request.user)
+    nb_extras = len(entetes) - 4
+    paysage = nb_extras > 0  # les modules à colonnes supplémentaires respirent mieux à l'horizontale
 
     flux = io.BytesIO()
+    format_page = landscape(A4) if paysage else A4
     document = SimpleDocTemplate(
-        flux, pagesize=A4,
+        flux, pagesize=format_page,
         leftMargin=1.5 * cm, rightMargin=1.5 * cm,
         topMargin=1.5 * cm, bottomMargin=1.5 * cm,
     )
@@ -390,27 +471,41 @@ def export_pdf_module(request, cle):
         elements.append(Paragraph(
             f"Période : {filtres['date_debut'] or '—'} au {filtres['date_fin'] or '—'}",
             styles['Normal']))
+    if filtres.get('type') and cfg.get('filtre_choix'):
+        libelles = dict(cfg['filtre_choix']['choix'])
+        elements.append(Paragraph(
+            f"{cfg['filtre_choix']['label']} : {libelles.get(filtres['type'], filtres['type'])}",
+            styles['Normal']))
     elements.append(Spacer(1, 0.6 * cm))
 
-    donnees = [['Date', cfg['entete_libelle'], 'Montant (GNF)', 'Observation']]
+    donnees = [entetes]
     for ligne in lignes:
         donnees.append([
             ligne[0],
             Paragraph(str(ligne[1]), styles['BodyText']),
-            f"{ligne[2]:,}".replace(',', ' '),
-            Paragraph(str(ligne[3]), styles['BodyText']),
+            *[str(valeur) for valeur in ligne[2:-2]],
+            f"{ligne[-2]:,}".replace(',', ' '),
+            Paragraph(str(ligne[-1]), styles['BodyText']),
         ])
-    total = sum(l[2] for l in lignes)
-    donnees.append(['', 'TOTAL', f"{total:,}".replace(',', ' '), ''])
+    total = sum(l[-2] for l in lignes)
+    donnees.append([''] * (len(entetes) - 3) + ['TOTAL', f"{total:,}".replace(',', ' '), ''])
 
-    tableau = Table(donnees, colWidths=[2.4 * cm, 6.5 * cm, 3.2 * cm, 5.9 * cm], repeatRows=1)
+    # Largeurs proportionnelles, ajustées à la largeur utile de la page
+    poids = [1.6, 4.0] + [2.2] * nb_extras + [2.2, 4.0]
+    largeur_utile = format_page[0] - 3 * cm
+    colonne_montant = len(entetes) - 2
+
+    tableau = Table(
+        donnees, repeatRows=1,
+        colWidths=[p / sum(poids) * largeur_utile for p in poids],
+    )
     tableau.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1657A8')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
         ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#EAF1FB')),
-        ('ALIGN', (2, 1), (2, -1), 'RIGHT'),
+        ('ALIGN', (colonne_montant, 1), (colonne_montant, -1), 'RIGHT'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#B9C7D9')),
         ('FONTSIZE', (0, 0), (-1, -1), 8),

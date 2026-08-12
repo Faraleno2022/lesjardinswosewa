@@ -20,6 +20,7 @@ from datetime import date, datetime, timedelta
 from io import BytesIO
 import os
 import logging
+import re
 import urllib.parse
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
@@ -479,27 +480,70 @@ def ensure_echeancier_for_eleve(
                 eleve=eleve, annee_scolaire=annee_scol
             ).first()
 
+# Le libellé est déjà normalisé (minuscules, sans accents, espaces simples) :
+# « 1ère » y arrive sous la forme « 1ere ».
+_POSTE = r'(?:tranche|versement)'
+_ROMAIN_TRANCHE = {1: 'i', 2: 'ii', 3: 'iii'}
+_ORDINAL_TRANCHE = {1: 'premiere?', 2: 'deuxieme|2nde?|seconde', 3: 'troisieme'}
+# Formes ordinales : « 1ère tranche », « 3e versement », « deuxième tranche »,
+# « tranche II », « T2 ». Le suffixe ordinal est obligatoire devant le poste :
+# sans lui, « scolarité 3 tranches » (un décompte) passerait pour la 3ème.
+# Le `\b` après le chiffre romain évite que « tranche i » morde sur « tranche ii ».
+_MOTIFS_TRANCHE = {
+    numero: re.compile(
+        r'\b{n}\s*(?:ere|er|re|eme|e)\s*{poste}'
+        r'|\b(?:{ordinal})\s+{poste}'
+        r'|{poste}s?\s*{romain}\b'
+        r'|\bt\s*{n}\b'.format(
+            n=numero,
+            poste=_POSTE,
+            romain=_ROMAIN_TRANCHE[numero],
+            ordinal=_ORDINAL_TRANCHE[numero],
+        )
+    )
+    for numero in (1, 2, 3)
+}
+# Énumérations et intervalles : « Tranche 1 », « tranches 1 et 2 »,
+# « tranches 1, 2 et 3 », « tranches 1 à 3 », « tranches 2-3 ».
+_MOTIF_SERIE = re.compile(
+    r'{poste}s?\s*(?:n\s*[°o]?\s*)?'
+    r'([1-3](?:\s*(?:et|a|au|jusqu.?a|\+|,|-)\s*[1-3])*)'.format(poste=_POSTE)
+)
+_SEPARATEURS_INTERVALLE = re.compile(r'\b(?:a|au|jusqu.?a)\b|-')
+
+
 def _tranches_visees_par_type(type_nom):
     """Retourne l'ensemble des tranches ({1, 2, 3}) couvertes par un type de paiement.
 
     ``type_nom`` doit déjà être normalisé (minuscules, sans accents).
-    « Annuel » et « Scolarité » couvrent les trois tranches.
+
+    L'analyse est additive : chaque tranche citée compte, sous n'importe
+    laquelle de ses graphies (« Tranche 2 », « 2ème tranche », « T2 »,
+    « deuxième versement », « tranches 1 et 3 », « tranches 1 à 3 »).
+
+    « Annuel » et « Scolarité » ne couvrent les trois tranches que lorsque le
+    libellé n'en désigne aucune explicitement : « Frais d'inscription +
+    Scolarité 1ère Tranche » vise la seule première tranche, et non l'année
+    entière comme le faisait le raccourci précédent.
     """
+    tranches = set()
+    for numero, motif in _MOTIFS_TRANCHE.items():
+        if motif.search(type_nom):
+            tranches.add(numero)
+    for serie in _MOTIF_SERIE.findall(type_nom):
+        citees = [int(chiffre) for chiffre in re.findall(r'[1-3]', serie)]
+        if len(citees) > 1 and _SEPARATEURS_INTERVALLE.search(serie):
+            tranches.update(range(min(citees), max(citees) + 1))
+        else:
+            tranches.update(citees)
+    if tranches:
+        return tranches
     if 'annuel' in type_nom or 'scolarite' in type_nom:
         return {1, 2, 3}
-    tranches = set()
-    motifs = {
-        1: ('tranche 1', 'tranche1', '1ere tranche', '1re tranche'),
-        2: ('tranche 2', 'tranche2', '2eme tranche'),
-        3: ('tranche 3', 'tranche3', '3eme tranche'),
-    }
-    for numero, variantes in motifs.items():
-        if any(variante in type_nom for variante in variantes):
-            tranches.add(numero)
     return tranches
 
 
-def _suggestion_paiement(ech, type_nom):
+def _suggestion_paiement(ech, type_nom, *, est_scolarite=True):
     """Calcule le montant exact restant à payer pour un type de paiement donné.
 
     Additionne le reste dû de chacun des postes couverts par le type : frais
@@ -509,6 +553,15 @@ def _suggestion_paiement(ech, type_nom):
     L'analyse est additive (et non une cascade de cas) afin que les libellés
     combinés soient tous couverts, y compris « Inscription + Tranche 1 +
     Tranche 2 + Tranche 3 ».
+
+    Le reste part du dû, puis retranche dans l'ordre : les encaissements déjà
+    affectés (``*_paye``), les remises validées, et enfin les reçus de scolarité
+    encore EN_ATTENTE. Ces derniers ne sont pas affectés à l'échéancier tant
+    qu'ils ne sont pas validés : sans cette déduction, le moteur proposerait de
+    réencaisser une tranche qu'un reçu en attente couvre déjà.
+
+    ``est_scolarite`` vient de la catégorie du type. Un encaissement de cantine
+    ou de transport n'a aucun poste dans l'échéancier, quel que soit son libellé.
     """
     discounts = (
         PaiementRemise.objects
@@ -522,6 +575,22 @@ def _suggestion_paiement(ech, type_nom):
         .order_by('paiement__date_paiement', 'paiement_id', 'id')
     )
     _, net_balances = allocate_discounts(ech, discounts)
+
+    # Les reçus en attente se ventilent comme les encaissements validés :
+    # inscription, puis T1, T2, T3.
+    en_attente = (
+        Paiement.objects
+        .filter(
+            eleve_id=ech.eleve_id,
+            annee_scolaire=ech.annee_scolaire,
+            statut='EN_ATTENTE',
+        )
+        .filter(filtre_types_scolarite())
+        .aggregate(total=Sum('montant'))['total']
+        or Decimal('0')
+    )
+    _, net_balances, _ = allocate_amount_sequentially(en_attente, net_balances)
+
     restes = {
         'fi': int(net_balances['inscription']),
         1: int(net_balances['tranche_1']),
@@ -529,8 +598,9 @@ def _suggestion_paiement(ech, type_nom):
         3: int(net_balances['tranche_3']),
     }
 
-    inclut_frais = 'inscription' in type_nom  # couvre aussi « reinscription »
-    tranches = _tranches_visees_par_type(type_nom)
+    # « inscription » couvre aussi « reinscription »
+    inclut_frais = est_scolarite and 'inscription' in type_nom
+    tranches = _tranches_visees_par_type(type_nom) if est_scolarite else set()
 
     suggested = (restes['fi'] if inclut_frais else 0) + sum(restes[n] for n in tranches)
 
@@ -547,6 +617,11 @@ def _suggestion_paiement(ech, type_nom):
 
     if postes:
         description = "Reste à payer : " + " + ".join(postes) + "."
+        if en_attente > 0:
+            description += (
+                f" {int(en_attente):,} GNF de reçus en attente de validation "
+                "sont déjà déduits.".replace(',', ' ')
+            )
     else:
         description = (
             "Ce type de paiement ne correspond à aucun poste de l'échéancier "
@@ -571,6 +646,7 @@ def _suggestion_paiement(ech, type_nom):
             't1_restant': restes[1],
             't2_restant': restes[2],
             't3_restant': restes[3],
+            'en_attente': int(en_attente),
             'description': description,
         },
         'echeancier': {
@@ -620,7 +696,9 @@ def ajax_montant_suggere(request):
         _align_enrollment_fee(eleve, ech, type_nom)
         ech.refresh_from_db()
 
-        resultat = _suggestion_paiement(ech, type_nom)
+        resultat = _suggestion_paiement(
+            ech, type_nom, est_scolarite=est_type_scolarite(type_pmt)
+        )
         resultat['ok'] = True
         resultat['type_nom'] = type_pmt.nom
         return JsonResponse(resultat)
@@ -1808,6 +1886,20 @@ def modifier_paiement(request, paiement_id: int):
                     paiement._audit_user = request.user
                     paiement._audit_reason = form.cleaned_data['motif_modification'].strip()
                     if paiement.statut == 'VALIDE' and est_type_scolarite(paiement.type_paiement):
+                        # Même préalable qu'à la validation : un échéancier
+                        # absent ou resté vide (grille saisie après coup)
+                        # ferait refuser toute correction avec un maximum
+                        # autorisé de 0 GNF.
+                        ensure_echeancier_for_eleve(
+                            paiement.eleve,
+                            created_by=request.user if request.user.is_authenticated else None,
+                            annee_scolaire=paiement.annee_scolaire,
+                            prefer_reinscription=(
+                                _enrollment_preference_from_type(
+                                    paiement.type_paiement.nom
+                                ) is True
+                            ),
+                        )
                         _assert_payment_fits_annual_balance(paiement)
                     paiement.save()
                     if paiement.statut == 'VALIDE':

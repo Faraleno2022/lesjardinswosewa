@@ -67,7 +67,7 @@ class InscriptionReinscriptionReportingTests(TestCase):
             responsable_principal=self.responsable,
         )
 
-    def _schedule(self, student, nature, fee, tranche_1=0):
+    def _schedule(self, student, nature, fee, tranche_1=0, admission_paye=0):
         return EcheancierPaiement.objects.create(
             eleve=student,
             annee_scolaire="2025-2026",
@@ -76,6 +76,7 @@ class InscriptionReinscriptionReportingTests(TestCase):
             tranche_1_due=Decimal(str(tranche_1)),
             tranche_2_due=0,
             tranche_3_due=0,
+            frais_inscription_paye=Decimal(str(admission_paye)),
             date_echeance_inscription=date(2025, 9, 1),
             date_echeance_tranche_1=date(2026, 1, 15),
             date_echeance_tranche_2=date(2026, 3, 15),
@@ -123,6 +124,39 @@ class InscriptionReinscriptionReportingTests(TestCase):
         self.assertEqual(values[5], 20000)
         self.assertEqual(values[6], 40.0)
         self.assertEqual(values[7], 50000)
+
+    def test_tranches_exports_separate_reenrollment_from_enrollment(self):
+        student = self._student("VENT-009", "Saran")
+        self._schedule(
+            student,
+            "REINSCRIPTION",
+            20000,
+            tranche_1=100000,
+            admission_paye=20000,
+        )
+
+        response = self.client.get(
+            reverse("paiements:export_tranches_par_classe_excel"),
+            {"annee_scolaire": "2025-2026", "classe": self.classe.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        workbook = load_workbook(BytesIO(response.content), data_only=True)
+        worksheet = next(ws for ws in workbook.worksheets if ws.title != "Index")
+        self.assertEqual(
+            [cell.value for cell in worksheet[2]],
+            [
+                "Élève", "Inscription payée", "Réinscription payée",
+                "Tranche 1 payée", "Tranche 2 payée", "Tranche 3 payée",
+                "Total dû", "Total payé", "Reste",
+            ],
+        )
+        values = [cell.value for cell in worksheet[3]]
+        self.assertEqual(values[1], 0)
+        self.assertEqual(values[2], 20000)
+        self.assertEqual(values[6], 120000)
+        self.assertEqual(values[7], 20000)
+        self.assertEqual(values[8], 100000)
 
     @patch("paiements.views.timezone.localdate", return_value=date(2025, 10, 1))
     def test_reenrollment_plus_first_installment_sets_nature_and_allocates(self, _localdate):

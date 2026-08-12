@@ -262,5 +262,5 @@ from .models_bibliotheque import (
 )
 from .models_fournitures import ProduitFourniture, VenteFourniture
 from .models_recouvrement import (
-    DepenseCuisine, DepenseDocument, Versement, AbonnementInformatique
+    Entree, DepenseCuisine, DepenseDocument, Versement, AbonnementInformatique
 )

@@ -43,11 +43,16 @@ class PaiementForm(forms.ModelForm):
             'mode_paiement': forms.Select(attrs={
                 'class': 'form-select'
             }),
+            # `step` reste à 1 : le montant proposé par le moteur est le reste
+            # exact de l'échéancier, qui n'est pas toujours un multiple de
+            # 1 000 (forfaits, remises, soldes partiels). Un pas de 1 000 ferait
+            # refuser par le navigateur le montant que le serveur vient de
+            # calculer.
             'montant': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'Montant en GNF',
-                'min': '0',
-                'step': '1000'
+                'min': '1',
+                'step': '1'
             }),
             'date_paiement': forms.DateInput(attrs={
                 'class': 'form-control',
@@ -123,8 +128,11 @@ class ModificationPaiementForm(forms.ModelForm):
         widgets = {
             'type_paiement': forms.Select(attrs={'class': 'form-select'}),
             'mode_paiement': forms.Select(attrs={'class': 'form-select'}),
+            # `step` doit rester à 1 : avec min=1, un pas de 1000 ne rendrait
+            # valides que 1, 1001, 2001... Le navigateur refusait alors tout
+            # montant rond (250000) — y compris celui déjà enregistré.
             'montant': forms.NumberInput(attrs={
-                'class': 'form-control', 'min': '1', 'step': '1000',
+                'class': 'form-control', 'min': '1', 'step': '1',
             }),
             'date_paiement': forms.DateInput(attrs={
                 'class': 'form-control', 'type': 'date',
