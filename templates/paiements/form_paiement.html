@@ -383,6 +383,10 @@
                                             <div><span class="text-muted">T1 restant:</span> <strong id="sbT1">0 GNF</strong></div>
                                             <div><span class="text-muted">T2 restant:</span> <strong id="sbT2">0 GNF</strong></div>
                                             <div><span class="text-muted">T3 restant:</span> <strong id="sbT3">0 GNF</strong></div>
+                                            <div id="sbAttenteBloc" style="display:none;">
+                                                <span class="text-muted">Reçus en attente:</span>
+                                                <strong id="sbAttente" class="text-warning">0 GNF</strong>
+                                            </div>
                                         </div>
                                         <div class="small text-muted mt-1">
                                             <i class="fas fa-info-circle me-1"></i>
@@ -949,6 +953,14 @@ document.addEventListener('DOMContentLoaded', function() {
             setTxt('sbT1', bd.t1_restant);
             setTxt('sbT2', bd.t2_restant);
             setTxt('sbT3', bd.t3_restant);
+            // Les reçus encore en attente sont déjà retranchés du montant
+            // proposé : on les affiche pour que le caissier sache pourquoi.
+            const attenteBloc = document.getElementById('sbAttenteBloc');
+            if (attenteBloc) {
+                const enAttente = Number(bd.en_attente || 0);
+                setTxt('sbAttente', enAttente);
+                attenteBloc.style.display = enAttente > 0 ? '' : 'none';
+            }
             const desc = document.getElementById('sbDesc');
             if (desc) desc.textContent = bd.description || '';
             const bloc = document.getElementById('suggestionBreakdown');
