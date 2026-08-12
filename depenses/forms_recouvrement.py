@@ -10,7 +10,7 @@ from eleves.models import Eleve
 from utilisateurs.utils import filter_by_user_school
 
 from .models_recouvrement import (
-    AbonnementInformatique, DepenseCuisine, DepenseDocument, Versement,
+    AbonnementInformatique, DepenseCuisine, DepenseDocument, Entree, Versement,
 )
 
 
@@ -28,6 +28,19 @@ class _BaseOperationForm(forms.ModelForm):
         if montant is not None and montant <= 0:
             raise forms.ValidationError("Le montant doit être supérieur à zéro.")
         return montant
+
+
+class EntreeForm(_BaseOperationForm):
+    """Saisie d'une entrée d'argent : provenance, nature et mode d'encaissement."""
+
+    class Meta:
+        model = Entree
+        fields = ['source', 'type_entree', 'mode_paiement', 'reference', 'montant', 'observation']
+        widgets = {
+            'source': forms.TextInput(attrs={'placeholder': "Ex. : don d'un parent, location de la salle"}),
+            'reference': forms.TextInput(attrs={'placeholder': "Ex. : reçu n° 042 (facultatif)"}),
+            'observation': forms.Textarea(attrs={'rows': 2}),
+        }
 
 
 class DepenseCuisineForm(_BaseOperationForm):

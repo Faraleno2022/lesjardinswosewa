@@ -13,7 +13,15 @@
 
 <!-- ===== Bandeau KPI ===== -->
 <div class="row g-3 mb-4">
-  <div class="col-6 col-lg-3">
+  <div class="col-6 col-lg-4 col-xxl">
+    <div class="rec-kpi rec-kpi--success">
+      <div class="rec-kpi-icon"><i class="fas fa-arrow-down-to-line"></i></div>
+      <div class="rec-kpi-value">{{ total_entrees|intcomma }} <small>GNF</small></div>
+      <div class="rec-kpi-label">Total encaissé</div>
+      <div class="rec-kpi-sub">{{ total_entrees_mois|intcomma }} GNF ce mois</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-4 col-xxl">
     <div class="rec-kpi rec-kpi--danger">
       <div class="rec-kpi-icon"><i class="fas fa-arrow-trend-up"></i></div>
       <div class="rec-kpi-value">{{ total_sorties|intcomma }} <small>GNF</small></div>
@@ -21,7 +29,7 @@
       <div class="rec-kpi-sub">Dépenses, cuisine et documents</div>
     </div>
   </div>
-  <div class="col-6 col-lg-3">
+  <div class="col-6 col-lg-4 col-xxl">
     <div class="rec-kpi rec-kpi--warning">
       <div class="rec-kpi-icon"><i class="fas fa-calendar-day"></i></div>
       <div class="rec-kpi-value">{{ total_sorties_mois|intcomma }} <small>GNF</small></div>
@@ -29,15 +37,15 @@
       <div class="rec-kpi-sub">Depuis le 1er du mois en cours</div>
     </div>
   </div>
-  <div class="col-6 col-lg-3">
-    <div class="rec-kpi rec-kpi--success">
+  <div class="col-6 col-lg-4 col-xxl">
+    <div class="rec-kpi rec-kpi--info">
       <div class="rec-kpi-icon"><i class="fas fa-hand-holding-dollar"></i></div>
       <div class="rec-kpi-value">{{ total_versements|intcomma }} <small>GNF</small></div>
       <div class="rec-kpi-label">Versements encaissés</div>
       <div class="rec-kpi-sub">Comptés à part : ce sont des entrées</div>
     </div>
   </div>
-  <div class="col-6 col-lg-3">
+  <div class="col-6 col-lg-4 col-xxl">
     <div class="rec-kpi rec-kpi--primary">
       <div class="rec-kpi-icon"><i class="fas fa-laptop"></i></div>
       <div class="rec-kpi-value">{{ carte_informatique.actifs }} <small>actifs</small></div>
@@ -83,7 +91,8 @@
         <div>
           <h3 class="rec-card-title">{{ carte.titre }}</h3>
           <p class="rec-card-text">
-            {% if carte.cle == 'cuisine' %}Achats et frais engagés pour la cuisine de l'établissement
+            {% if carte.cle == 'entree' %}Tout montant encaissé : dons, subventions, locations, ventes et autres recettes
+            {% elif carte.cle == 'cuisine' %}Achats et frais engagés pour la cuisine de l'établissement
             {% elif carte.cle == 'document' %}Impressions, reprographie et fournitures administratives
             {% elif carte.cle == 'versement' %}Versements d'espèces vers la banque, le coffre ou la direction
             {% endif %}
@@ -213,6 +222,9 @@
 <!-- ===== Raccourcis ===== -->
 <h2 class="rec-section-title"><i class="fas fa-bolt me-2"></i>Raccourcis</h2>
 <div class="rec-shortcuts">
+  <a href="{% url 'depenses:recouvrement_liste' cle='entree' %}" class="rec-shortcut">
+    <i class="fas fa-arrow-down-to-line"></i>Nouvelle entrée
+  </a>
   <a href="{% url 'depenses:ajouter_depense' %}" class="rec-shortcut">
     <i class="fas fa-plus"></i>Nouvelle dépense
   </a>
@@ -280,6 +292,8 @@
   .rec-kpi--success .rec-kpi-icon { background: rgba(40,167,69,.12); color: #28a745; }
   .rec-kpi--primary { border-top-color: #007bff; }
   .rec-kpi--primary .rec-kpi-icon { background: rgba(0,123,255,.12); color: #007bff; }
+  .rec-kpi--info    { border-top-color: #17a2b8; }
+  .rec-kpi--info .rec-kpi-icon    { background: rgba(23,162,184,.12); color: #17a2b8; }
 
   /* ===== Titres de section ===== */
   .rec-section-title {

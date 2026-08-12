@@ -50,6 +50,11 @@
                         <i class="fas fa-file-pdf me-2"></i>Tranches par classe (PDF)
                     </a>
                 </li>
+                <li>
+                    <a class="dropdown-item" href="#" onclick="exportTranchesParClasseExcel(); return false;">
+                        <i class="fas fa-file-excel me-2"></i>Tranches par classe (Excel)
+                    </a>
+                </li>
                 <li><hr class="dropdown-divider"></li>
                 <li>
                     <a class="dropdown-item fw-bold" href="#" data-bs-toggle="modal" data-bs-target="#rapportComptableModal">
@@ -459,6 +464,22 @@ function exportTranchesParClassePdf() {
     const out = new URL(base, window.location.origin);
     const annee = u.searchParams.get('annee_scolaire');
     const classe = u.searchParams.get('classe') || u.searchParams.get('classe_id'); // compat
+    const ecole = u.searchParams.get('ecole');
+
+    if (annee) out.searchParams.set('annee_scolaire', annee);
+    if (classe) out.searchParams.set('classe', classe);
+    if (ecole) out.searchParams.set('ecole', ecole);
+
+    window.open(out.toString(), '_blank');
+}
+
+// Ouvre le même état au format Excel avec exactement les mêmes filtres
+function exportTranchesParClasseExcel() {
+    const u = new URL(window.location.href);
+    const base = '{% url "paiements:export_tranches_par_classe_excel" %}';
+    const out = new URL(base, window.location.origin);
+    const annee = u.searchParams.get('annee_scolaire');
+    const classe = u.searchParams.get('classe') || u.searchParams.get('classe_id');
     const ecole = u.searchParams.get('ecole');
 
     if (annee) out.searchParams.set('annee_scolaire', annee);
