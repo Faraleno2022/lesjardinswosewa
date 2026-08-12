@@ -1,3 +1,4 @@
+import re
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -78,6 +79,31 @@ class ModificationPaiementHistoriqueTests(TestCase):
         detail = self.client.get(reverse('paiements:detail_paiement', args=[self.paiement.id]))
         self.assertContains(detail, 'Mémoire des modifications')
         self.assertContains(detail, 'Montant incomplet')
+
+    def test_le_champ_montant_accepte_les_montants_ronds(self):
+        """Le couple min/step du champ ne doit refuser aucun montant entier.
+
+        Avec min=1 et step=1000, le navigateur n'acceptait que 1, 1001,
+        2001... : la page refusait 200 000 GNF, et même le montant déjà
+        enregistré, avant tout envoi au serveur.
+        """
+        response = self.client.get(
+            reverse('paiements:modifier_paiement', args=[self.paiement.id])
+        )
+        self.assertEqual(response.status_code, 200)
+        champ = re.search(
+            r'<input[^>]*name="montant"[^>]*>', response.content.decode()
+        )
+        self.assertIsNotNone(champ, "Le champ montant doit être rendu.")
+        balise = champ.group(0)
+        minimum = Decimal(re.search(r'min="([^"]+)"', balise).group(1))
+        pas = Decimal(re.search(r'step="([^"]+)"', balise).group(1))
+        for montant in (Decimal('200000'), Decimal('250000'), self.paiement.montant):
+            self.assertEqual(
+                (montant - minimum) % pas, Decimal('0'),
+                f"{montant} GNF serait refusé par le navigateur "
+                f"(min={minimum}, step={pas}).",
+            )
 
     def test_motif_est_obligatoire(self):
         response = self.client.post(
