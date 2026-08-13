@@ -1,7 +1,7 @@
 from django.urls import path
 from . import views
 from .views_tranches import export_tranches_par_classe_pdf, export_tranches_par_classe_excel
-from .export_comptabilite import export_comptabilite_pdf, export_comptabilite_excel
+from .rapports_professionnels import export_comptabilite_pdf, export_comptabilite_excel
 from .export_paiements_filtres import export_paiements_filtres_pdf, export_paiements_filtres_excel
 from . import views_rappels
 from .whatsapp_recu import apercu_message_whatsapp_recu, apercu_message_whatsapp_note_rappel

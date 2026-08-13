@@ -1,0 +1,211 @@
+from datetime import date, timedelta
+from decimal import Decimal
+from io import BytesIO
+
+from django.contrib.auth import get_user_model
+from django.test import RequestFactory, TestCase, override_settings
+from django.urls import reverse
+from django.utils import timezone
+from openpyxl import load_workbook
+
+from eleves.models import Classe, Ecole, Eleve, Responsable
+from paiements.models import (
+    EcheancierPaiement,
+    ModePaiement,
+    Paiement,
+    PaiementRemise,
+    RemiseReduction,
+    TypePaiement,
+)
+from paiements.rapports_professionnels import collect_accounting_data
+
+from .support import TEST_MIDDLEWARE
+
+
+@override_settings(MIDDLEWARE=TEST_MIDDLEWARE)
+class RapportComptableProfessionnelTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username="rapport-professionnel",
+            email="rapport@example.com",
+            password="mot-de-passe-test",
+            first_name="Aïssatou",
+            last_name="Camara",
+        )
+        self.client.force_login(self.user)
+        self.factory = RequestFactory()
+        self.ecole = Ecole.objects.create(
+            nom="École rapport professionnel",
+            adresse="Conakry",
+            telephone="+224620000601",
+            directeur="Direction",
+        )
+        self.classe = Classe.objects.create(
+            ecole=self.ecole,
+            nom="11 Série littéraire",
+            niveau="LYCEE_11",
+            annee_scolaire="2025-2026",
+        )
+        responsable = Responsable.objects.create(
+            prenom="Parent",
+            nom="Rapport",
+            relation="PERE",
+            telephone="+224620000602",
+        )
+        self.eleve = Eleve.objects.create(
+            matricule="RCE-001",
+            prenom="Mariama",
+            nom="Diallo",
+            sexe="F",
+            date_naissance=date(2010, 1, 1),
+            classe=self.classe,
+            date_inscription=date(2025, 9, 1),
+            responsable_principal=responsable,
+        )
+        self.echeancier = EcheancierPaiement.objects.create(
+            eleve=self.eleve,
+            annee_scolaire="2025-2026",
+            nature_frais="REINSCRIPTION",
+            frais_inscription_du=Decimal("20000"),
+            tranche_1_due=Decimal("100000"),
+            tranche_2_due=0,
+            tranche_3_due=0,
+            date_echeance_inscription=date(2025, 9, 30),
+            date_echeance_tranche_1=date(2026, 1, 10),
+            date_echeance_tranche_2=date(2026, 3, 5),
+            date_echeance_tranche_3=date(2026, 5, 5),
+        )
+        self.scolarite = TypePaiement.objects.create(
+            nom="Réinscription + Tranche 1",
+            categorie="SCOLARITE",
+        )
+        self.cantine = TypePaiement.objects.create(
+            nom="Cantine mensuelle",
+            categorie="CANTINE",
+        )
+        self.mobile = ModePaiement.objects.create(nom="Mobile Money")
+        self.especes = ModePaiement.objects.create(nom="Espèces")
+        self.paiement_scolarite = self._payment(
+            "RCE-REC-001", "80000", "VALIDE", self.scolarite, self.mobile,
+            reference="MM-2026-001",
+        )
+        self._payment(
+            "RCE-REC-002", "15000", "VALIDE", self.cantine, self.especes,
+        )
+        self._payment(
+            "RCE-REC-003", "20000", "EN_ATTENTE", self.scolarite, self.especes,
+        )
+        remise = RemiseReduction.objects.create(
+            nom="Remise sociale rapport",
+            type_remise="MONTANT_FIXE",
+            valeur=Decimal("10000"),
+            motif="SOCIALE",
+            date_debut=date(2025, 9, 1),
+            date_fin=date(2026, 6, 30),
+        )
+        PaiementRemise.objects.create(
+            paiement=self.paiement_scolarite,
+            remise=remise,
+            montant_remise=Decimal("10000"),
+            motif="GESTE_COMMERCIAL",
+            tranches_concernees="1",
+        )
+
+    def _payment(self, receipt, amount, status, payment_type, mode, reference=""):
+        return Paiement.objects.create(
+            eleve=self.eleve,
+            type_paiement=payment_type,
+            mode_paiement=mode,
+            numero_recu=receipt,
+            montant=Decimal(amount),
+            annee_scolaire="2025-2026",
+            date_paiement=date(2026, 1, 15),
+            statut=status,
+            reference_externe=reference,
+            cree_par=self.user,
+            valide_par=self.user if status == "VALIDE" else None,
+        )
+
+    def _request(self, **params):
+        values = {
+            "classe_id": str(self.classe.pk),
+            "du": "2026-01-01",
+            "au": "2026-01-31",
+        }
+        values.update(params)
+        request = self.factory.get("/paiements/export/comptabilite/pdf/", values)
+        request.user = self.user
+        return request
+
+    def test_ventilation_separe_reinscription_tranches_et_autres_services(self):
+        data = collect_accounting_data(self._request())
+
+        self.assertEqual(data["validated_count"], 2)
+        self.assertEqual(data["total_validated"], Decimal("95000"))
+        self.assertEqual(data["total_discounts"], Decimal("10000"))
+        self.assertEqual(data["by_component"]["inscription"]["amount"], 0)
+        self.assertEqual(data["by_component"]["reinscription"]["amount"], 20000)
+        self.assertEqual(data["by_component"]["tranche_1"]["amount"], 60000)
+        self.assertEqual(data["by_component"]["autres"]["amount"], 15000)
+        self.assertEqual(data["unallocated_total"], 0)
+        self.assertEqual(data["by_status"]["EN_ATTENTE"]["amount"], 20000)
+
+    def test_date_future_est_automatiquement_limitee_a_aujourdhui(self):
+        future = timezone.localdate() + timedelta(days=30)
+
+        data = collect_accounting_data(
+            self._request(du="", au=future.isoformat())
+        )
+
+        self.assertTrue(data["period_adjusted"])
+        self.assertEqual(data["end"], timezone.localdate())
+        self.assertIn(timezone.localdate().strftime("%d/%m/%Y"), data["period_label"])
+
+    def test_reference_mobile_money_manquante_est_signalee(self):
+        self.paiement_scolarite.reference_externe = ""
+        self.paiement_scolarite.save(update_fields=["reference_externe"])
+
+        data = collect_accounting_data(self._request())
+
+        self.assertEqual(data["reference_missing_count"], 1)
+        self.assertEqual(data["reference_missing_amount"], Decimal("80000"))
+
+    def test_exports_pdf_et_excel_contiennent_les_elements_professionnels(self):
+        params = {
+            "classe_id": self.classe.pk,
+            "du": "2026-01-01",
+            "au": "2026-01-31",
+        }
+        pdf = self.client.get(reverse("paiements:export_comptabilite_pdf"), params)
+        self.assertEqual(pdf.status_code, 200)
+        self.assertEqual(pdf["Content-Type"], "application/pdf")
+        self.assertTrue(pdf.content.startswith(b"%PDF"))
+        self.assertGreater(len(pdf.content), 5000)
+
+        excel = self.client.get(reverse("paiements:export_comptabilite_excel"), params)
+        self.assertEqual(excel.status_code, 200)
+        workbook = load_workbook(BytesIO(excel.content), data_only=True)
+        self.assertEqual(
+            workbook.sheetnames,
+            ["Synthèse", "Journal validé", "Affectations", "Statuts", "Ventilations", "Remises"],
+        )
+        headers = [cell.value for cell in workbook["Journal validé"][1]]
+        self.assertIn("Réinscription", headers)
+        self.assertIn("Tranche 1", headers)
+        self.assertIn("Validateur", headers)
+        summary_values = [workbook["Synthèse"].cell(row, 1).value for row in range(1, 15)]
+        self.assertIn("Référence", summary_values)
+
+    def test_export_exige_la_permission_de_consulter_les_rapports(self):
+        simple_user = get_user_model().objects.create_user(
+            username="sans-permission-rapport",
+            password="mot-de-passe-test",
+        )
+        simple_user.profil.role = "ENSEIGNANT"
+        simple_user.profil.peut_consulter_rapports = False
+        simple_user.profil.save(update_fields=["role", "peut_consulter_rapports"])
+        self.client.force_login(simple_user)
+
+        response = self.client.get(reverse("paiements:export_comptabilite_pdf"))
+
+        self.assertEqual(response.status_code, 403)

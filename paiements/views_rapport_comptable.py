@@ -185,8 +185,8 @@ def rapport_comptable(request):
 
 
 def export_rapport_comptable_pdf(request):
-    """Compatibilité avec l'export comptable PDF existant."""
-    from .export_comptabilite import export_comptabilite_pdf
+    """Compatibilité avec le rapport professionnel PDF."""
+    from .rapports_professionnels import export_comptabilite_pdf
 
     query = request.GET.copy()
     query["classe_id"] = query.get("classe", "")
@@ -197,8 +197,8 @@ def export_rapport_comptable_pdf(request):
 
 
 def export_rapport_comptable_excel(request):
-    """Compatibilité avec l'export comptable Excel existant."""
-    from .export_comptabilite import export_comptabilite_excel
+    """Compatibilité avec le rapport professionnel Excel."""
+    from .rapports_professionnels import export_comptabilite_excel
 
     query = request.GET.copy()
     query["classe_id"] = query.get("classe", "")
