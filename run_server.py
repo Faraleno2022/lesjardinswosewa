@@ -814,9 +814,95 @@ def _show_fatal_error(message):
         pass
 
 
+# ─── Sous-commandes de maintenance ────────────────────────────────────────────
+def _traiter_sous_commande():
+    """Exécute une sous-commande de sauvegarde passée en argument, si présente.
+
+    Traitée avant tout le reste — garde d'intégrité, licence, base, serveur —
+    pour deux raisons : une tâche planifiée doit pouvoir sauvegarder sans
+    ouvrir l'application, et une licence expirée ne doit jamais empêcher de
+    sauvegarder ni de restaurer (c'est précisément le moment où les données
+    comptent le plus).
+
+    Le moteur de sauvegarde n'utilise ni Django ni la découverte des commandes
+    de management : il fonctionne donc dans l'exécutable PyInstaller.
+
+    Retourne True si une sous-commande a été traitée (l'application ne doit pas
+    démarrer le serveur).
+    """
+    arguments = [a.lower() for a in sys.argv[1:]]
+    if not arguments:
+        return False
+
+    connues = {'--sauvegarder', '--restaurer', '--lister-sauvegardes'}
+    demandee = next((a for a in arguments if a in connues), None)
+    if not demandee:
+        return False
+
+    from ecole_moderne import sauvegarde
+
+    if demandee == '--lister-sauvegardes':
+        print("[Sauvegarde] Destinations :")
+        for cible in sauvegarde.destinations():
+            etat = 'existe' if os.path.isdir(cible) else 'a creer'
+            print(f"  - {cible}  [{etat}]")
+        archives = sauvegarde.archives_disponibles()
+        print(f"[Sauvegarde] Archives disponibles : {len(archives)}")
+        for archive in archives[:20]:
+            print(f"  {archive['date']:%d/%m/%Y %H:%M}  "
+                  f"{archive['taille'] / (1024 * 1024):6.1f} Mo  {archive['chemin']}")
+        return True
+
+    if demandee == '--sauvegarder':
+        rapport = sauvegarde.executer_sauvegarde()
+        for avertissement in rapport.avertissements:
+            print(f"[Sauvegarde] Avertissement : {avertissement}")
+        for echec in rapport.destinations_ko:
+            print(f"[Sauvegarde] Destination en echec : {echec}")
+        print(f"[Sauvegarde] {rapport.resume()}")
+        sys.exit(0 if rapport.succes else 1)
+
+    # --restaurer [chemin] [--confirmer]
+    positionnels = [a for a in sys.argv[1:] if not a.startswith('--')]
+    chemin = positionnels[0] if positionnels else None
+    if not chemin:
+        disponibles = sauvegarde.archives_disponibles()
+        if not disponibles:
+            print("[Restauration] Aucune archive trouvee sur les destinations connues.")
+            sys.exit(1)
+        chemin = disponibles[0]['chemin']
+
+    try:
+        manifeste = sauvegarde.lire_manifeste(chemin)
+    except Exception as err:
+        print(f"[Restauration] Archive illisible : {err}")
+        sys.exit(1)
+
+    print(f"[Restauration] Archive : {chemin}")
+    print(f"  Date    : {manifeste.get('date', '?')}")
+    print(f"  Machine : {manifeste.get('machine', '?')}")
+    print(f"  Medias  : {(manifeste.get('media') or {}).get('nombre', '?')} fichier(s)")
+    for cle, valeur in (manifeste.get('statistiques') or {}).items():
+        print(f"  {cle:<9} : {valeur}")
+
+    if '--confirmer' not in arguments:
+        print("[Restauration] Rien n'a ete modifie. Ajoutez --confirmer pour restaurer.")
+        sys.exit(0)
+
+    rapport = sauvegarde.restaurer(chemin)
+    if rapport.erreur:
+        print(f"[Restauration] ECHEC : {rapport.erreur}")
+        sys.exit(1)
+    print("[Restauration] Terminee. Redemarrez MySchoolGN.")
+    sys.exit(0)
+
+
 # ─── Point d'entrée principal ──────────────────────────────────────────────────
 def main():
     """Point d'entrée principal."""
+    if _traiter_sous_commande():
+        return
+
     print("")
     print("*" * 60)
     print("   MySchoolGN — GS Hadja Kanfing Dian")
@@ -872,6 +958,18 @@ def main():
             print(f"[Sync] Synchronisation automatique active (intervalle {_sync_interval}s).")
     except Exception as _sync_err:
         print(f"[Sync] Synchronisation automatique non démarrée : {_sync_err}")
+
+    # Démarrer la sauvegarde automatique en arrière-plan. Complémentaire de la
+    # tâche planifiée Windows : celle-ci couvre l'application fermée, celle-là
+    # ne demande aucune installation ni droit administrateur sur le poste.
+    try:
+        from ecole_moderne import auto_sauvegarde
+        _sauv_heures = auto_sauvegarde.start()
+        if _sauv_heures:
+            print(f"[Sauvegarde] Sauvegarde automatique active (toutes les "
+                  f"{_sauv_heures:g} h, base + medias, destinations multiples).")
+    except Exception as _sauv_err:
+        print(f"[Sauvegarde] Sauvegarde automatique non démarrée : {_sauv_err}")
 
     # Ouvrir le navigateur en arrière-plan
     browser_thread = threading.Thread(
