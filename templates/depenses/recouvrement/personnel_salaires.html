@@ -9,6 +9,7 @@
     <p class="text-muted small mb-0">Ajoutez un membre, puis saisissez ses montants mois par mois directement dans le tableau.</p>
   </div>
   <div class="d-flex gap-2">
+    <a href="#form-membre" class="btn btn-sm btn-primary"><i class="fas fa-user-plus me-1"></i>Ajouter un enseignant</a>
     <a href="{% url 'depenses:recouvrement_hub' %}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i>Recouvrement</a>
     <a href="{% url 'depenses:personnel_export_excel' %}?annee={{ annee }}" class="btn btn-sm btn-success"><i class="fas fa-file-excel me-1"></i>Export Excel</a>
   </div>
@@ -23,6 +24,58 @@
     {% endfor %}
   </select>
 </form>
+
+<!-- ===== Ajout d'un membre du personnel ===== -->
+<div class="card border-0 shadow-sm mb-4 border-top border-4 border-primary" id="form-membre">
+  <div class="card-header bg-white">
+    <strong><i class="fas fa-user-plus me-2 text-primary"></i>Ajouter un enseignant ou un membre du personnel</strong>
+    <div class="small text-muted">
+      Renseignez le prénom, le nom et la fonction, choisissez le groupe, puis cliquez sur
+      <strong>Ajouter</strong>. La personne apparaît aussitôt dans le tableau de son groupe,
+      où vous saisissez ses montants mois par mois.
+    </div>
+  </div>
+  <div>
+    <div class="card-body">
+      <form method="post" class="row g-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="ajouter">
+        <input type="hidden" name="annee" value="{{ annee }}">
+        <div class="col-md-3">
+          <label class="form-label small fw-semibold" for="{{ form.prenom.id_for_label }}">Prénom</label>
+          {{ form.prenom }}
+          {% for erreur in form.prenom.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small fw-semibold" for="{{ form.nom.id_for_label }}">Nom</label>
+          {{ form.nom }}
+          {% for erreur in form.nom.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small fw-semibold" for="{{ form.fonction.id_for_label }}">Fonction</label>
+          {{ form.fonction }}
+          {% for erreur in form.fonction.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small fw-semibold" for="{{ form.groupe.id_for_label }}">Groupe</label>
+          {{ form.groupe }}
+          {% for erreur in form.groupe.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
+        </div>
+        <div class="col-md-9">
+          <label class="form-label small fw-semibold" for="{{ form.observation.id_for_label }}">Observation</label>
+          {{ form.observation }}
+        </div>
+        <div class="col-md-3 d-flex flex-column justify-content-end">
+          <div class="form-check mb-2">
+            {{ form.actif }}
+            <label class="form-check-label small" for="{{ form.actif.id_for_label }}">En activité</label>
+          </div>
+          <button type="submit" class="btn btn-primary"><i class="fas fa-plus me-1"></i>Ajouter</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 
 <!-- ===== Statistique globale des salaires ===== -->
 <h2 class="sal-section-title"><i class="fas fa-chart-pie me-2"></i>Statistique globale des salaires — {{ annee }}</h2>
@@ -102,56 +155,6 @@
   </div>
 </div>
 
-<!-- ===== Ajout d'un membre du personnel ===== -->
-<div class="card border-0 shadow-sm mb-4">
-  <div class="card-header bg-white d-flex justify-content-between align-items-center">
-    <strong><i class="fas fa-user-plus me-2 text-primary"></i>Ajouter un membre du personnel</strong>
-    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#form-membre">
-      Afficher / masquer
-    </button>
-  </div>
-  <div class="collapse {% if form.errors %}show{% endif %}" id="form-membre">
-    <div class="card-body">
-      <form method="post" class="row g-3">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="ajouter">
-        <input type="hidden" name="annee" value="{{ annee }}">
-        <div class="col-md-3">
-          <label class="form-label small fw-semibold" for="{{ form.prenom.id_for_label }}">Prénom</label>
-          {{ form.prenom }}
-          {% for erreur in form.prenom.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
-        </div>
-        <div class="col-md-3">
-          <label class="form-label small fw-semibold" for="{{ form.nom.id_for_label }}">Nom</label>
-          {{ form.nom }}
-          {% for erreur in form.nom.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
-        </div>
-        <div class="col-md-3">
-          <label class="form-label small fw-semibold" for="{{ form.fonction.id_for_label }}">Fonction</label>
-          {{ form.fonction }}
-          {% for erreur in form.fonction.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
-        </div>
-        <div class="col-md-3">
-          <label class="form-label small fw-semibold" for="{{ form.groupe.id_for_label }}">Groupe</label>
-          {{ form.groupe }}
-          {% for erreur in form.groupe.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
-        </div>
-        <div class="col-md-9">
-          <label class="form-label small fw-semibold" for="{{ form.observation.id_for_label }}">Observation</label>
-          {{ form.observation }}
-        </div>
-        <div class="col-md-3 d-flex flex-column justify-content-end">
-          <div class="form-check mb-2">
-            {{ form.actif }}
-            <label class="form-check-label small" for="{{ form.actif.id_for_label }}">En activité</label>
-          </div>
-          <button type="submit" class="btn btn-primary"><i class="fas fa-plus me-1"></i>Ajouter</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
 <!-- ===== Tableaux des salaires, un par groupe ===== -->
 <form method="post" id="form-montants">
   {% csrf_token %}
@@ -206,7 +209,8 @@
           {% empty %}
           <tr>
             <td colspan="16" class="text-center text-muted py-4">
-              Aucun membre dans « {{ groupe.libelle }} ». Ajoutez-en un ci-dessus.
+              Aucun membre dans « {{ groupe.libelle }} ».
+              <a href="#form-membre" class="fw-semibold">Ajouter quelqu'un dans ce groupe</a>
             </td>
           </tr>
           {% endfor %}
