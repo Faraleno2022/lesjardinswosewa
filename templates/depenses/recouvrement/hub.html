@@ -144,20 +144,23 @@
   <div class="col-md-6 col-xl-4">
     <div class="rec-card rec-card--info">
       <div class="rec-card-head">
-        <span class="rec-card-icon"><i class="fas fa-chalkboard-teacher"></i></span>
+        <span class="rec-card-icon"><i class="fas fa-users"></i></span>
         <div>
-          <h3 class="rec-card-title">Salaires enseignants</h3>
-          <p class="rec-card-text">Suivi des salaires payés par enseignant, mois et niveau</p>
+          <h3 class="rec-card-title">Salaires du personnel</h3>
+          <p class="rec-card-text">Maternelle et primaire, collège, équipe de direction : montants mois par mois</p>
         </div>
       </div>
       <div class="rec-card-stat">
-        {{ carte_salaires.nombre }} état{{ carte_salaires.nombre|pluralize }} payé{{ carte_salaires.nombre|pluralize }} ·
-        {{ carte_salaires.total|intcomma }} GNF
+        {{ carte_salaires.effectif }} personne{{ carte_salaires.effectif|pluralize }} ·
+        {{ carte_salaires.total|intcomma }} GNF versés
         <span class="text-muted">(dont {{ carte_salaires.total_mois|intcomma }} GNF ce mois)</span>
+        <div class="text-muted" style="font-size: .76rem;">
+          {% for e in carte_salaires.effectifs %}{{ e.libelle }} : {{ e.effectif }}{% if not forloop.last %} · {% endif %}{% endfor %}
+        </div>
       </div>
       <div class="rec-card-actions">
-        <a href="{% url 'depenses:salaires_dashboard' %}" class="btn btn-sm btn-primary">
-          <i class="fas fa-chart-line me-1"></i>Tableau de bord
+        <a href="{% url 'depenses:personnel_dashboard' %}" class="btn btn-sm btn-primary">
+          <i class="fas fa-table me-1"></i>Tableau des salaires
         </a>
       </div>
     </div>
