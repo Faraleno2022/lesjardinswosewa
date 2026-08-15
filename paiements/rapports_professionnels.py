@@ -22,6 +22,7 @@ from utilisateurs.utils import filter_by_user_school, user_school
 from .allocation import allocate_amount_sequentially, due_balances
 from .calculs import est_type_scolarite, filtre_types_scolarite
 from .models import EcheancierPaiement, Paiement, PaiementRemise
+from .services import calculer_situations_echeanciers
 
 
 ZERO = Decimal("0")
@@ -45,6 +46,28 @@ COMPONENTS = (
 
 def _money(value):
     return f"{int(value or 0):,}".replace(",", " ")
+
+
+def _percentage(amount, base):
+    """Retourne un taux effectif borné, exprimé de 0 à 100."""
+    amount = Decimal(str(amount or 0))
+    base = Decimal(str(base or 0))
+    if amount <= 0 or base <= 0:
+        return ZERO
+    return min(Decimal("100"), amount * Decimal("100") / base)
+
+
+def _settlement_label(total_due, coverage, discount):
+    total_due = Decimal(str(total_due or 0))
+    coverage = Decimal(str(coverage or 0))
+    discount = Decimal(str(discount or 0))
+    if total_due <= 0:
+        return "Échéancier vide"
+    if coverage >= total_due:
+        return "Soldé - remise appliquée" if discount else "Soldé"
+    if coverage > 0:
+        return "Partiel - remise appliquée" if discount else "Partiel"
+    return "À payer"
 
 
 def _safe_filename(value):
@@ -240,11 +263,60 @@ def _allocations(data, selected):
     return result
 
 
+def _student_situations(data):
+    """Situation de chaque élève à la date d'arrêté du rapport."""
+    schedules = EcheancierPaiement.objects.filter(
+        eleve__classe_id__in=data["class_ids"],
+    ).select_related("eleve", "eleve__classe")
+    if data["school_year"]:
+        schedules = schedules.filter(annee_scolaire=data["school_year"])
+    schedules = list(schedules.order_by(
+        "eleve__classe__nom", "eleve__nom", "eleve__prenom", "annee_scolaire",
+    ))
+    situations = calculer_situations_echeanciers(
+        schedules,
+        date_reference=data["end"],
+        date_limite=data["end"],
+    )
+    rows = []
+    by_key = {}
+    for schedule in schedules:
+        situation = situations[schedule.pk]
+        tuition_due = sum((
+            Decimal(str(schedule.tranche_1_due or 0)),
+            Decimal(str(schedule.tranche_2_due or 0)),
+            Decimal(str(schedule.tranche_3_due or 0)),
+        ), ZERO)
+        total_due = situation["total_du"]
+        paid = situation["encaisse"]
+        discount = situation["remises"]
+        remaining = situation["reste"]
+        coverage = max(ZERO, total_due - remaining)
+        row = {
+            "matricule": schedule.eleve.matricule,
+            "student": schedule.eleve.nom_complet,
+            "class": schedule.eleve.classe.nom,
+            "school_year": schedule.annee_scolaire,
+            "total_due": total_due,
+            "tuition_due": tuition_due,
+            "paid": paid,
+            "discount": discount,
+            "discount_rate": _percentage(discount, tuition_due),
+            "coverage": coverage,
+            "remaining": remaining,
+            "situation": _settlement_label(total_due, coverage, discount),
+        }
+        rows.append(row)
+        by_key[(schedule.eleve_id, schedule.annee_scolaire)] = row
+    return rows, by_key
+
+
 def collect_accounting_data(request):
     data = _scope(request)
     payments = list(_payments(data))
     validated = [item for item in payments if item.statut == "VALIDE"]
     allocations = _allocations(data, validated)
+    student_rows, student_by_key = _student_situations(data)
     discounts = list(
         PaiementRemise.objects.filter(paiement__in=validated)
         .select_related("paiement", "remise")
@@ -271,7 +343,9 @@ def collect_accounting_data(request):
         "reference_missing": 0, "reference_missing_amount": ZERO,
     })
     by_type = defaultdict(lambda: {"count": 0, "amount": ZERO})
-    by_class = defaultdict(lambda: {"count": 0, "amount": ZERO, "discount": ZERO})
+    by_class = defaultdict(lambda: {
+        "count": 0, "amount": ZERO, "discount": ZERO, "tuition_due": ZERO,
+    })
     by_component = {
         key: {"label": label, "count": 0, "amount": ZERO}
         for key, label in COMPONENTS
@@ -299,6 +373,13 @@ def collect_accounting_data(request):
         by_class[class_name]["amount"] += amount
         by_class[class_name]["discount"] += discount
         allocation = allocations[payment.pk]
+        student_situation = student_by_key.get(
+            (payment.eleve_id, payment.annee_scolaire)
+        )
+        discount_rate = _percentage(
+            discount,
+            student_situation["tuition_due"] if student_situation else amount + discount,
+        )
         for component, component_amount in allocation.items():
             if component_amount:
                 by_component[component]["count"] += 1
@@ -313,6 +394,16 @@ def collect_accounting_data(request):
             "mode": mode,
             "amount": amount,
             "discount": discount,
+            "discount_rate": discount_rate,
+            "situation": (
+                student_situation["situation"]
+                if student_situation and est_type_scolarite(payment.type_paiement)
+                else (
+                    "Autre service"
+                    if not est_type_scolarite(payment.type_paiement)
+                    else "Échéancier absent"
+                )
+            ),
             "reference": payment.reference_externe or "-",
             "reference_status": (
                 "Non requise" if not external_reference_required
@@ -322,6 +413,13 @@ def collect_accounting_data(request):
             "validator": _display_user(payment.valide_par),
             "allocation": allocation,
         })
+
+    for student_row in student_rows:
+        by_class[student_row["class"]]["tuition_due"] += student_row["tuition_due"]
+    for class_row in by_class.values():
+        class_row["discount_rate"] = _percentage(
+            class_row["discount"], class_row["tuition_due"]
+        )
 
     total_validated = sum((item.montant or ZERO for item in validated), ZERO)
     total_discounts = sum(discount_by_payment.values(), ZERO)
@@ -334,6 +432,10 @@ def collect_accounting_data(request):
         "total_validated": total_validated,
         "total_discounts": total_discounts,
         "total_coverage": total_validated + total_discounts,
+        "student_rows": student_rows,
+        "total_tuition_due": sum(
+            (item["tuition_due"] for item in student_rows), ZERO
+        ),
         "by_status": by_status,
         "by_mode": dict(sorted(by_mode.items())),
         "by_type": dict(sorted(by_type.items())),
@@ -391,7 +493,9 @@ def build_accounting_pdf(data):
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import cm
     from reportlab.pdfgen import canvas as pdf_canvas
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reportlab.platypus import (
+        KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
+    )
 
     buffer = BytesIO()
     page_size = landscape(A4)
@@ -532,51 +636,87 @@ def build_accounting_pdf(data):
         [label, item["count"], _money(item["amount"])]
         for label, item in data["by_type"].items()
     ]
-    class_rows = [["Classe", "Opérations", "Encaissé", "Remises", "Couverture"]] + [
+    class_rows = [["Classe", "Opérations", "Encaissé", "Remises", "Remise %", "Couverture"]] + [
         [label, item["count"], _money(item["amount"]), _money(item["discount"]),
-         _money(item["amount"] + item["discount"])]
+         f"{item['discount_rate']:.1f} %", _money(item["amount"] + item["discount"])]
         for label, item in data["by_class"].items()
     ]
     # Keep these tables independent: the class table may contain many rows and
     # must be allowed to split across pages without overflowing the A4 frame.
-    elements.append(Paragraph("4.1. Par type de paiement", subsection_style))
-    elements.append(_pdf_table(
-        type_rows or [["Type", "Opérations", "Montant"]],
-        [10 * cm, 5 * cm, 7 * cm],
-        (1, 2),
-    ))
+    elements.append(KeepTogether([
+        Paragraph("4.1. Par type de paiement", subsection_style),
+        _pdf_table(
+            type_rows or [["Type", "Opérations", "Montant"]],
+            [10 * cm, 5 * cm, 7 * cm],
+            (1, 2),
+        ),
+    ]))
     elements.append(Paragraph("4.2. Par classe", subsection_style))
     elements.append(_pdf_table(
-        class_rows or [["Classe", "Opérations", "Encaissé", "Remises", "Couverture"]],
-        [7 * cm, 3.5 * cm, 5 * cm, 5 * cm, 5 * cm],
-        (1, 2, 3, 4),
+        class_rows or [["Classe", "Opérations", "Encaissé", "Remises", "Remise %", "Couverture"]],
+        [6.5 * cm, 3.2 * cm, 4.5 * cm, 4.2 * cm, 3 * cm, 4.5 * cm],
+        (1, 2, 3, 4, 5),
     ))
 
     elements.append(Paragraph("5. Remises et réductions", section_style))
-    discount_rows = [["Motif", "Montant (GNF)"]] + [
-        [label, _money(amount)] for label, amount in data["discount_by_reason"].items()
+    discount_rows = [["Motif", "Montant (GNF)", "% de la scolarité"]] + [
+        [label, _money(amount), f"{_percentage(amount, data['total_tuition_due']):.1f} %"]
+        for label, amount in data["discount_by_reason"].items()
     ]
     if len(discount_rows) == 1:
-        discount_rows.append(["Aucune remise", "0"])
-    discount_rows.append(["TOTAL", _money(data["total_discounts"])])
-    elements.append(_pdf_table(discount_rows, [12 * cm, 6 * cm], (1,), True))
+        discount_rows.append(["Aucune remise", "0", "0.0 %"])
+    discount_rows.append([
+        "TOTAL", _money(data["total_discounts"]),
+        f"{_percentage(data['total_discounts'], data['total_tuition_due']):.1f} %",
+    ])
+    elements.append(_pdf_table(
+        discount_rows, [11 * cm, 6 * cm, 5 * cm], (1, 2), True
+    ))
+
+    elements.append(Paragraph("6. Situation des élèves et remises appliquées", section_style))
+    student_details = [[
+        "Élève", "Classe", "Total dû", "Base scolarité", "Encaissé",
+        "Remise", "Remise %", "Couverture", "Reste", "Situation",
+    ]]
+    for item in data["student_rows"]:
+        student_details.append([
+            f"{item['matricule']}\n{item['student']}", item["class"],
+            _money(item["total_due"]), _money(item["tuition_due"]),
+            _money(item["paid"]), _money(item["discount"]),
+            f"{item['discount_rate']:.1f} %", _money(item["coverage"]),
+            _money(item["remaining"]), item["situation"],
+        ])
+    if len(student_details) == 1:
+        student_details.append([
+            "Aucun échéancier", "-", "0", "0", "0", "0", "0.0 %", "0", "0", "-",
+        ])
+    elements.append(_pdf_table(
+        student_details,
+        [4 * cm, 2.5 * cm, 2.3 * cm, 2.5 * cm, 2.3 * cm, 2.2 * cm,
+         1.5 * cm, 2.3 * cm, 2.1 * cm, 3.3 * cm],
+        (2, 3, 4, 5, 6, 7, 8),
+    ))
 
     if data["payment_rows"]:
-        elements.append(Paragraph("6. Journal détaillé des encaissements validés", section_style))
-        details = [["Date", "Reçu", "Élève", "Classe", "Type", "Mode", "Montant", "Remise", "Référence", "Validation"]]
+        elements.append(Paragraph("7. Journal détaillé des encaissements validés", section_style))
+        details = [[
+            "Date", "Reçu", "Élève", "Classe", "Type", "Mode", "Montant",
+            "Remise", "Remise %", "Situation", "Référence", "Validation",
+        ]]
         for item in data["payment_rows"]:
             details.append([
                 item["date"].strftime("%d/%m/%Y"), item["receipt"],
                 f"{item['matricule']}\n{item['student']}", item["class"], item["type"],
                 item["mode"], _money(item["amount"]), _money(item["discount"]),
+                f"{item['discount_rate']:.1f} %", item["situation"],
                 f"{item['reference']}\n{item['reference_status']}",
                 f"Caisse : {item['cashier']}\nVisa : {item['validator']}",
             ])
         elements.append(_pdf_table(
             details,
-            [1.8 * cm, 2.1 * cm, 4 * cm, 2.5 * cm, 3.2 * cm, 2.5 * cm,
-             2.5 * cm, 2.1 * cm, 3.1 * cm, 3.6 * cm],
-            (6, 7),
+            [1.5 * cm, 1.8 * cm, 3.4 * cm, 2.2 * cm, 2.8 * cm, 2.1 * cm,
+             2.2 * cm, 1.9 * cm, 1.4 * cm, 2.5 * cm, 2.5 * cm, 3 * cm],
+            (6, 7, 8),
         ))
     else:
         elements.append(Paragraph(
@@ -651,14 +791,14 @@ def build_accounting_workbook(data):
     summary.append(["Couverture totale", int(data["total_coverage"])])
     summary.append(["Références manquantes", data["reference_missing_count"]])
     summary.append(["Montant à justifier", int(data["reference_missing_amount"])])
-    _style_sheet(summary, 9, [30, 30])
+    _style_sheet(summary, 9, [36, 34])
     summary["A1"].font = Font(size=14, bold=True, color=BLUE)
 
     journal = workbook.create_sheet("Journal validé")
     journal_headers = [
         "Date", "Reçu", "Matricule", "Élève", "Classe", "Type", "Mode",
-        "Montant", "Remise", "Référence", "État référence", "Caissier",
-        "Validateur", "Inscription", "Réinscription", "Tranche 1",
+        "Montant", "Remise", "Remise (%)", "Situation", "Référence",
+        "État référence", "Caissier", "Validateur", "Inscription", "Réinscription", "Tranche 1",
         "Tranche 2", "Tranche 3", "Autres services", "Non affecté",
     ]
     journal.append(journal_headers)
@@ -668,14 +808,38 @@ def build_accounting_workbook(data):
             item["date"], _excel_safe(item["receipt"]), _excel_safe(item["matricule"]),
             _excel_safe(item["student"]), _excel_safe(item["class"]),
             _excel_safe(item["type"]), _excel_safe(item["mode"]), int(item["amount"]),
-            int(item["discount"]), _excel_safe(item["reference"]), item["reference_status"],
+            int(item["discount"]), float(item["discount_rate"] / Decimal("100")),
+            item["situation"], _excel_safe(item["reference"]), item["reference_status"],
             _excel_safe(item["cashier"]), _excel_safe(item["validator"]),
             int(allocation["inscription"]), int(allocation["reinscription"]),
             int(allocation["tranche_1"]), int(allocation["tranche_2"]),
             int(allocation["tranche_3"]), int(allocation["autres"]),
             int(allocation["non_affecte"]),
         ])
-    _style_sheet(journal, 1, [12, 18, 16, 26, 18, 25, 18, 15, 15, 20, 17, 20, 20] + [15] * 7)
+    _style_sheet(
+        journal, 1,
+        [12, 18, 16, 26, 18, 25, 18, 15, 15, 13, 28, 20, 17, 20, 20] + [15] * 7,
+    )
+    for cell in journal["J"][1:]:
+        cell.number_format = "0.0%"
+
+    students = workbook.create_sheet("Situation élèves")
+    students.append([
+        "Matricule", "Élève", "Classe", "Année scolaire", "Total dû",
+        "Base scolarité", "Encaissé", "Remise", "Remise (%)",
+        "Couverture", "Reste", "Situation",
+    ])
+    for item in data["student_rows"]:
+        students.append([
+            _excel_safe(item["matricule"]), _excel_safe(item["student"]),
+            _excel_safe(item["class"]), item["school_year"], int(item["total_due"]),
+            int(item["tuition_due"]), int(item["paid"]), int(item["discount"]),
+            float(item["discount_rate"] / Decimal("100")), int(item["coverage"]),
+            int(item["remaining"]), item["situation"],
+        ])
+    _style_sheet(students, 1, [16, 28, 20, 16] + [16] * 7 + [30])
+    for cell in students["I"][1:]:
+        cell.number_format = "0.0%"
 
     affectations = workbook.create_sheet("Affectations")
     affectations.append(["Affectation réelle", "Opérations", "Montant (GNF)"])
@@ -700,17 +864,34 @@ def build_accounting_workbook(data):
     for label, item in data["by_type"].items():
         ventilations.append([label, item["count"], int(item["amount"])])
     ventilations.append([])
-    ventilations.append(["PAR CLASSE", "Opérations", "Encaissé", "Remises", "Couverture"])
+    ventilations.append(["PAR CLASSE", "Opérations", "Encaissé", "Remises", "Remise (%)", "Couverture"])
+    class_section_start = ventilations.max_row + 1
     for label, item in data["by_class"].items():
-        ventilations.append([label, item["count"], int(item["amount"]), int(item["discount"]), int(item["amount"] + item["discount"])])
-    _style_sheet(ventilations, 1, [32, 15, 20, 18, 20, 22])
+        ventilations.append([
+            label, item["count"], int(item["amount"]), int(item["discount"]),
+            float(item["discount_rate"] / Decimal("100")),
+            int(item["amount"] + item["discount"]),
+        ])
+    _style_sheet(ventilations, 1, [32, 15, 20, 18, 16, 22])
+    for cell in ventilations["E"][class_section_start - 1:]:
+        cell.number_format = "0.0%"
 
     discounts = workbook.create_sheet("Remises")
-    discounts.append(["Motif", "Montant (GNF)"])
+    discounts.append(["Motif", "Montant (GNF)", "% de la scolarité"])
     for label, amount in data["discount_by_reason"].items():
-        discounts.append([label, int(amount)])
-    discounts.append(["TOTAL", int(data["total_discounts"])])
-    _style_sheet(discounts, 1, [35, 22])
+        discounts.append([
+            label, int(amount),
+            float(_percentage(amount, data["total_tuition_due"]) / Decimal("100")),
+        ])
+    discounts.append([
+        "TOTAL", int(data["total_discounts"]),
+        float(_percentage(
+            data["total_discounts"], data["total_tuition_due"]
+        ) / Decimal("100")),
+    ])
+    _style_sheet(discounts, 1, [35, 22, 20])
+    for cell in discounts["C"][1:]:
+        cell.number_format = "0.0%"
     return workbook
 
 
