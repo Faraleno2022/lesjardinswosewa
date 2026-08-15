@@ -1,11 +1,12 @@
 from django.contrib.auth.decorators import login_required
+from django.db.models import Sum
 from django.http import HttpResponse, HttpResponseForbidden
 from datetime import datetime
 from decimal import Decimal
 
 from eleves.models import Classe
 from eleves.utils_annee import get_annee_active
-from paiements.models import Paiement
+from paiements.models import Paiement, PaiementRemise
 from paiements.calculs import filtre_types_scolarite, normaliser_libelle
 from utilisateurs.utils import user_is_admin, user_school
 from rapports.utils import _draw_header_and_watermark
@@ -23,8 +24,21 @@ TRANCHES_EXPORT_HEADERS = [
     'Tranche 3 payée',
     'Total dû',
     'Total payé',
+    'Remise (GNF)',
+    'Remise (%)',
+    'Total couvert',
     'Reste',
+    'Situation',
 ]
+
+
+def _pourcentage_remise(montant_remise, base_scolarite):
+    """Taux effectif de remise sur les trois tranches de scolarité."""
+    montant_remise = Decimal(str(montant_remise or 0))
+    base_scolarite = Decimal(str(base_scolarite or 0))
+    if montant_remise <= 0 or base_scolarite <= 0:
+        return Decimal('0')
+    return min(Decimal('100'), (montant_remise * Decimal('100')) / base_scolarite)
 
 
 def _paiements_fallback_par_poste(eleve, annee_scolaire=None):
@@ -62,7 +76,10 @@ def _paiements_fallback_par_poste(eleve, annee_scolaire=None):
                 cibles.append(f'tranche_{numero}')
         if len(cibles) == 1:
             postes[cibles[0]] += montant
-    return postes, total
+    remises = PaiementRemise.objects.filter(
+        paiement__in=paiements,
+    ).aggregate(total=Sum('montant_remise'))['total'] or Decimal('0')
+    return postes, total, Decimal(str(remises))
 
 
 def _donnees_tranches_eleve(eleve, annee_scolaire=None):
@@ -80,7 +97,10 @@ def _donnees_tranches_eleve(eleve, annee_scolaire=None):
 
     inscription = reinscription = Decimal('0')
     tranche_1 = tranche_2 = tranche_3 = Decimal('0')
-    total_du = total_paye = reste = Decimal('0')
+    total_du = total_paye = remise = reste = Decimal('0')
+    total_couvert = Decimal('0')
+    pourcentage_remise = Decimal('0')
+    situation = 'Échéancier absent'
 
     if echeancier is not None:
         admission_payee = Decimal(str(echeancier.frais_inscription_paye or 0))
@@ -93,14 +113,31 @@ def _donnees_tranches_eleve(eleve, annee_scolaire=None):
         tranche_3 = Decimal(str(echeancier.tranche_3_payee or 0))
         total_du = Decimal(str(echeancier.total_du or 0))
         total_paye = inscription + reinscription + tranche_1 + tranche_2 + tranche_3
-        reste = max(Decimal('0'), total_du - total_paye)
+        remise = Decimal(str(echeancier.total_remises_valides or 0))
+        base_scolarite = sum((
+            Decimal(str(echeancier.tranche_1_due or 0)),
+            Decimal(str(echeancier.tranche_2_due or 0)),
+            Decimal(str(echeancier.tranche_3_due or 0)),
+        ), Decimal('0'))
+        pourcentage_remise = _pourcentage_remise(remise, base_scolarite)
+        total_couvert = min(total_du, total_paye + remise)
+        reste = max(Decimal('0'), total_du - total_couvert)
+        if total_du <= 0:
+            situation = 'Échéancier vide'
+        elif reste == 0:
+            situation = 'Soldé - remise appliquée' if remise else 'Soldé'
+        elif total_couvert > 0:
+            situation = 'Partiel - remise appliquée' if remise else 'Partiel'
+        else:
+            situation = 'À payer'
     else:
-        postes, total_paye = _paiements_fallback_par_poste(eleve, annee_scolaire)
+        postes, total_paye, remise = _paiements_fallback_par_poste(eleve, annee_scolaire)
         inscription = postes['inscription']
         reinscription = postes['reinscription']
         tranche_1 = postes['tranche_1']
         tranche_2 = postes['tranche_2']
         tranche_3 = postes['tranche_3']
+        total_couvert = total_paye + remise
 
     return {
         'inscription': inscription,
@@ -110,7 +147,11 @@ def _donnees_tranches_eleve(eleve, annee_scolaire=None):
         'tranche_3': tranche_3,
         'total_du': total_du,
         'total_paye': Decimal(str(total_paye or 0)),
+        'remise': remise,
+        'pourcentage_remise': pourcentage_remise,
+        'total_couvert': total_couvert,
         'reste': reste,
+        'situation': situation,
     }
 
 
@@ -191,11 +232,15 @@ def export_tranches_par_classe_pdf(request):
     )
     elements = []
     styles = getSampleStyleSheet()
-    cell = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=8, leading=9)
+    cell = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=6.2, leading=7.2)
+    header_cell = ParagraphStyle(
+        'HeaderCell', parent=cell, fontName='Helvetica-Bold', textColor=colors.white,
+        alignment=1,
+    )
 
     titre = 'Tranches par classe'
     if annee_scolaire:
-        titre += f" – Année {annee_scolaire}"
+        titre += f" - Année {annee_scolaire}"
     elements.append(Paragraph(titre, styles['Title']))
     elements.append(Spacer(1, 0.5*cm))
 
@@ -207,11 +252,11 @@ def export_tranches_par_classe_pdf(request):
     # Parcours des classes
     for classe in classes:
         # Titre de la classe
-        titre_classe = f"Classe: {classe.nom} – {getattr(classe.ecole, 'nom', '')}"
+        titre_classe = f"Classe: {classe.nom} - {getattr(classe.ecole, 'nom', '')}"
         elements.append(Paragraph(titre_classe, styles['Heading2']))
         elements.append(Spacer(1, 0.2*cm))
 
-        data = [header]
+        data = [[Paragraph(str(label), header_cell) for label in header]]
 
         # Élèves de la classe
         # Utiliser le related_name défini sur Eleve.classe = 'eleves'
@@ -235,17 +280,24 @@ def export_tranches_par_classe_pdf(request):
                 f"{ligne['tranche_3']:,}".replace(',', ' '),
                 f"{ligne['total_du']:,}".replace(',', ' '),
                 f"{ligne['total_paye']:,}".replace(',', ' '),
+                f"{ligne['remise']:,}".replace(',', ' '),
+                f"{ligne['pourcentage_remise']:.1f} %",
+                f"{ligne['total_couvert']:,}".replace(',', ' '),
                 f"{ligne['reste']:,}".replace(',', ' '),
+                P(ligne['situation']),
             ])
 
         # Construire la table pour la classe
-        col_widths = [4.5*cm] + [2.9*cm] * 8
+        col_widths = [
+            3.8*cm, 1.7*cm, 1.8*cm, 1.65*cm, 1.65*cm, 1.65*cm,
+            1.8*cm, 1.8*cm, 1.8*cm, 1.45*cm, 1.9*cm, 1.7*cm, 2.8*cm,
+        ]
         table = Table(data, repeatRows=1, colWidths=col_widths)
         table.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
-            ('TEXTCOLOR', (0,0), (-1,0), colors.black),
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#174A6E')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
             ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0,0), (-1,0), 8),
+            ('FONTSIZE', (0,0), (-1,0), 6.2),
             ('ALIGN', (1,1), (-1,-1), 'RIGHT'),
             ('ALIGN', (0,0), (0,-1), 'LEFT'),
             ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
@@ -283,6 +335,7 @@ def export_tranches_par_classe_excel(request):
     # Import openpyxl
     try:
         from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
         from openpyxl.utils import get_column_letter
     except Exception:
         return HttpResponse("OpenPyXL n'est pas installé. Veuillez exécuter: pip install openpyxl", status=500)
@@ -327,7 +380,11 @@ def export_tranches_par_classe_excel(request):
     for classe in classes:
         sheet_name = f"{classe.nom[:25]}"  # Limite Excel <=31
         ws = wb.create_sheet(title=sheet_name)
-        ws.append([f"Classe: {classe.nom} – {getattr(classe.ecole, 'nom', '')}"])
+        ws.append([f"Classe: {classe.nom} - {getattr(classe.ecole, 'nom', '')}"])
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=13)
+        ws['A1'].fill = PatternFill('solid', fgColor='DCEAF3')
+        ws['A1'].font = Font(color='174A6E', bold=True, size=13)
+        ws['A1'].alignment = Alignment(horizontal='left', vertical='center')
         ws.append(headers)
 
         eleves_mgr = getattr(classe, 'eleves', None)
@@ -345,12 +402,32 @@ def export_tranches_par_classe_excel(request):
                 int(ligne['tranche_3']),
                 int(ligne['total_du']),
                 int(ligne['total_paye']),
+                int(ligne['remise']),
+                float(ligne['pourcentage_remise'] / Decimal('100')),
+                int(ligne['total_couvert']),
                 int(ligne['reste']),
+                ligne['situation'],
             ])
 
-        # Ajuster largeur colonnes simple
-        for col in range(1, 10):
-            ws.column_dimensions[get_column_letter(col)].width = 22 if col == 1 else 16
+        for cell_header in ws[2]:
+            cell_header.fill = PatternFill('solid', fgColor='174A6E')
+            cell_header.font = Font(color='FFFFFF', bold=True)
+            cell_header.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        ws.freeze_panes = 'A3'
+        ws.auto_filter.ref = f"A2:M{ws.max_row}"
+        for row in ws.iter_rows(min_row=3, min_col=2, max_col=12):
+            for cell_value in row:
+                cell_value.number_format = '#,##0'
+        for cell_value in ws['J'][2:]:
+            cell_value.number_format = '0.0%'
+        for col in range(1, 14):
+            if col == 1:
+                width = 27
+            elif col == 13:
+                width = 29
+            else:
+                width = 16
+            ws.column_dimensions[get_column_letter(col)].width = width
 
         # Index line
         ws_index.append([getattr(classe.ecole, 'nom', ''), classe.nom, sheet_name])
@@ -358,6 +435,15 @@ def export_tranches_par_classe_excel(request):
     # Supprimer la feuille par défaut si vide
     if ws_index.max_row == 2:
         ws_index.append(['Aucune classe'])
+    ws_index['A1'].fill = PatternFill('solid', fgColor='174A6E')
+    ws_index['A1'].font = Font(color='FFFFFF', bold=True, size=13)
+    ws_index['B1'].fill = PatternFill('solid', fgColor='174A6E')
+    ws_index['B1'].font = Font(color='FFFFFF', bold=True)
+    ws_index['A2'].font = Font(color='174A6E', bold=True)
+    ws_index.column_dimensions['A'].width = 36
+    ws_index.column_dimensions['B'].width = 27
+    ws_index.column_dimensions['C'].width = 29
+    ws_index.freeze_panes = 'A3'
 
     from io import BytesIO
     stream = BytesIO()

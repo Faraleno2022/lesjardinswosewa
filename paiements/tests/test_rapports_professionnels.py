@@ -187,14 +187,50 @@ class RapportComptableProfessionnelTests(TestCase):
         workbook = load_workbook(BytesIO(excel.content), data_only=True)
         self.assertEqual(
             workbook.sheetnames,
-            ["Synthèse", "Journal validé", "Affectations", "Statuts", "Ventilations", "Remises"],
+            [
+                "Synthèse", "Journal validé", "Situation élèves", "Affectations",
+                "Statuts", "Ventilations", "Remises",
+            ],
         )
         headers = [cell.value for cell in workbook["Journal validé"][1]]
         self.assertIn("Réinscription", headers)
         self.assertIn("Tranche 1", headers)
+        self.assertIn("Remise (%)", headers)
+        self.assertIn("Situation", headers)
         self.assertIn("Validateur", headers)
+        student_row = [cell.value for cell in workbook["Situation élèves"][2]]
+        self.assertEqual(student_row[7], 10000)
+        self.assertEqual(student_row[8], 0.1)
+        self.assertEqual(student_row[11], "Partiel - remise appliquée")
         summary_values = [workbook["Synthèse"].cell(row, 1).value for row in range(1, 15)]
         self.assertIn("Référence", summary_values)
+
+    def test_remise_solde_la_scolarite_et_le_rapport_le_precise(self):
+        self._payment(
+            "RCE-REC-004", "30000", "VALIDE", self.scolarite, self.especes,
+        )
+
+        data = collect_accounting_data(self._request())
+
+        situation = data["student_rows"][0]
+        self.assertEqual(situation["total_due"], Decimal("120000"))
+        self.assertEqual(situation["paid"], Decimal("110000"))
+        self.assertEqual(situation["discount"], Decimal("10000"))
+        self.assertEqual(situation["discount_rate"], Decimal("10"))
+        self.assertEqual(situation["coverage"], Decimal("120000"))
+        self.assertEqual(situation["remaining"], Decimal("0"))
+        self.assertEqual(situation["situation"], "Soldé - remise appliquée")
+
+        response = self.client.get(
+            reverse("paiements:export_comptabilite_excel"),
+            {"classe_id": self.classe.pk, "du": "2026-01-01", "au": "2026-01-31"},
+        )
+        workbook = load_workbook(BytesIO(response.content), data_only=True)
+        exported = [cell.value for cell in workbook["Situation élèves"][2]]
+        self.assertEqual(exported[7], 10000)
+        self.assertEqual(exported[8], 0.1)
+        self.assertEqual(exported[10], 0)
+        self.assertEqual(exported[11], "Soldé - remise appliquée")
 
     def test_export_exige_la_permission_de_consulter_les_rapports(self):
         simple_user = get_user_model().objects.create_user(
