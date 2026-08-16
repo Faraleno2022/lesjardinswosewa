@@ -1,5 +1,6 @@
 from django import forms
 from django.core.exceptions import ValidationError
+from decimal import Decimal
 from .models import (
     AffectationClasse,
     Enseignant,
@@ -79,13 +80,13 @@ class EnseignantForm(forms.ModelForm):
             'statut': 'Statut',
             'taux_horaire': 'Taux horaire (GNF)',
             'salaire_fixe': 'Salaire fixe (GNF)',
-            'heures_mensuelles': 'Heures mensuelles',
+            'heures_mensuelles': 'Volume mensuel indicatif',
             'date_embauche': 'Date d\'embauche *',
         }
         help_texts = {
-            'taux_horaire': 'Pour les enseignants du secondaire uniquement',
-            'salaire_fixe': 'Pour garderie, maternelle, primaire et administrateurs',
-            'heures_mensuelles': 'Nombre d\'heures de travail prévues par mois (pour calcul précis du salaire)',
+            'taux_horaire': 'Pour le secondaire. Le salaire est calculé avec les heures réelles.',
+            'salaire_fixe': 'Montant mensuel négocié pour garderie, maternelle, primaire et cadres/administrateurs',
+            'heures_mensuelles': 'Optionnel et indicatif. Les heures payées viennent des pointages ou de la saisie globale du mois.',
             'date_embauche': 'Date d\'entrée en fonction',
         }
 
@@ -126,10 +127,6 @@ class EnseignantForm(forms.ModelForm):
                 raise ValidationError({
                     'taux_horaire': 'Le taux horaire est obligatoire pour les enseignants du secondaire.'
                 })
-            if not heures_mensuelles:
-                raise ValidationError({
-                    'heures_mensuelles': 'Le nombre d\'heures mensuelles est obligatoire pour les enseignants du secondaire.'
-                })
             if salaire_fixe:
                 cleaned_data['salaire_fixe'] = None  # Effacer le salaire fixe
         else:
@@ -139,6 +136,7 @@ class EnseignantForm(forms.ModelForm):
                 })
             if taux_horaire:
                 cleaned_data['taux_horaire'] = None  # Effacer le taux horaire
+            cleaned_data['heures_mensuelles'] = None
         
         # Validation des heures mensuelles
         if heures_mensuelles and heures_mensuelles <= 0:
@@ -165,6 +163,43 @@ class EnseignantForm(forms.ModelForm):
                     raise ValidationError('Format de téléphone invalide. Utilisez le format guinéen.')
         return telephone
 
+
+class HeuresMensuellesPeriodeForm(forms.Form):
+    """Formulaire dynamique de saisie globale des heures d'une période."""
+
+    def __init__(
+        self,
+        *args,
+        enseignants,
+        initiales=None,
+        verrouilles=None,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        initiales = initiales or {}
+        verrouilles = set(verrouilles or ())
+        for enseignant in enseignants:
+            nom_champ = f'heures_{enseignant.pk}'
+            self.fields[nom_champ] = forms.DecimalField(
+                required=False,
+                min_value=Decimal('0'),
+                max_value=Decimal('744'),
+                max_digits=6,
+                decimal_places=2,
+                label=f'Heures de {enseignant.nom_complet}',
+                help_text=(
+                    'Laisser vide pour calculer depuis les pointages journaliers.'
+                ),
+                widget=forms.NumberInput(attrs={
+                    'class': 'form-control form-control-sm',
+                    'step': '0.25',
+                    'min': '0',
+                    'max': '744',
+                    'placeholder': 'Pointages',
+                }),
+                initial=initiales.get(enseignant.pk),
+                disabled=enseignant.pk in verrouilles,
+            )
 
 class AffectationClasseForm(forms.ModelForm):
     """Formulaire pour affecter un enseignant à une classe"""

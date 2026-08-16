@@ -12,7 +12,14 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.db import transaction
 from django.db.models import Q, Sum
 
-from .models import DetailHeuresClasse, Enseignant, EtatSalaire
+from .models import (
+    DetailHeuresClasse,
+    Enseignant,
+    EtatSalaire,
+    PeriodeSalaire,
+    SaisieHeuresMensuelles,
+    SourceHeuresSalaire,
+)
 
 
 HEURE = Decimal('0.01')
@@ -55,6 +62,24 @@ def heures_reellement_travaillees(enseignant, periode):
         statut__in=STATUTS_HEURES_PAYEES,
     ).aggregate(total=Sum('heures_travaillees'))['total']
     return arrondir_heures(total)
+
+
+def heures_payables_et_source(enseignant, periode):
+    """Retourne les heures à payer et leur source explicite.
+
+    Une saisie mensuelle globale, même égale à zéro, remplace les pointages du
+    mois. En son absence, les heures journalières restent la source de vérité.
+    """
+    saisie = SaisieHeuresMensuelles.objects.filter(
+        enseignant=enseignant,
+        periode=periode,
+    ).first()
+    if saisie is not None:
+        return arrondir_heures(saisie.heures), SourceHeuresSalaire.SAISIE_MENSUELLE
+    return (
+        heures_reellement_travaillees(enseignant, periode),
+        SourceHeuresSalaire.POINTAGE,
+    )
 
 
 def affectations_de_la_periode(enseignant, periode):
@@ -154,10 +179,13 @@ def calculer_etat_salaire(enseignant, periode, utilisateur):
     etat.details_heures.all().delete()
 
     if enseignant.est_taux_horaire:
-        total_heures = heures_reellement_travaillees(enseignant, periode)
+        total_heures, source_heures = heures_payables_et_source(
+            enseignant, periode
+        )
         taux_horaire = enseignant.taux_horaire or Decimal('0')
         etat.total_heures = total_heures
         etat.taux_horaire_applique = taux_horaire
+        etat.source_heures = source_heures
         etat.salaire_base = arrondir_montant(total_heures * taux_horaire)
         etat.calcule_par = utilisateur
         etat.save()
@@ -176,8 +204,30 @@ def calculer_etat_salaire(enseignant, periode, utilisateur):
     else:
         etat.total_heures = None
         etat.taux_horaire_applique = None
+        etat.source_heures = SourceHeuresSalaire.SALAIRE_FIXE
         etat.salaire_base = salaire_fixe_proratise(enseignant, periode)
         etat.calcule_par = utilisateur
         etat.save()
 
     return etat, True
+
+
+def recalculer_etat_salaire_pour_date(enseignant, date_pointage, utilisateur):
+    """Recalcule le brouillon de salaire du mois après un pointage."""
+    periode = PeriodeSalaire.objects.filter(
+        ecole=enseignant.ecole,
+        mois=date_pointage.month,
+        annee=date_pointage.year,
+        cloturee=False,
+    ).first()
+    if periode is None:
+        return None, False
+
+    etat_existant = EtatSalaire.objects.filter(
+        enseignant=enseignant,
+        periode=periode,
+    ).first()
+    if etat_existant is not None and etat_existant.valide:
+        return etat_existant, False
+
+    return calculer_etat_salaire(enseignant, periode, utilisateur)

@@ -22,15 +22,21 @@ from reportlab.lib.units import cm
 
 from .models import (
     Enseignant, AffectationClasse, PeriodeSalaire, 
-    EtatSalaire, DetailHeuresClasse, TypeEnseignant, PresenceEnseignant
+    EtatSalaire, DetailHeuresClasse, TypeEnseignant, PresenceEnseignant,
+    SaisieHeuresMensuelles,
 )
 from .forms import (
     AffectationClasseForm,
     EnseignantForm,
     EtatSalaireAjustementForm,
+    HeuresMensuellesPeriodeForm,
     PresenceForm,
 )
-from .services import calculer_etat_salaire, enseignants_eligibles
+from .services import (
+    calculer_etat_salaire,
+    enseignants_eligibles,
+    heures_reellement_travaillees,
+)
 from eleves.models import Ecole, Classe
 from utilisateurs.utils import user_is_admin, user_school
 from utilisateurs.permissions import can_add_teachers
@@ -882,6 +888,128 @@ def export_etats_salaire_pdf(request):
 
     doc.build(elements, onFirstPage=_draw_header_and_watermark, onLaterPages=_draw_header_and_watermark)
     return response
+
+
+@login_required
+@require_school_object(model=PeriodeSalaire, pk_kwarg='periode_id', field_path='ecole')
+def saisir_heures_mensuelles(request, periode_id):
+    """Saisir globalement les heures réelles et recalculer immédiatement."""
+    periode = get_object_or_404(
+        PeriodeSalaire.objects.select_related('ecole'), id=periode_id
+    )
+    if periode.cloturee:
+        messages.error(
+            request,
+            "Une période clôturée ne peut plus recevoir d'heures.",
+        )
+        return redirect('salaires:gestion_periodes')
+
+    enseignants = list(
+        enseignants_eligibles(periode).filter(
+            type_enseignant=TypeEnseignant.SECONDAIRE
+        )
+    )
+    saisies = {
+        saisie.enseignant_id: saisie
+        for saisie in SaisieHeuresMensuelles.objects.filter(
+            periode=periode,
+            enseignant__in=enseignants,
+        )
+    }
+    etats = {
+        etat.enseignant_id: etat
+        for etat in EtatSalaire.objects.filter(
+            periode=periode,
+            enseignant__in=enseignants,
+        )
+    }
+    initiales = {
+        enseignant_id: saisie.heures
+        for enseignant_id, saisie in saisies.items()
+    }
+    verrouilles = {
+        enseignant_id
+        for enseignant_id, etat in etats.items()
+        if etat.valide or etat.paye
+    }
+    form = HeuresMensuellesPeriodeForm(
+        request.POST or None,
+        enseignants=enseignants,
+        initiales=initiales,
+        verrouilles=verrouilles,
+    )
+
+    if request.method == 'POST' and form.is_valid():
+        with transaction.atomic():
+            periode_verrouillee = PeriodeSalaire.objects.select_for_update().get(
+                pk=periode.pk
+            )
+            if periode_verrouillee.cloturee:
+                messages.error(request, "Cette période vient d'être clôturée.")
+                return redirect('salaires:gestion_periodes')
+
+            saisies_enregistrees = 0
+            calculs_effectues = 0
+            for enseignant in enseignants:
+                if enseignant.pk in verrouilles:
+                    continue
+                heures = form.cleaned_data[f'heures_{enseignant.pk}']
+                if heures is None:
+                    SaisieHeuresMensuelles.objects.filter(
+                        enseignant=enseignant,
+                        periode=periode_verrouillee,
+                    ).delete()
+                else:
+                    SaisieHeuresMensuelles.objects.update_or_create(
+                        enseignant=enseignant,
+                        periode=periode_verrouillee,
+                        defaults={
+                            'heures': heures,
+                            'saisi_par': request.user,
+                        },
+                    )
+                    saisies_enregistrees += 1
+
+                _, modifie = calculer_etat_salaire(
+                    enseignant, periode_verrouillee, request.user
+                )
+                calculs_effectues += int(modifie)
+
+        messages.success(
+            request,
+            f"{saisies_enregistrees} saisie(s) mensuelle(s) enregistrée(s) et "
+            f"{calculs_effectues} salaire(s) recalculé(s).",
+        )
+        return redirect(
+            'salaires:saisir_heures_mensuelles', periode_id=periode.pk
+        )
+
+    lignes = []
+    for enseignant in enseignants:
+        saisie = saisies.get(enseignant.pk)
+        etat = etats.get(enseignant.pk)
+        heures_pointage = heures_reellement_travaillees(enseignant, periode)
+        heures_calcul = saisie.heures if saisie is not None else heures_pointage
+        lignes.append({
+            'enseignant': enseignant,
+            'champ': form[f'heures_{enseignant.pk}'],
+            'heures_pointage': heures_pointage,
+            'heures_calcul': heures_calcul,
+            'salaire_calcule': heures_calcul * (enseignant.taux_horaire or Decimal('0')),
+            'etat': etat,
+            'verrouille': enseignant.pk in verrouilles,
+            'saisie_globale': saisie is not None,
+        })
+
+    return render(
+        request,
+        'salaires/saisir_heures_mensuelles.html',
+        {
+            'periode': periode,
+            'form': form,
+            'lignes': lignes,
+        },
+    )
 
 
 @login_required

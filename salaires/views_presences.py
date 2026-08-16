@@ -10,9 +10,12 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 import csv
 
-from .models import Enseignant, PresenceEnseignant
+from .models import Enseignant, EtatSalaire, PeriodeSalaire, PresenceEnseignant
 from .forms import PresenceForm
-from .services import STATUTS_HEURES_PAYEES
+from .services import (
+    STATUTS_HEURES_PAYEES,
+    recalculer_etat_salaire_pour_date,
+)
 from utilisateurs.utils import user_school, user_is_admin
 
 
@@ -163,11 +166,29 @@ def pointer_presence(request):
         except (ValueError, InvalidOperation, ValidationError) as exc:
             messages.error(request, f"Pointage non enregistré : {exc}")
             return redirect('salaires:pointer_presence')
+
+        salaires_recalcules = 0
+        erreurs_calcul = []
+        for enseignant in enseignants_valides.values():
+            try:
+                _, modifie = recalculer_etat_salaire_pour_date(
+                    enseignant, date_pointage, request.user
+                )
+                salaires_recalcules += int(modifie)
+            except Exception as exc:
+                erreurs_calcul.append(f"{enseignant.nom_complet}: {exc}")
         
         messages.success(
             request,
-            f"Pointage enregistré: {count_created} nouveau(x), {count_updated} mis à jour."
+            f"Pointage enregistré: {count_created} nouveau(x), {count_updated} mis à jour. "
+            f"{salaires_recalcules} salaire(s) recalculé(s) automatiquement."
         )
+        if erreurs_calcul:
+            messages.warning(
+                request,
+                "Le pointage est enregistré, mais certains salaires n'ont pas pu être recalculés: "
+                + " | ".join(erreurs_calcul),
+            )
         return redirect('salaires:liste_presences')
     
     # GET: Afficher le formulaire
@@ -223,6 +244,21 @@ def pointer_presence(request):
             'absents': pm['jours_absents'],
             'retards': pm['jours_retards'],
         }
+
+    periode_mois = PeriodeSalaire.objects.filter(
+        ecole=user_school_obj,
+        mois=date_pointage_obj.month,
+        annee=date_pointage_obj.year,
+    ).first()
+    etats_mois_par_enseignant = {}
+    if periode_mois is not None:
+        etats_mois_par_enseignant = {
+            etat.enseignant_id: etat
+            for etat in EtatSalaire.objects.filter(
+                periode=periode_mois,
+                enseignant__in=enseignants,
+            )
+        }
     
     # Statistiques globales du jour
     stats_jour = {
@@ -247,6 +283,8 @@ def pointer_presence(request):
         'stats_jour': stats_jour,
         'total_heures_mois': total_heures_mois,
         'mois_courant': date_pointage_obj.strftime('%B %Y'),
+        'periode_mois': periode_mois,
+        'etats_mois_par_enseignant': etats_mois_par_enseignant,
     }
     
     return render(request, 'salaires/presences/pointer.html', context)
@@ -268,7 +306,21 @@ def modifier_presence(request, presence_id):
             presence = form.save(commit=False)
             presence.pointe_par = request.user
             presence.save()
+            try:
+                _, salaire_recalcule = recalculer_etat_salaire_pour_date(
+                    presence.enseignant, presence.date, request.user
+                )
+            except Exception as exc:
+                salaire_recalcule = False
+                messages.warning(
+                    request,
+                    f"Présence modifiée, mais salaire non recalculé: {exc}",
+                )
             messages.success(request, "Présence modifiée avec succès.")
+            if salaire_recalcule:
+                messages.success(
+                    request, "Le salaire mensuel a été recalculé automatiquement."
+                )
             return redirect('salaires:liste_presences')
     else:
         form = PresenceForm(instance=presence, ecole=user_school_obj)
@@ -293,12 +345,27 @@ def supprimer_presence(request, presence_id):
     
     if request.method == 'POST':
         enseignant_nom = presence.enseignant.nom_complet
+        enseignant = presence.enseignant
         date_presence = presence.date
         presence.delete()
+        try:
+            _, salaire_recalcule = recalculer_etat_salaire_pour_date(
+                enseignant, date_presence, request.user
+            )
+        except Exception as exc:
+            salaire_recalcule = False
+            messages.warning(
+                request,
+                f"Présence supprimée, mais salaire non recalculé: {exc}",
+            )
         messages.success(
             request,
             f"Présence de {enseignant_nom} du {date_presence} supprimée."
         )
+        if salaire_recalcule:
+            messages.success(
+                request, "Le salaire mensuel a été recalculé automatiquement."
+            )
         return redirect('salaires:liste_presences')
     
     context = {
