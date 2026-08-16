@@ -14,7 +14,14 @@ class TypeEnseignant(models.TextChoices):
     MATERNELLE = 'MATERNELLE', 'Maternelle'
     PRIMAIRE = 'PRIMAIRE', 'Primaire'
     SECONDAIRE = 'SECONDAIRE', 'Secondaire (taux horaire)'
-    ADMINISTRATEUR = 'ADMINISTRATEUR', 'Administrateur'
+    ADMINISTRATEUR = 'ADMINISTRATEUR', 'Cadre / Administrateur'
+
+
+class SourceHeuresSalaire(models.TextChoices):
+    NON_APPLICABLE = '', 'Non applicable'
+    POINTAGE = 'POINTAGE', 'Pointages arrivée / départ'
+    SAISIE_MENSUELLE = 'SAISIE_MENSUELLE', 'Saisie mensuelle globale'
+    SALAIRE_FIXE = 'SALAIRE_FIXE', 'Salaire fixe négocié'
 
 
 class StatutEnseignant(models.TextChoices):
@@ -65,7 +72,7 @@ class Enseignant(SyncTrackedModel):
         null=True, 
         blank=True,
         verbose_name="Salaire fixe (GNF)",
-        help_text="Pour garderie, maternelle, primaire et administrateurs",
+        help_text="Montant mensuel négocié pour garderie, maternelle, primaire et cadres/administrateurs",
         validators=[MinValueValidator(Decimal('0'))],
     )
     heures_mensuelles = models.DecimalField(
@@ -73,8 +80,8 @@ class Enseignant(SyncTrackedModel):
         decimal_places=2, 
         null=True, 
         blank=True,
-        verbose_name="Heures mensuelles",
-        help_text="Nombre d'heures de travail prévues par mois (pour calcul précis du salaire)",
+        verbose_name="Volume mensuel indicatif",
+        help_text="Volume indicatif du contrat. Le salaire réel utilise les pointages ou la saisie globale de la période.",
         validators=[
             MinValueValidator(Decimal('0')),
             MaxValueValidator(Decimal('200')),
@@ -338,6 +345,83 @@ class PeriodeSalaire(SyncTrackedModel):
         return f"{mois_noms[self.mois]} {self.annee}"
 
 
+class SaisieHeuresMensuelles(SyncTrackedModel):
+    """Heures réelles saisies globalement pour un enseignant et une période.
+
+    Une ligne remplace explicitement la somme des pointages du mois. Une
+    valeur égale à zéro signifie donc bien qu'aucune heure n'est payable.
+    """
+
+    enseignant = models.ForeignKey(
+        Enseignant,
+        on_delete=models.CASCADE,
+        related_name='saisies_heures_mensuelles',
+        verbose_name="Enseignant",
+    )
+    periode = models.ForeignKey(
+        PeriodeSalaire,
+        on_delete=models.CASCADE,
+        related_name='saisies_heures_mensuelles',
+        verbose_name="Période",
+    )
+    heures = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        verbose_name="Heures mensuelles réalisées",
+        validators=[
+            MinValueValidator(Decimal('0')),
+            MaxValueValidator(Decimal('744')),
+        ],
+    )
+    saisi_par = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='saisies_heures_mensuelles',
+        verbose_name="Saisi par",
+    )
+    date_creation = models.DateTimeField(auto_now_add=True)
+    date_modification = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Saisie mensuelle d'heures"
+        verbose_name_plural = "Saisies mensuelles d'heures"
+        ordering = ['-periode__annee', '-periode__mois', 'enseignant__nom']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['enseignant', 'periode'],
+                name='sal_uniq_heures_ens_periode',
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.enseignant.nom_complet} - {self.periode.nom_periode}: {self.heures} h"
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.enseignant_id and not self.enseignant.est_taux_horaire:
+            errors['enseignant'] = (
+                "La saisie mensuelle d'heures est réservée aux enseignants au taux horaire."
+            )
+        if (
+            self.enseignant_id
+            and self.periode_id
+            and self.enseignant.ecole_id != self.periode.ecole_id
+        ):
+            errors['enseignant'] = (
+                "L'enseignant et la période doivent appartenir à la même école."
+            )
+        if self.periode_id and self.periode.cloturee:
+            errors['periode'] = "Une période clôturée ne peut plus être modifiée."
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+
 class EtatSalaire(SyncTrackedModel):
     """État de salaire d'un enseignant pour une période donnée"""
     
@@ -371,6 +455,14 @@ class EtatSalaire(SyncTrackedModel):
         verbose_name="Taux horaire appliqué",
         help_text="Taux conservé au moment du calcul pour l'historique",
         validators=[MinValueValidator(Decimal('0'))],
+    )
+    source_heures = models.CharField(
+        max_length=24,
+        choices=SourceHeuresSalaire.choices,
+        default=SourceHeuresSalaire.NON_APPLICABLE,
+        blank=True,
+        verbose_name="Source du calcul",
+        help_text="Origine des heures ou du montant utilisé pour calculer le salaire",
     )
     
     # Montants

@@ -55,6 +55,7 @@ SYNC_MODEL_LABELS = [
     'salaires.PeriodeSalaire',
     'salaires.EtatSalaire',
     'salaires.PresenceEnseignant',
+    'salaires.SaisieHeuresMensuelles',
     'salaires.DetailHeuresClasse',
     'abonnements.TypeAbonnement',
     'abonnements.Itineraire',

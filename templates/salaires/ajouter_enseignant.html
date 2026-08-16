@@ -456,7 +456,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const selectedType = typeEnseignantSelect.value;
         
         if (selectedType === 'SECONDAIRE') {
-            // Enseignant du secondaire : taux horaire + heures mensuelles
+            // Enseignant du secondaire : taux horaire requis, volume indicatif facultatif
             salaireFixeField.classList.remove('show');
             tauxHoraireField.classList.add('show');
             heuresMensuellesField.classList.add('show');
@@ -464,25 +464,16 @@ document.addEventListener('DOMContentLoaded', function() {
             // Vider le champ salaire fixe
             document.getElementById('{{ form.salaire_fixe.id_for_label }}').value = '';
             
-            // Mettre une valeur par défaut pour les heures mensuelles si vide
-            const heuresMensuellesInput = document.getElementById('{{ form.heures_mensuelles.id_for_label }}');
-            if (!heuresMensuellesInput.value) {
-                heuresMensuellesInput.value = '120'; // 120 heures par mois par défaut
-            }
         } else if (selectedType) {
-            // Autres types : salaire fixe + heures mensuelles optionnelles
+            // Primaire et cadres : salaire mensuel fixe négocié
             tauxHoraireField.classList.remove('show');
             salaireFixeField.classList.add('show');
-            heuresMensuellesField.classList.add('show');
+            heuresMensuellesField.classList.remove('show');
             
             // Vider le champ taux horaire
             document.getElementById('{{ form.taux_horaire.id_for_label }}').value = '';
             
-            // Mettre une valeur par défaut pour les heures mensuelles si vide
-            const heuresMensuellesInput = document.getElementById('{{ form.heures_mensuelles.id_for_label }}');
-            if (!heuresMensuellesInput.value) {
-                heuresMensuellesInput.value = '160'; // 160 heures par mois par défaut pour salaire fixe
-            }
+            document.getElementById('{{ form.heures_mensuelles.id_for_label }}').value = '';
         } else {
             // Aucun type sélectionné
             salaireFixeField.classList.remove('show');
