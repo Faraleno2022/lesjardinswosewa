@@ -14,8 +14,9 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Q, F
 from django.http import HttpResponse
 
-from eleves.models import Classe
-from utilisateurs.utils import filter_by_user_school
+from eleves.models import Classe, Ecole
+from rapports.utils import _draw_header_and_watermark
+from utilisateurs.utils import filter_by_user_school, user_school
 from .models import Paiement, EcheancierPaiement, ModePaiement, TypePaiement
 from .services import calculer_situations_echeanciers
 
@@ -25,6 +26,29 @@ def _fmt_gnf(v):
         return f"{int(v):,}".replace(',', ' ')
     except (TypeError, ValueError):
         return '0'
+
+
+def _ecole_export_paiements(request, qs):
+    """Retourne l'ecole unique couverte par l'export, si elle existe."""
+    classe_id = (request.GET.get('classe_id') or '').strip()
+    if classe_id.isdigit():
+        classes = filter_by_user_school(
+            Classe.objects.select_related('ecole'), request.user, 'ecole'
+        )
+        classe = classes.filter(pk=int(classe_id)).first()
+        if classe:
+            return classe.ecole
+
+    ecole_utilisateur = user_school(request.user)
+    if ecole_utilisateur:
+        return ecole_utilisateur
+
+    ecole_ids = list(
+        qs.order_by().values_list('eleve__classe__ecole_id', flat=True).distinct()[:2]
+    )
+    if len(ecole_ids) == 1:
+        return Ecole.objects.filter(pk=ecole_ids[0]).first()
+    return None
 
 
 def filtrer_paiements(request):
@@ -124,7 +148,7 @@ def export_paiements_filtres_excel(request):
     bordure = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     ws.merge_cells('A1:J1')
-    ws['A1'] = 'LISTE DES PAIEMENTS' + (f" — {' | '.join(libelles)}" if libelles else '')
+    ws['A1'] = 'LISTE DES PAIEMENTS' + (f" - {' | '.join(libelles)}" if libelles else '')
     ws['A1'].font = Font(bold=True, size=12, color='007BFF')
     ws['A1'].alignment = centre
 
@@ -192,10 +216,11 @@ def export_paiements_filtres_pdf(request):
     from reportlab.lib.enums import TA_CENTER
 
     qs, libelles = filtrer_paiements(request)
+    ecole = _ecole_export_paiements(request, qs)
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(A4),
-                            topMargin=0.8 * cm, bottomMargin=0.8 * cm,
+                            topMargin=2.8 * cm, bottomMargin=0.8 * cm,
                             leftMargin=0.8 * cm, rightMargin=0.8 * cm)
     styles = getSampleStyleSheet()
     titre = ParagraphStyle('T', parent=styles['Heading1'], fontSize=13,
@@ -206,7 +231,7 @@ def export_paiements_filtres_pdf(request):
     elements = [Paragraph("<b>LISTE DES PAIEMENTS</b>", titre)]
     ligne_filtres = ' | '.join(libelles) if libelles else 'Aucun filtre'
     elements.append(Paragraph(
-        f"Filtres : {ligne_filtres} — édité le {date.today().strftime('%d/%m/%Y')}", sous))
+        f"Filtres : {ligne_filtres} - édité le {date.today().strftime('%d/%m/%Y')}", sous))
 
     data = [['N°', 'Matricule', 'Élève', 'Classe', 'Nature', 'Mode', 'Date', 'N° Reçu', 'Statut', 'Montant (GNF)']]
     total = Decimal('0')
@@ -247,9 +272,21 @@ def export_paiements_filtres_pdf(request):
     elements.append(table)
     elements.append(Spacer(1, 0.3 * cm))
     elements.append(Paragraph(
-        f"Total : {len(data) - 2} paiement(s) — {_fmt_gnf(total)} GNF", styles['Normal']))
+        f"Total : {len(data) - 2} paiement(s) - {_fmt_gnf(total)} GNF", styles['Normal']))
 
-    doc.build(elements)
+    def dessiner_entete(canvas, document):
+        _draw_header_and_watermark(
+            canvas,
+            document,
+            ecole=ecole,
+            titre_override='Liste des paiements',
+        )
+
+    doc.build(
+        elements,
+        onFirstPage=dessiner_entete,
+        onLaterPages=dessiner_entete,
+    )
     buffer.seek(0)
     response = HttpResponse(buffer, content_type='application/pdf')
     response['Content-Disposition'] = (
