@@ -539,6 +539,30 @@ def build_accounting_pdf(data):
         pdf.saveState()
         pdf.resetTransforms()
         if logo_path:
+            # Filigrane de l'ecole, place derriere le contenu de chaque page.
+            # Une opacite faible conserve la lisibilite des tableaux comptables.
+            pdf.saveState()
+            try:
+                pdf.setFillAlpha(0.08)
+                watermark_width = width * 1.10
+                watermark_height = height * 0.90
+                pdf.translate(width / 2.0, height / 2.0)
+                pdf.rotate(22)
+                pdf.translate(-width / 2.0, -height / 2.0)
+                pdf.drawImage(
+                    logo_path,
+                    (width - watermark_width) / 2.0,
+                    (height - watermark_height) / 2.0,
+                    watermark_width,
+                    watermark_height,
+                    preserveAspectRatio=True,
+                    mask="auto",
+                )
+            except Exception:
+                pass
+            finally:
+                pdf.restoreState()
+
             try:
                 pdf.drawImage(logo_path, 0.8 * cm, height - 1.25 * cm, 1.3 * cm, 0.7 * cm,
                               preserveAspectRatio=True, mask="auto")

@@ -4,7 +4,7 @@ from django.http import HttpResponse, HttpResponseForbidden
 from datetime import datetime
 from decimal import Decimal
 
-from eleves.models import Classe
+from eleves.models import Classe, Ecole
 from eleves.utils_annee import get_annee_active
 from paiements.models import Paiement, PaiementRemise
 from paiements.calculs import filtre_types_scolarite, normaliser_libelle
@@ -208,7 +208,16 @@ def export_tranches_par_classe_pdf(request):
         classes = classes.filter(annee_scolaire=annee_scolaire)
 
     # Anti-abus: limiter le nombre de classes exportées en une requête
-    classes = classes.order_by('ecole__nom', 'niveau', 'nom')[:200]
+    classes = list(classes.order_by('ecole__nom', 'niveau', 'nom')[:200])
+
+    # L'en-tete doit recevoir l'ecole reelle du perimetre exporte. Sans ce
+    # parametre, le helper utilisait seulement le logo statique par defaut.
+    ecole_export = ecole_user if restreindre else None
+    ecole_ids = {classe.ecole_id for classe in classes}
+    if len(ecole_ids) == 1:
+        ecole_export = classes[0].ecole
+    elif not classes and ecole_id and not restreindre:
+        ecole_export = Ecole.objects.filter(pk=ecole_id).first()
 
     # Préparer réponse PDF
     response = HttpResponse(content_type='application/pdf')
@@ -228,7 +237,7 @@ def export_tranches_par_classe_pdf(request):
     doc = SimpleDocTemplate(
         response,
         pagesize=landscape(A4),
-        rightMargin=20, leftMargin=20, topMargin=60, bottomMargin=30
+        rightMargin=20, leftMargin=20, topMargin=80, bottomMargin=30
     )
     elements = []
     styles = getSampleStyleSheet()
@@ -311,7 +320,19 @@ def export_tranches_par_classe_pdf(request):
         elements.append(Spacer(1, 0.6*cm))
 
     # Construire le document avec en-tête + filigrane logo
-    doc.build(elements, onFirstPage=_draw_header_and_watermark, onLaterPages=_draw_header_and_watermark)
+    def dessiner_entete(canvas, document):
+        _draw_header_and_watermark(
+            canvas,
+            document,
+            ecole=ecole_export,
+            titre_override='Tranches par classe',
+        )
+
+    doc.build(
+        elements,
+        onFirstPage=dessiner_entete,
+        onLaterPages=dessiner_entete,
+    )
     return response
 
 @login_required

@@ -50,7 +50,10 @@ def _draw_header_and_watermark(c, doc, ecole=None, titre_override=None):
     - Filigrane: logo agrandi (~500% largeur) centré, faible opacité si disponible
     - Entête: logo à gauche + nom de l'établissement
     """
-    width, height = A4
+    # Respecter le format reel du document (notamment les exports A4 paysage).
+    # L'ancienne valeur A4 en dur comprimait l'en-tete sur la partie gauche
+    # des rapports en paysage.
+    width, height = getattr(doc, 'pagesize', None) or getattr(c, '_pagesize', A4)
     logo_path = _get_logo_path(ecole)
 
     c.saveState()
@@ -103,7 +106,7 @@ def _draw_header_and_watermark(c, doc, ecole=None, titre_override=None):
         # Si un titre explicite est fourni par l'appelant, l'afficher à droite
         header_text = school_name
         if titre_override:
-            header_text = f"{school_name} — {titre_override}" if school_name else titre_override
+            header_text = f"{school_name} - {titre_override}" if school_name else titre_override
         c.drawString(margin_x + 70, height - margin_y - 10, header_text)
 
         # Ligne de séparation
