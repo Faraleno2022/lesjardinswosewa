@@ -72,3 +72,21 @@ class PaiementsPdfSchoolLogoTests(TestCase):
         self.assertTrue(response.content.startswith(b'%PDF'))
         get_logo_path.assert_called_once_with(self.ecole)
         self.assertGreaterEqual(draw_image.call_count, 2)
+
+    @patch('reportlab.pdfgen.canvas.Canvas.drawImage')
+    @patch(
+        'paiements.rapports_professionnels._get_logo_path',
+        return_value='logo-ecole-test.png',
+    )
+    def test_export_modes_ajoute_logo_et_filigrane(
+        self, get_logo_path, draw_image,
+    ):
+        response = self.client.get(
+            reverse('paiements:export_modes_encaissement_pdf'),
+            {'classe_id': self.classe.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.content.startswith(b'%PDF'))
+        get_logo_path.assert_called_once_with(self.ecole)
+        self.assertGreaterEqual(draw_image.call_count, 2)

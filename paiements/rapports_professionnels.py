@@ -10,6 +10,7 @@ import uuid
 from xml.sax.saxutils import escape
 
 from django.http import HttpResponse
+from django.db.models import Count, Sum
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
@@ -919,6 +920,303 @@ def build_accounting_workbook(data):
     return workbook
 
 
+def collect_payment_modes_data(request):
+    """Agrège les montants par mode avec le même périmètre que les rapports."""
+    data = _scope(request)
+    status = (request.GET.get("statut") or "VALIDE").strip().upper()
+    labels = dict(Paiement.STATUT_CHOICES)
+    if status not in labels and status != "TOUS":
+        status = "VALIDE"
+
+    payments = _payments(data)
+    if status != "TOUS":
+        payments = payments.filter(statut=status)
+
+    grouped = (
+        payments.order_by()
+        .values("mode_paiement__nom")
+        .annotate(count=Count("id"), amount=Sum("montant"))
+        .order_by("-amount", "mode_paiement__nom")
+    )
+    modes = []
+    total_amount = ZERO
+    payment_count = 0
+    for item in grouped:
+        amount = item["amount"] or ZERO
+        count = item["count"] or 0
+        total_amount += amount
+        payment_count += count
+        modes.append({
+            "name": item["mode_paiement__nom"] or "Non précisé",
+            "count": count,
+            "amount": amount,
+        })
+
+    for item in modes:
+        item["share"] = (
+            item["amount"] / total_amount if total_amount else ZERO
+        )
+        item["average"] = (
+            item["amount"] / item["count"] if item["count"] else ZERO
+        )
+
+    data.update({
+        "status": status,
+        "status_label": "Tous les statuts" if status == "TOUS" else labels[status],
+        "modes": modes,
+        "total_amount": total_amount,
+        "payment_count": payment_count,
+    })
+    return data
+
+
+def build_payment_modes_pdf(data):
+    """Construit l'extrait PDF des montants par mode d'encaissement."""
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import cm
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    buffer = BytesIO()
+    page_size = A4
+    document = SimpleDocTemplate(
+        buffer,
+        pagesize=page_size,
+        leftMargin=1.2 * cm,
+        rightMargin=1.2 * cm,
+        topMargin=1.8 * cm,
+        bottomMargin=1.2 * cm,
+        title="Montants par mode d'encaissement",
+        author=data["generated_by"],
+    )
+    logo_path = _get_logo_path(data.get("school"))
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "ModesTitle",
+        parent=styles["Title"],
+        fontSize=15,
+        leading=18,
+        textColor=colors.HexColor("#" + BLUE),
+        spaceAfter=4,
+    )
+    subtitle_style = ParagraphStyle(
+        "ModesSubtitle",
+        parent=styles["Normal"],
+        fontSize=8,
+        leading=10,
+        textColor=colors.HexColor("#" + GREY),
+        spaceAfter=10,
+    )
+
+    def draw_page(pdf, doc):
+        width, height = page_size
+        pdf.saveState()
+        if logo_path:
+            pdf.saveState()
+            try:
+                pdf.setFillAlpha(0.07)
+                watermark_width = width * 1.15
+                watermark_height = height * 0.65
+                pdf.translate(width / 2.0, height / 2.0)
+                pdf.rotate(22)
+                pdf.translate(-width / 2.0, -height / 2.0)
+                pdf.drawImage(
+                    logo_path,
+                    (width - watermark_width) / 2.0,
+                    (height - watermark_height) / 2.0,
+                    watermark_width,
+                    watermark_height,
+                    preserveAspectRatio=True,
+                    mask="auto",
+                )
+            except Exception:
+                pass
+            finally:
+                pdf.restoreState()
+            try:
+                pdf.drawImage(
+                    logo_path, 1.2 * cm, height - 1.35 * cm, 1.3 * cm, 0.75 * cm,
+                    preserveAspectRatio=True, mask="auto",
+                )
+            except Exception:
+                pass
+        pdf.setFont("Helvetica-Bold", 8)
+        pdf.setFillColor(colors.HexColor("#" + BLUE))
+        pdf.drawString(2.7 * cm, height - 0.92 * cm, data["school_name"])
+        pdf.setFont("Helvetica", 6.5)
+        pdf.setFillColor(colors.HexColor("#" + GREY))
+        pdf.drawRightString(
+            width - 1.2 * cm, height - 0.92 * cm,
+            "MONTANTS PAR MODE D'ENCAISSEMENT",
+        )
+        pdf.line(1.2 * cm, height - 1.4 * cm, width - 1.2 * cm, height - 1.4 * cm)
+        pdf.line(1.2 * cm, 0.8 * cm, width - 1.2 * cm, 0.8 * cm)
+        pdf.drawString(
+            1.2 * cm, 0.48 * cm,
+            f"Réf. {data['report_reference']} - {data['generated_by']} - "
+            f"{data['generated_at']:%d/%m/%Y à %H:%M}",
+        )
+        pdf.drawRightString(width - 1.2 * cm, 0.48 * cm, f"Page {doc.page}")
+        pdf.restoreState()
+
+    elements = [
+        Paragraph("MONTANTS PAR MODE D'ENCAISSEMENT", title_style),
+        Paragraph(
+            escape(
+                f"{data['scope_label']} | Année scolaire : "
+                f"{data['school_year'] or 'Toutes'} | {_period_label(data)} | "
+                f"Statut : {data['status_label']}"
+            ),
+            subtitle_style,
+        ),
+    ]
+    summary = Table(
+        [
+            ["Montant total", "Nombre d'encaissements", "Modes utilisés"],
+            [_money(data["total_amount"]), data["payment_count"], len(data["modes"])],
+        ],
+        colWidths=[6.2 * cm, 6.2 * cm, 6.2 * cm],
+        style=TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#" + BLUE)),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#" + LIGHT_BLUE)),
+            ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#B7C4CC")),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ]),
+    )
+    elements.extend([summary, Spacer(1, 0.45 * cm)])
+
+    rows = [["Mode", "Opérations", "Montant (GNF)", "Part du total", "Montant moyen"]]
+    for item in data["modes"]:
+        rows.append([
+            item["name"], item["count"], _money(item["amount"]),
+            f"{item['share'] * Decimal('100'):.1f} %", _money(item["average"]),
+        ])
+    if not data["modes"]:
+        rows.append(["Aucun encaissement", 0, "0", "0,0 %", "0"])
+    rows.append([
+        "TOTAL", data["payment_count"], _money(data["total_amount"]),
+        "100,0 %" if data["total_amount"] else "0,0 %",
+        _money(
+            data["total_amount"] / data["payment_count"]
+            if data["payment_count"] else ZERO
+        ),
+    ])
+    elements.append(
+        _pdf_table(
+            rows,
+            [5.2 * cm, 3.1 * cm, 4.1 * cm, 3.2 * cm, 3.7 * cm],
+            (1, 2, 3, 4),
+            True,
+        )
+    )
+    elements.extend([
+        Spacer(1, 0.4 * cm),
+        Paragraph(
+            "Les montants correspondent aux paiements du statut et de la période "
+            "sélectionnés, dans le périmètre autorisé de l'utilisateur.",
+            subtitle_style,
+        ),
+    ])
+    document.build(elements, onFirstPage=draw_page, onLaterPages=draw_page)
+    buffer.seek(0)
+    return buffer
+
+
+def build_payment_modes_workbook(data):
+    """Construit le classeur Excel auditable des montants par mode."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Modes d'encaissement"
+    sheet.sheet_view.showGridLines = False
+    sheet.merge_cells("A1:E1")
+    sheet["A1"] = "MONTANTS PAR MODE D'ENCAISSEMENT"
+    sheet["A1"].font = Font(size=15, bold=True, color=BLUE)
+    sheet["A1"].alignment = Alignment(horizontal="center")
+    metadata = [
+        ("Établissement", data["school_name"]),
+        ("Portée", data["scope_label"]),
+        ("Période", _period_label(data)),
+        ("Année scolaire", data["school_year"] or "Toutes"),
+        ("Statut", data["status_label"]),
+        ("Généré par", data["generated_by"]),
+    ]
+    for row, (label, value) in enumerate(metadata, 2):
+        sheet.cell(row, 1, label).font = Font(bold=True, color=GREY)
+        sheet.cell(row, 2, _excel_safe(value))
+
+    header_row = 9
+    headers = [
+        "Mode d'encaissement", "Nombre d'encaissements", "Montant (GNF)",
+        "Part du total", "Montant moyen (GNF)",
+    ]
+    for column, value in enumerate(headers, 1):
+        sheet.cell(header_row, column, value)
+
+    first_data_row = header_row + 1
+    source_modes = data["modes"] or [{"name": "Aucun encaissement", "count": 0, "amount": ZERO}]
+    for item in source_modes:
+        sheet.append([
+            _excel_safe(item["name"]), item["count"], int(item["amount"]), None, None,
+        ])
+    last_data_row = sheet.max_row
+    total_row = last_data_row + 1
+    sheet.cell(total_row, 1, "TOTAL")
+    sheet.cell(total_row, 2, f"=SUM(B{first_data_row}:B{last_data_row})")
+    sheet.cell(total_row, 3, f"=SUM(C{first_data_row}:C{last_data_row})")
+    sheet.cell(total_row, 4, f'=IF(C{total_row}=0,0,SUM(D{first_data_row}:D{last_data_row}))')
+    sheet.cell(total_row, 5, f'=IF(B{total_row}=0,0,C{total_row}/B{total_row})')
+    for row in range(first_data_row, last_data_row + 1):
+        sheet.cell(row, 4, f'=IF($C${total_row}=0,0,C{row}/$C${total_row})')
+        sheet.cell(row, 5, f'=IF(B{row}=0,0,C{row}/B{row})')
+
+    header_fill = PatternFill("solid", fgColor=BLUE)
+    total_fill = PatternFill("solid", fgColor=LIGHT_BLUE)
+    thin = Side(style="thin", color="B7C4CC")
+    for cell in sheet[header_row]:
+        cell.fill = header_fill
+        cell.font = Font(color="FFFFFF", bold=True)
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = Border(bottom=thin)
+    for row in range(first_data_row, total_row + 1):
+        for cell in sheet[row]:
+            cell.border = Border(bottom=thin)
+            cell.alignment = Alignment(
+                horizontal="left" if cell.column == 1 else "right",
+                vertical="center",
+            )
+    for cell in sheet[total_row]:
+        cell.fill = total_fill
+        cell.font = Font(bold=True, color=BLUE)
+
+    for row in range(first_data_row, total_row + 1):
+        sheet.cell(row, 2).number_format = "#,##0"
+        sheet.cell(row, 3).number_format = '#,##0 "GNF"'
+        sheet.cell(row, 4).number_format = "0.0%"
+        sheet.cell(row, 5).number_format = '#,##0 "GNF"'
+    for column, width in {"A": 30, "B": 22, "C": 20, "D": 17, "E": 22}.items():
+        sheet.column_dimensions[column].width = width
+    sheet.row_dimensions[1].height = 25
+    sheet.row_dimensions[header_row].height = 32
+    sheet.freeze_panes = f"A{first_data_row}"
+    sheet.auto_filter.ref = f"A{header_row}:E{last_data_row}"
+    sheet.print_title_rows = f"1:{header_row}"
+    sheet.print_area = f"A1:E{total_row}"
+    sheet.page_setup.orientation = "landscape"
+    sheet.page_setup.fitToWidth = 1
+    sheet.sheet_properties.pageSetUpPr.fitToPage = True
+    workbook.calculation.fullCalcOnLoad = True
+    workbook.calculation.forceFullCalc = True
+    workbook.calculation.calcMode = "auto"
+    return workbook
+
+
 def _bad_request(exc):
     return HttpResponse(str(exc), status=400, content_type="text/plain; charset=utf-8")
 
@@ -926,6 +1224,14 @@ def _bad_request(exc):
 def _filename(data, extension):
     scope = data["classes"][0].nom if len(data["classes"]) == 1 else data["school_name"]
     return f"rapport_comptable_{_safe_filename(scope)}_{data['end']:%Y-%m-%d}.{extension}"
+
+
+def _modes_filename(data, extension):
+    scope = data["classes"][0].nom if len(data["classes"]) == 1 else data["school_name"]
+    return (
+        f"montants_par_mode_{_safe_filename(scope)}_"
+        f"{data['end']:%Y-%m-%d}.{extension}"
+    )
 
 
 @can_view_reports
@@ -952,4 +1258,40 @@ def export_comptabilite_excel(request):
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
     response["Content-Disposition"] = f'attachment; filename="{_filename(data, "xlsx")}"'
+    return response
+
+
+@can_view_reports
+def export_payment_modes_pdf(request):
+    try:
+        data = collect_payment_modes_data(request)
+    except ValueError as exc:
+        return _bad_request(exc)
+    response = HttpResponse(
+        build_payment_modes_pdf(data).getvalue(),
+        content_type="application/pdf",
+    )
+    response["Content-Disposition"] = (
+        f'attachment; filename="{_modes_filename(data, "pdf")}"'
+    )
+    return response
+
+
+@can_view_reports
+def export_payment_modes_excel(request):
+    try:
+        data = collect_payment_modes_data(request)
+    except ValueError as exc:
+        return _bad_request(exc)
+    stream = BytesIO()
+    build_payment_modes_workbook(data).save(stream)
+    response = HttpResponse(
+        stream.getvalue(),
+        content_type=(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ),
+    )
+    response["Content-Disposition"] = (
+        f'attachment; filename="{_modes_filename(data, "xlsx")}"'
+    )
     return response
