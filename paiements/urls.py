@@ -1,7 +1,12 @@
 from django.urls import path
 from . import views
 from .views_tranches import export_tranches_par_classe_pdf, export_tranches_par_classe_excel
-from .rapports_professionnels import export_comptabilite_pdf, export_comptabilite_excel
+from .rapports_professionnels import (
+    export_comptabilite_pdf,
+    export_comptabilite_excel,
+    export_payment_modes_pdf,
+    export_payment_modes_excel,
+)
 from .export_paiements_filtres import export_paiements_filtres_pdf, export_paiements_filtres_excel
 from . import views_rappels
 from .whatsapp_recu import apercu_message_whatsapp_recu, apercu_message_whatsapp_note_rappel
@@ -11,6 +16,7 @@ from .views_rapport_comptable import (
     export_rapport_comptable_pdf,
     export_rapport_comptable_excel,
 )
+from .views_modes_encaissement import payment_modes_students
 
 app_name = 'paiements'
 
@@ -45,6 +51,8 @@ urlpatterns = [
     path('export/paiements-filtres/excel/', export_paiements_filtres_excel, name='export_paiements_filtres_excel'),
     path('export/comptabilite/pdf/', export_comptabilite_pdf, name='export_comptabilite_pdf'),
     path('export/comptabilite/excel/', export_comptabilite_excel, name='export_comptabilite_excel'),
+    path('export/modes-encaissement/pdf/', export_payment_modes_pdf, name='export_modes_encaissement_pdf'),
+    path('export/modes-encaissement/excel/', export_payment_modes_excel, name='export_modes_encaissement_excel'),
     path('export/tranches-par-classe/pdf/', export_tranches_par_classe_pdf, name='export_tranches_par_classe_pdf'),
     path('export/tranches-par-classe/excel/', export_tranches_par_classe_excel, name='export_tranches_par_classe_excel'),
     path('export/liste/excel/', views.export_liste_paiements_excel, name='export_liste_paiements_excel'),
@@ -59,6 +67,11 @@ urlpatterns = [
     path('rapport/comptabilite/', rapport_comptable, name='rapport_comptable'),
     path('rapport/comptabilite/pdf/', export_rapport_comptable_pdf, name='export_rapport_comptable_pdf'),
     path('rapport/comptabilite/excel/', export_rapport_comptable_excel, name='export_rapport_comptable_excel'),
+    path(
+        'rapport/modes-encaissement/eleves/',
+        payment_modes_students,
+        name='modes_encaissement_eleves',
+    ),
     
     # Élèves soldés (année scolaire réglée)
     path('eleves-soldes/', views.eleves_soldes_simple, name='liste_eleves_soldes'),
