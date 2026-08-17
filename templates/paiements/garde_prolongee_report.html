@@ -1,0 +1,278 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Élèves en garde prolongée{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="{% url 'paiements:tableau_bord' %}">Paiements</a></li>
+<li class="breadcrumb-item active">Garde prolongée</li>
+{% endblock %}
+
+{% block page_actions %}
+<div class="d-flex flex-wrap gap-2">
+  <a id="exportGardePdf" href="{% url 'paiements:export_garde_prolongee_pdf' %}" class="btn btn-danger">
+    <i class="fas fa-file-pdf me-1"></i>Exporter en PDF
+  </a>
+  <a id="exportGardeExcel" href="{% url 'paiements:export_garde_prolongee_excel' %}" class="btn btn-success">
+    <i class="fas fa-file-excel me-1"></i>Exporter en Excel
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+  <h3 class="mb-1">Élèves en garde prolongée</h3>
+  <p class="text-muted mb-0">
+    Élèves gardés au-delà des heures de cours, avec le forfait du cycle,
+    les frais d'inscription ou de réinscription et leur situation financière détaillée.
+  </p>
+</div>
+
+<div class="alert alert-info border-info mb-4">
+  <div class="fw-semibold mb-1"><i class="fas fa-clock me-1"></i>Barème annuel de scolarité</div>
+  <div class="d-flex flex-wrap gap-3 small">
+    {% for label, amount in bareme %}
+    <span><strong>{{ label }} :</strong> {{ amount|floatformat:0|intcomma }} GNF</span>
+    {% endfor %}
+  </div>
+  <small>Les frais d'inscription ou de réinscription s'ajoutent toujours au forfait.</small>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="fw-semibold"><i class="fas fa-filter me-1"></i>Filtres dynamiques</span>
+    <span id="gardeLoading" class="text-primary small d-none" role="status">
+      <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Actualisation…
+    </span>
+  </div>
+  <div class="card-body">
+    <form method="get" id="gardeFiltres" class="row g-3 align-items-end" data-no-fast-submit>
+      {% if schools|length > 1 %}
+      <div class="col-md-3 col-xl-2">
+        <label for="gardeEcole" class="form-label">École</label>
+        <select id="gardeEcole" name="ecole_id" class="form-select garde-auto-filter">
+          <option value="">Toutes les écoles</option>
+          {% for school in schools %}
+          <option value="{{ school.id }}" {% if selected_school_id == school.id %}selected{% endif %}>{{ school.nom }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div class="col-md-3 col-xl-2">
+        <label for="gardeAnnee" class="form-label">Année scolaire</label>
+        <select id="gardeAnnee" name="annee_scolaire" class="form-select garde-auto-filter">
+          {% for year in years %}
+          <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3 col-xl-2">
+        <label for="gardeClasse" class="form-label">Classe</label>
+        <select id="gardeClasse" name="classe_id" class="form-select garde-auto-filter">
+          <option value="">Toutes les classes</option>
+          {% for classe in classes %}
+          <option value="{{ classe.id }}"
+                  data-school="{{ classe.ecole_id }}"
+                  data-year="{{ classe.annee_scolaire }}"
+                  {% if selected_class_id == classe.id %}selected{% endif %}>
+            {{ classe.nom }} — {{ classe.annee_scolaire }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3 col-xl-2">
+        <label for="gardeCycle" class="form-label">Cycle</label>
+        <select id="gardeCycle" name="cycle" class="form-select garde-auto-filter">
+          <option value="">Tous les cycles</option>
+          {% for code, label in cycle_choices %}
+          <option value="{{ code }}" {% if cycle_filter == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3 col-xl-2">
+        <label for="gardeNature" class="form-label">Admission</label>
+        <select id="gardeNature" name="nature" class="form-select garde-auto-filter">
+          <option value="">Inscription et réinscription</option>
+          <option value="INSCRIPTION" {% if nature_filter == 'INSCRIPTION' %}selected{% endif %}>Inscription</option>
+          <option value="REINSCRIPTION" {% if nature_filter == 'REINSCRIPTION' %}selected{% endif %}>Réinscription</option>
+          <option value="SANS_ECHEANCIER" {% if nature_filter == 'SANS_ECHEANCIER' %}selected{% endif %}>Sans échéancier</option>
+        </select>
+      </div>
+      <div class="col-md-3 col-xl-2">
+        <label for="gardeSituation" class="form-label">Situation financière</label>
+        <select id="gardeSituation" name="situation" class="form-select garde-auto-filter">
+          <option value="">Toutes les situations</option>
+          <option value="solde" {% if situation_filter == 'solde' %}selected{% endif %}>Soldé</option>
+          <option value="partiel" {% if situation_filter == 'partiel' %}selected{% endif %}>Partiel</option>
+          <option value="a_payer" {% if situation_filter == 'a_payer' %}selected{% endif %}>À payer</option>
+          <option value="sans_echeancier" {% if situation_filter == 'sans_echeancier' %}selected{% endif %}>Sans échéancier</option>
+          <option value="a_verifier" {% if situation_filter == 'a_verifier' %}selected{% endif %}>Forfait à vérifier</option>
+        </select>
+      </div>
+      <div class="col-md-3 col-xl-2">
+        <label for="gardeStatut" class="form-label">Statut de l'élève</label>
+        <select id="gardeStatut" name="statut_eleve" class="form-select garde-auto-filter">
+          <option value="">Tous les statuts</option>
+          {% for code, label in student_status_choices %}
+          <option value="{{ code }}" {% if student_status == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6 col-xl-4">
+        <label for="gardeRecherche" class="form-label">Rechercher</label>
+        <div class="input-group">
+          <span class="input-group-text"><i class="fas fa-search"></i></span>
+          <input id="gardeRecherche" type="search" name="q" value="{{ q }}" class="form-control"
+                 placeholder="Élève, matricule, responsable, téléphone…" autocomplete="off">
+        </div>
+      </div>
+      <div class="col-md-6 col-xl-4 d-flex gap-2">
+        <button type="submit" class="btn btn-primary flex-grow-1">
+          <i class="fas fa-sync-alt me-1"></i>Actualiser
+        </button>
+        <a href="{% url 'paiements:garde_prolongee_report' %}" class="btn btn-outline-secondary">Réinitialiser</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="gardeResults" aria-live="polite">
+  {% include 'paiements/_garde_prolongee_resultats.html' %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const form = document.getElementById('gardeFiltres');
+  const results = document.getElementById('gardeResults');
+  const loading = document.getElementById('gardeLoading');
+  const search = document.getElementById('gardeRecherche');
+  const school = document.getElementById('gardeEcole');
+  const year = document.getElementById('gardeAnnee');
+  const classSelect = document.getElementById('gardeClasse');
+  const pdfLink = document.getElementById('exportGardePdf');
+  const excelLink = document.getElementById('exportGardeExcel');
+  let debounceTimer = null;
+  let currentRequest = null;
+
+  function cleanParams(params) {
+    const cleaned = new URLSearchParams(params);
+    cleaned.delete('fragment');
+    cleaned.delete('page');
+    Array.from(cleaned.entries()).forEach(function (entry) {
+      if (!entry[1]) cleaned.delete(entry[0]);
+    });
+    return cleaned;
+  }
+
+  function currentParams() {
+    return cleanParams(new URLSearchParams(new FormData(form)));
+  }
+
+  function updateExportLinks() {
+    const params = currentParams().toString();
+    pdfLink.href = '{% url "paiements:export_garde_prolongee_pdf" %}' + (params ? '?' + params : '');
+    excelLink.href = '{% url "paiements:export_garde_prolongee_excel" %}' + (params ? '?' + params : '');
+  }
+
+  function filterYearOptions(clearInvalid) {
+    if (!year || !classSelect) return;
+    const schoolValue = school ? school.value : '';
+    const availableYears = new Set(
+      Array.from(classSelect.options)
+        .filter(function (option, index) {
+          return index > 0 && (!schoolValue || option.dataset.school === schoolValue);
+        })
+        .map(function (option) { return option.dataset.year; })
+    );
+    let selectionIsVisible = false;
+    Array.from(year.options).forEach(function (option) {
+      const visible = availableYears.has(option.value);
+      option.hidden = !visible;
+      option.disabled = !visible;
+      if (option.selected && visible) selectionIsVisible = true;
+    });
+    if (clearInvalid && !selectionIsVisible) {
+      const firstVisible = Array.from(year.options).find(function (option) {
+        return !option.disabled;
+      });
+      year.value = firstVisible ? firstVisible.value : '';
+    }
+  }
+
+  function filterClassOptions(clearInvalid) {
+    if (!classSelect) return;
+    const schoolValue = school ? school.value : '';
+    const yearValue = year ? year.value : '';
+    let selectionIsVisible = !classSelect.value;
+    Array.from(classSelect.options).forEach(function (option, index) {
+      if (index === 0) return;
+      const visible = (!schoolValue || option.dataset.school === schoolValue)
+        && (!yearValue || option.dataset.year === yearValue);
+      option.hidden = !visible;
+      option.disabled = !visible;
+      if (option.selected && visible) selectionIsVisible = true;
+    });
+    if (clearInvalid && !selectionIsVisible) classSelect.value = '';
+  }
+
+  async function refreshResults(sourceUrl) {
+    if (currentRequest) currentRequest.abort();
+    currentRequest = new AbortController();
+    const url = sourceUrl ? new URL(sourceUrl, window.location.href) : new URL(window.location.href);
+    if (!sourceUrl) url.search = currentParams().toString();
+    url.searchParams.set('fragment', '1');
+    loading.classList.remove('d-none');
+    results.setAttribute('aria-busy', 'true');
+    try {
+      const response = await fetch(url.toString(), {
+        headers: {'X-Requested-With': 'XMLHttpRequest'},
+        signal: currentRequest.signal
+      });
+      if (!response.ok) throw new Error('Réponse invalide');
+      results.innerHTML = await response.text();
+      const clean = cleanParams(url.searchParams);
+      window.history.replaceState({}, '', url.pathname + (clean.toString() ? '?' + clean.toString() : ''));
+      updateExportLinks();
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        results.innerHTML = '<div class="alert alert-danger">Impossible d’actualiser le rapport. Réessayez.</div>';
+      }
+    } finally {
+      loading.classList.add('d-none');
+      results.removeAttribute('aria-busy');
+    }
+  }
+
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+    refreshResults();
+  });
+  form.querySelectorAll('.garde-auto-filter').forEach(function (control) {
+    control.addEventListener('change', function () {
+      if (control === school) filterYearOptions(true);
+      if (control === school || control === year) filterClassOptions(true);
+      updateExportLinks();
+      refreshResults();
+    });
+  });
+  search.addEventListener('input', function () {
+    updateExportLinks();
+    window.clearTimeout(debounceTimer);
+    debounceTimer = window.setTimeout(refreshResults, 350);
+  });
+  results.addEventListener('click', function (event) {
+    const link = event.target.closest('[data-garde-page]');
+    if (!link) return;
+    event.preventDefault();
+    refreshResults(link.href);
+  });
+  pdfLink.addEventListener('click', updateExportLinks);
+  excelLink.addEventListener('click', updateExportLinks);
+  filterYearOptions(false);
+  filterClassOptions(false);
+  updateExportLinks();
+})();
+</script>
+{% endblock %}

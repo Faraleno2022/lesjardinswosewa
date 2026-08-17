@@ -419,10 +419,26 @@ class RapportComptableProfessionnelTests(TestCase):
         self.assertContains(
             report, reverse("paiements:apercu_comptabilite_pdf")
         )
+        self.assertContains(
+            report, reverse("paiements:export_rapport_comptable_pdf")
+        )
+        self.assertContains(
+            report, reverse("paiements:export_rapport_comptable_excel")
+        )
 
         payment_list = self.client.get(reverse("paiements:liste_paiements"))
         self.assertContains(
             payment_list, reverse("paiements:apercu_comptabilite_pdf")
+        )
+        self.assertContains(
+            payment_list,
+            f'href="{reverse("paiements:rapport_comptable")}" '
+            'class="btn btn-outline-primary"',
+        )
+        self.assertNotContains(
+            payment_list,
+            f'href="{reverse("paiements:apercu_comptabilite_pdf")}" '
+            'class="btn btn-outline-primary" target="_blank"',
         )
 
         modes = self.client.get(reverse("paiements:modes_encaissement_eleves"))

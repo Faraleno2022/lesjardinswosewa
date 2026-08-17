@@ -17,8 +17,11 @@
         <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#filtresModal">
             <i class="fas fa-filter me-1"></i>Filtres
         </button>
-        <a href="{% url 'paiements:apercu_comptabilite_pdf' %}" class="btn btn-outline-primary" target="_blank" rel="noopener">
+        <a href="{% url 'paiements:rapport_comptable' %}" class="btn btn-outline-primary">
             <i class="fas fa-book-open me-1"></i>Rapport comptable
+        </a>
+        <a href="{% url 'paiements:garde_prolongee_report' %}" class="btn btn-outline-primary">
+            <i class="fas fa-clock me-1"></i>Garde prolongée
         </a>
         <div class="btn-group">
             <button type="button" class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">

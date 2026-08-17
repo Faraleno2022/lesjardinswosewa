@@ -18,6 +18,11 @@ from .views_rapport_comptable import (
     export_rapport_comptable_excel,
 )
 from .views_modes_encaissement import payment_modes_students
+from .views_garde_prolongee import (
+    garde_prolongee_report,
+    export_garde_prolongee_pdf,
+    export_garde_prolongee_excel,
+)
 
 app_name = 'paiements'
 
@@ -69,6 +74,9 @@ urlpatterns = [
     path('rapport/comptabilite/', rapport_comptable, name='rapport_comptable'),
     path('rapport/comptabilite/pdf/', export_rapport_comptable_pdf, name='export_rapport_comptable_pdf'),
     path('rapport/comptabilite/excel/', export_rapport_comptable_excel, name='export_rapport_comptable_excel'),
+    path('rapport/garde-prolongee/', garde_prolongee_report, name='garde_prolongee_report'),
+    path('export/garde-prolongee/pdf/', export_garde_prolongee_pdf, name='export_garde_prolongee_pdf'),
+    path('export/garde-prolongee/excel/', export_garde_prolongee_excel, name='export_garde_prolongee_excel'),
     path(
         'rapport/modes-encaissement/',
         payment_modes_students,
