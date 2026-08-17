@@ -272,6 +272,10 @@ class RapportComptableProfessionnelTests(TestCase):
         self.assertEqual(sheet["A11"].value, "TOTAL")
 
     def test_tableau_par_mode_affiche_eleves_montants_et_soldes(self):
+        self.assertEqual(
+            reverse("paiements:modes_encaissement_eleves"),
+            "/paiements/rapport/modes-encaissement/",
+        )
         response = self.client.get(
             reverse("paiements:modes_encaissement_eleves"),
             {
@@ -300,6 +304,16 @@ class RapportComptableProfessionnelTests(TestCase):
         self.assertEqual(mobile_row["total_due"], Decimal("120000"))
         self.assertEqual(mobile_row["remaining"], Decimal("30000"))
         self.assertEqual(mobile_row["situation"], "Partiel - remise appliquée")
+
+        legacy_response = self.client.get(
+            reverse("paiements:modes_encaissement_eleves_legacy"),
+            {
+                "classe_id": self.classe.pk,
+                "date_debut": "2026-01-01",
+                "date_fin": "2026-01-31",
+            },
+        )
+        self.assertEqual(legacy_response.status_code, 200)
 
     def test_filtres_dynamiques_par_mode_statut_recherche_et_fragment(self):
         response = self.client.get(
