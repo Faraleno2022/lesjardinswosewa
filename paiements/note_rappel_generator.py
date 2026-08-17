@@ -18,6 +18,7 @@ from datetime import datetime, timedelta
 import os
 from io import BytesIO
 from PIL import Image as PILImage
+from paiements.calculs import filtre_types_scolarite
 
 def generer_note_rappel_eleve(eleve, response=None):
     """Génère une note de rappel pour un élève spécifique"""
@@ -161,8 +162,10 @@ def generer_note_rappel_eleve(eleve, response=None):
             montant_total = config.montant_inscription + config.montant_scolarite
 
             total_paye = Paiement.objects.filter(
-                eleve=eleve, statut='VALIDE'
-            ).aggregate(total=Sum('montant'))['total'] or Decimal('0')
+                eleve=eleve,
+                annee_scolaire=getattr(eleve.classe, 'annee_scolaire', ''),
+                statut='VALIDE',
+            ).filter(filtre_types_scolarite()).aggregate(total=Sum('montant'))['total'] or Decimal('0')
             reste_a_payer = max(Decimal('0'), montant_total - total_paye)
 
             if reste_a_payer > 0:
@@ -317,8 +320,9 @@ def generer_notes_rappel_classe(classe):
         for eleve in eleves:
             paiements_effectues = Paiement.objects.filter(
                 eleve=eleve,
-                statut='VALIDE'
-            ).aggregate(total=Sum('montant'))['total'] or 0
+                annee_scolaire=getattr(eleve.classe, 'annee_scolaire', ''),
+                statut='VALIDE',
+            ).filter(filtre_types_scolarite()).aggregate(total=Sum('montant'))['total'] or 0
             
             reste_a_payer = montant_total - paiements_effectues
             

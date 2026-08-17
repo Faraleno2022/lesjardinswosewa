@@ -81,6 +81,9 @@ MySchoolGN_Output/
 *.spec
 .codex-tools/
 
+# Secret Django propre à chaque poste (généré par run_server.py)
+.secret_key
+
 # Licences générées localement
 license.dat
 license_*.lic
@@ -96,3 +99,12 @@ tmp/
 # Journaux de build locaux
 build_log*.txt
 iscc_log*.txt
+
+# Sauvegardes locales : archives lourdes contenant des données personnelles
+# d'élèves, et réglages propres à chaque poste. Jamais dans le dépôt.
+sauvegardes/
+myschoolgn_sauvegarde_*.zip
+sauvegarde_config.json
+sync_config.json
+db.sqlite3.avant_restauration_*
+media_avant_restauration_*

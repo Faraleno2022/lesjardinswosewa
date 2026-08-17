@@ -318,12 +318,18 @@
                     </div>
                     
                     {% if not periode_courante.cloturee %}
-                    <div class="mt-3">
-                        <a href="{% url 'salaires:calculer_salaires' periode_courante.id %}" 
-                           class="btn btn-success btn-sm"
-                           onclick="return confirm('Calculer les salaires pour cette période ?')">
-                            <i class="fas fa-play"></i> Calculer les Salaires
+                    <div class="mt-3 d-flex justify-content-center gap-2 flex-wrap">
+                        <a href="{% url 'salaires:saisir_heures_mensuelles' periode_courante.id %}"
+                           class="btn btn-primary btn-sm">
+                            <i class="fas fa-clock"></i> Heures mensuelles
                         </a>
+                        <form method="post" action="{% url 'salaires:calculer_salaires' periode_courante.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-success btn-sm"
+                                    onclick="return confirm('Calculer les salaires pour cette période ?')">
+                                <i class="fas fa-play"></i> Calculer les Salaires
+                            </button>
+                        </form>
                     </div>
                     {% endif %}
                 </div>

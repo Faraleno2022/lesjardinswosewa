@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     Enseignant, TypeEnseignant, StatutEnseignant, 
     AffectationClasse, PeriodeSalaire, EtatSalaire, 
-    DetailHeuresClasse, PresenceEnseignant
+    DetailHeuresClasse, PresenceEnseignant, SaisieHeuresMensuelles
 )
 
 
@@ -36,3 +36,11 @@ class PresenceEnseignantAdmin(admin.ModelAdmin):
         if not change:  # Nouveau pointage
             obj.pointe_par = request.user
         super().save_model(request, obj, form, change)
+
+
+@admin.register(SaisieHeuresMensuelles)
+class SaisieHeuresMensuellesAdmin(admin.ModelAdmin):
+    list_display = ['enseignant', 'periode', 'heures', 'saisi_par', 'date_modification']
+    list_filter = ['periode__annee', 'periode__mois', 'periode__ecole']
+    search_fields = ['enseignant__nom', 'enseignant__prenoms']
+    raw_id_fields = ['enseignant', 'periode', 'saisi_par']

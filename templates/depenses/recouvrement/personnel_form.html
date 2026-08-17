@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block title %}Modifier un membre du personnel - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h4 mb-0"><i class="fas fa-user-pen me-2 text-primary"></i>Modifier — {{ membre.nom_complet }}</h1>
+  <a href="{% url 'depenses:personnel_dashboard' %}?annee={{ annee }}" class="btn btn-sm btn-outline-secondary">
+    <i class="fas fa-arrow-left me-1"></i>Retour aux salaires
+  </a>
+</div>
+
+<div class="row">
+  <div class="col-lg-8">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body">
+        <form method="post" class="row g-3">
+          {% csrf_token %}
+          <input type="hidden" name="annee" value="{{ annee }}">
+          <div class="col-md-6">
+            <label class="form-label small fw-semibold" for="{{ form.prenom.id_for_label }}">Prénom</label>
+            {{ form.prenom }}
+            {% for erreur in form.prenom.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-semibold" for="{{ form.nom.id_for_label }}">Nom</label>
+            {{ form.nom }}
+            {% for erreur in form.nom.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-semibold" for="{{ form.fonction.id_for_label }}">Fonction</label>
+            {{ form.fonction }}
+            {% for erreur in form.fonction.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-semibold" for="{{ form.groupe.id_for_label }}">Groupe</label>
+            {{ form.groupe }}
+            {% for erreur in form.groupe.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
+          </div>
+          <div class="col-12">
+            <label class="form-label small fw-semibold" for="{{ form.observation.id_for_label }}">Observation</label>
+            {{ form.observation }}
+          </div>
+          <div class="col-12">
+            <div class="form-check">
+              {{ form.actif }}
+              <label class="form-check-label small" for="{{ form.actif.id_for_label }}">En activité</label>
+            </div>
+          </div>
+          <div class="col-12 d-flex gap-2">
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i>Enregistrer</button>
+            <a href="{% url 'depenses:personnel_dashboard' %}?annee={{ annee }}" class="btn btn-outline-secondary">Annuler</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="alert alert-info small mb-0">
+      <i class="fas fa-circle-info me-1"></i>
+      Les montants mensuels ne se modifient pas ici : ils se saisissent
+      directement dans le tableau du groupe, mois par mois.
+    </div>
+  </div>
+</div>
+{% endblock %}

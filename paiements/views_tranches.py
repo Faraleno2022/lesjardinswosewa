@@ -1,13 +1,13 @@
 from django.contrib.auth.decorators import login_required
-from django.http import HttpResponse, HttpResponseForbidden
 from django.db.models import Sum
-from django.utils import timezone
-from datetime import date, datetime
+from django.http import HttpResponse, HttpResponseForbidden
+from datetime import datetime
 from decimal import Decimal
 
-from eleves.models import Classe
+from eleves.models import Classe, Ecole
 from eleves.utils_annee import get_annee_active
-from paiements.models import Paiement
+from paiements.models import Paiement, PaiementRemise
+from paiements.calculs import filtre_types_scolarite, normaliser_libelle
 from utilisateurs.utils import user_is_admin, user_school
 from rapports.utils import _draw_header_and_watermark
 
@@ -15,19 +15,144 @@ from rapports.utils import _draw_header_and_watermark
 # ReportLab: fera l'objet d'un import différé dans la vue PDF
 
 
-def _annee_vers_dates(annee_scolaire: str):
-    try:
-        deb, fin = annee_scolaire.split('-')
-        an_deb = int(deb)
-        an_fin = int(fin)
-        return an_deb, an_fin
-    except Exception:
-        # Fallback année en cours selon rentrée (Septembre)
-        today = timezone.now().date()
-        y = today.year
-        if today.month >= 9:
-            return y, y + 1
-        return y - 1, y
+TRANCHES_EXPORT_HEADERS = [
+    'Élève',
+    'Inscription payée',
+    'Réinscription payée',
+    'Tranche 1 payée',
+    'Tranche 2 payée',
+    'Tranche 3 payée',
+    'Total dû',
+    'Total payé',
+    'Remise (GNF)',
+    'Remise (%)',
+    'Total couvert',
+    'Reste',
+    'Situation',
+]
+
+
+def _pourcentage_remise(montant_remise, base_scolarite):
+    """Taux effectif de remise sur les trois tranches de scolarité."""
+    montant_remise = Decimal(str(montant_remise or 0))
+    base_scolarite = Decimal(str(base_scolarite or 0))
+    if montant_remise <= 0 or base_scolarite <= 0:
+        return Decimal('0')
+    return min(Decimal('100'), (montant_remise * Decimal('100')) / base_scolarite)
+
+
+def _paiements_fallback_par_poste(eleve, annee_scolaire=None):
+    """Totalise les reçus sans compter plusieurs fois un paiement combiné.
+
+    Sans échéancier la ventilation d'un reçu combiné est indémontrable : son
+    montant est conservé dans le total, mais pas inventé dans plusieurs
+    colonnes de tranches.
+    """
+    paiements = Paiement.objects.filter(eleve=eleve, statut='VALIDE').filter(
+        filtre_types_scolarite()
+    )
+    if annee_scolaire:
+        paiements = paiements.filter(annee_scolaire=annee_scolaire)
+    postes = {
+        'inscription': Decimal('0'),
+        'reinscription': Decimal('0'),
+        'tranche_1': Decimal('0'),
+        'tranche_2': Decimal('0'),
+        'tranche_3': Decimal('0'),
+    }
+    total = Decimal('0')
+    for paiement in paiements.select_related('type_paiement'):
+        montant = Decimal(str(paiement.montant or 0))
+        total += montant
+        nom = normaliser_libelle(paiement.type_paiement.nom)
+        cibles = []
+        compact = ''.join(nom.split())
+        if 'reinscription' in compact:
+            cibles.append('reinscription')
+        elif 'inscription' in nom:
+            cibles.append('inscription')
+        for numero in (1, 2, 3):
+            if f'tranche {numero}' in nom or f'tranche{numero}' in nom:
+                cibles.append(f'tranche_{numero}')
+        if len(cibles) == 1:
+            postes[cibles[0]] += montant
+    remises = PaiementRemise.objects.filter(
+        paiement__in=paiements,
+    ).aggregate(total=Sum('montant_remise'))['total'] or Decimal('0')
+    return postes, total, Decimal(str(remises))
+
+
+def _donnees_tranches_eleve(eleve, annee_scolaire=None):
+    """Retourne une ligne commune aux exports PDF et Excel.
+
+    Les frais d'admission sont placés dans une seule des deux colonnes selon
+    ``nature_frais``. Ils ne sont donc jamais comptés deux fois dans le total.
+    """
+    if annee_scolaire:
+        echeancier = eleve.echeanciers.filter(
+            annee_scolaire=annee_scolaire
+        ).first()
+    else:
+        echeancier = getattr(eleve, 'echeancier', None)
+
+    inscription = reinscription = Decimal('0')
+    tranche_1 = tranche_2 = tranche_3 = Decimal('0')
+    total_du = total_paye = remise = reste = Decimal('0')
+    total_couvert = Decimal('0')
+    pourcentage_remise = Decimal('0')
+    situation = 'Échéancier absent'
+
+    if echeancier is not None:
+        admission_payee = Decimal(str(echeancier.frais_inscription_paye or 0))
+        if echeancier.nature_frais == 'REINSCRIPTION':
+            reinscription = admission_payee
+        else:
+            inscription = admission_payee
+        tranche_1 = Decimal(str(echeancier.tranche_1_payee or 0))
+        tranche_2 = Decimal(str(echeancier.tranche_2_payee or 0))
+        tranche_3 = Decimal(str(echeancier.tranche_3_payee or 0))
+        total_du = Decimal(str(echeancier.total_du or 0))
+        total_paye = inscription + reinscription + tranche_1 + tranche_2 + tranche_3
+        remise = Decimal(str(echeancier.total_remises_valides or 0))
+        base_scolarite = sum((
+            Decimal(str(echeancier.tranche_1_due or 0)),
+            Decimal(str(echeancier.tranche_2_due or 0)),
+            Decimal(str(echeancier.tranche_3_due or 0)),
+        ), Decimal('0'))
+        pourcentage_remise = _pourcentage_remise(remise, base_scolarite)
+        total_couvert = min(total_du, total_paye + remise)
+        reste = max(Decimal('0'), total_du - total_couvert)
+        if total_du <= 0:
+            situation = 'Échéancier vide'
+        elif reste == 0:
+            situation = 'Soldé - remise appliquée' if remise else 'Soldé'
+        elif total_couvert > 0:
+            situation = 'Partiel - remise appliquée' if remise else 'Partiel'
+        else:
+            situation = 'À payer'
+    else:
+        postes, total_paye, remise = _paiements_fallback_par_poste(eleve, annee_scolaire)
+        inscription = postes['inscription']
+        reinscription = postes['reinscription']
+        tranche_1 = postes['tranche_1']
+        tranche_2 = postes['tranche_2']
+        tranche_3 = postes['tranche_3']
+        total_couvert = total_paye + remise
+
+    return {
+        'inscription': inscription,
+        'reinscription': reinscription,
+        'tranche_1': tranche_1,
+        'tranche_2': tranche_2,
+        'tranche_3': tranche_3,
+        'total_du': total_du,
+        'total_paye': Decimal(str(total_paye or 0)),
+        'remise': remise,
+        'pourcentage_remise': pourcentage_remise,
+        'total_couvert': total_couvert,
+        'reste': reste,
+        'situation': situation,
+    }
 
 
 @login_required
@@ -83,7 +208,16 @@ def export_tranches_par_classe_pdf(request):
         classes = classes.filter(annee_scolaire=annee_scolaire)
 
     # Anti-abus: limiter le nombre de classes exportées en une requête
-    classes = classes.order_by('ecole__nom', 'niveau', 'nom')[:200]
+    classes = list(classes.order_by('ecole__nom', 'niveau', 'nom')[:200])
+
+    # L'en-tete doit recevoir l'ecole reelle du perimetre exporte. Sans ce
+    # parametre, le helper utilisait seulement le logo statique par defaut.
+    ecole_export = ecole_user if restreindre else None
+    ecole_ids = {classe.ecole_id for classe in classes}
+    if len(ecole_ids) == 1:
+        ecole_export = classes[0].ecole
+    elif not classes and ecole_id and not restreindre:
+        ecole_export = Ecole.objects.filter(pk=ecole_id).first()
 
     # Préparer réponse PDF
     response = HttpResponse(content_type='application/pdf')
@@ -103,22 +237,23 @@ def export_tranches_par_classe_pdf(request):
     doc = SimpleDocTemplate(
         response,
         pagesize=landscape(A4),
-        rightMargin=20, leftMargin=20, topMargin=60, bottomMargin=30
+        rightMargin=20, leftMargin=20, topMargin=80, bottomMargin=30
     )
     elements = []
     styles = getSampleStyleSheet()
-    cell = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=8, leading=9)
+    cell = ParagraphStyle('Cell', parent=styles['Normal'], fontSize=6.2, leading=7.2)
+    header_cell = ParagraphStyle(
+        'HeaderCell', parent=cell, fontName='Helvetica-Bold', textColor=colors.white,
+        alignment=1,
+    )
 
     titre = 'Tranches par classe'
     if annee_scolaire:
-        titre += f" – Année {annee_scolaire}"
+        titre += f" - Année {annee_scolaire}"
     elements.append(Paragraph(titre, styles['Title']))
     elements.append(Spacer(1, 0.5*cm))
 
-    header = [
-        'Élève', 'Inscription payée', 'Tranche 1 payée', 'Tranche 2 payée', 'Tranche 3 payée',
-        'Total dû', 'Total payé', 'Reste'
-    ]
+    header = TRANCHES_EXPORT_HEADERS
 
     def P(x):
         return Paragraph(str(x or ''), cell)
@@ -126,11 +261,11 @@ def export_tranches_par_classe_pdf(request):
     # Parcours des classes
     for classe in classes:
         # Titre de la classe
-        titre_classe = f"Classe: {classe.nom} – {getattr(classe.ecole, 'nom', '')}"
+        titre_classe = f"Classe: {classe.nom} - {getattr(classe.ecole, 'nom', '')}"
         elements.append(Paragraph(titre_classe, styles['Heading2']))
         elements.append(Spacer(1, 0.2*cm))
 
-        data = [header]
+        data = [[Paragraph(str(label), header_cell) for label in header]]
 
         # Élèves de la classe
         # Utiliser le related_name défini sur Eleve.classe = 'eleves'
@@ -141,57 +276,37 @@ def export_tranches_par_classe_pdf(request):
             eleves = []
 
         for e in eleves:
-            # Tenter via échéancier s'il existe
-            eche = getattr(e, 'echeancier', None)
-            insc = t1 = t2 = t3 = Decimal('0')
-            total_du = total_paye = reste = Decimal('0')
-
-            if eche is not None and (not annee_scolaire or eche.annee_scolaire == annee_scolaire):
-                insc = eche.frais_inscription_paye or 0
-                t1 = eche.tranche_1_payee or 0
-                t2 = eche.tranche_2_payee or 0
-                t3 = eche.tranche_3_payee or 0
-                total_du = (eche.frais_inscription_du or 0) + (eche.tranche_1_due or 0) + (eche.tranche_2_due or 0) + (eche.tranche_3_due or 0)
-                total_paye = (insc or 0) + (t1 or 0) + (t2 or 0) + (t3 or 0)
-                reste = (total_du or 0) - (total_paye or 0)
-            else:
-                # Fallback: somme depuis Paiement validé
-                paiements = Paiement.objects.filter(eleve=e, statut='VALIDE')
-                if annee_scolaire:
-                    an_deb, an_fin = _annee_vers_dates(annee_scolaire)
-                    start = date(an_deb, 9, 1)
-                    end = date(an_fin, 8, 31)
-                    paiements = paiements.filter(date_paiement__range=(start, end))
-                insc = paiements.filter(type_paiement__nom__icontains='inscription').aggregate(total=Sum('montant'))['total'] or 0
-                t1 = paiements.filter(type_paiement__nom__icontains='tranche 1').aggregate(total=Sum('montant'))['total'] or 0
-                t2 = paiements.filter(type_paiement__nom__icontains='tranche 2').aggregate(total=Sum('montant'))['total'] or 0
-                t3 = paiements.filter(type_paiement__nom__icontains='tranche 3').aggregate(total=Sum('montant'))['total'] or 0
-                # Sans échéancier, on ne connaît pas le dû exact; on met 0 et reste = 0
-                total_du = Decimal('0')
-                total_paye = (insc or 0) + (t1 or 0) + (t2 or 0) + (t3 or 0)
-                reste = Decimal('0')
+            ligne = _donnees_tranches_eleve(e, annee_scolaire)
 
             # Construire le nom de l'élève sans déclencher d'erreur si un attribut manque
             nom_affiche = getattr(e, 'nom_complet', None) or f"{getattr(e, 'prenom', '')} {getattr(e, 'nom', '')}".strip()
             data.append([
                 P(nom_affiche),
-                f"{insc:,}".replace(',', ' '),
-                f"{t1:,}".replace(',', ' '),
-                f"{t2:,}".replace(',', ' '),
-                f"{t3:,}".replace(',', ' '),
-                f"{total_du:,}".replace(',', ' '),
-                f"{total_paye:,}".replace(',', ' '),
-                f"{reste:,}".replace(',', ' '),
+                f"{ligne['inscription']:,}".replace(',', ' '),
+                f"{ligne['reinscription']:,}".replace(',', ' '),
+                f"{ligne['tranche_1']:,}".replace(',', ' '),
+                f"{ligne['tranche_2']:,}".replace(',', ' '),
+                f"{ligne['tranche_3']:,}".replace(',', ' '),
+                f"{ligne['total_du']:,}".replace(',', ' '),
+                f"{ligne['total_paye']:,}".replace(',', ' '),
+                f"{ligne['remise']:,}".replace(',', ' '),
+                f"{ligne['pourcentage_remise']:.1f} %",
+                f"{ligne['total_couvert']:,}".replace(',', ' '),
+                f"{ligne['reste']:,}".replace(',', ' '),
+                P(ligne['situation']),
             ])
 
         # Construire la table pour la classe
-        col_widths = [5.5*cm, 3*cm, 3*cm, 3*cm, 3*cm, 3*cm, 3*cm, 3*cm]
+        col_widths = [
+            3.8*cm, 1.7*cm, 1.8*cm, 1.65*cm, 1.65*cm, 1.65*cm,
+            1.8*cm, 1.8*cm, 1.8*cm, 1.45*cm, 1.9*cm, 1.7*cm, 2.8*cm,
+        ]
         table = Table(data, repeatRows=1, colWidths=col_widths)
         table.setStyle(TableStyle([
-            ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
-            ('TEXTCOLOR', (0,0), (-1,0), colors.black),
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#174A6E')),
+            ('TEXTCOLOR', (0,0), (-1,0), colors.white),
             ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0,0), (-1,0), 8),
+            ('FONTSIZE', (0,0), (-1,0), 6.2),
             ('ALIGN', (1,1), (-1,-1), 'RIGHT'),
             ('ALIGN', (0,0), (0,-1), 'LEFT'),
             ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
@@ -205,12 +320,24 @@ def export_tranches_par_classe_pdf(request):
         elements.append(Spacer(1, 0.6*cm))
 
     # Construire le document avec en-tête + filigrane logo
-    doc.build(elements, onFirstPage=_draw_header_and_watermark, onLaterPages=_draw_header_and_watermark)
+    def dessiner_entete(canvas, document):
+        _draw_header_and_watermark(
+            canvas,
+            document,
+            ecole=ecole_export,
+            titre_override='Tranches par classe',
+        )
+
+    doc.build(
+        elements,
+        onFirstPage=dessiner_entete,
+        onLaterPages=dessiner_entete,
+    )
     return response
 
 @login_required
 def export_tranches_par_classe_excel(request):
-    """Export Excel (XLSX) des tranches par classe: Élève, Inscription payée, Tranche 1, Tranche 2, Tranche 3, Total dû, Total payé, Reste.
+    """Export Excel (XLSX) des tranches par classe, inscription et réinscription séparées.
 
     Filtres GET facultatifs: ecole, classe/classe_id, annee_scolaire.
     Respecte la séparation par école pour non-admin.
@@ -229,6 +356,7 @@ def export_tranches_par_classe_excel(request):
     # Import openpyxl
     try:
         from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
         from openpyxl.utils import get_column_letter
     except Exception:
         return HttpResponse("OpenPyXL n'est pas installé. Veuillez exécuter: pip install openpyxl", status=500)
@@ -268,69 +396,59 @@ def export_tranches_par_classe_excel(request):
     ws_index.append(['Tranches par classe', f"Année: {annee_scolaire}" if annee_scolaire else ''])
     ws_index.append(['Écoles / Classes listées:'])
 
-    headers = ['Élève', 'Inscription payée', 'Tranche 1 payée', 'Tranche 2 payée', 'Tranche 3 payée', 'Total dû', 'Total payé', 'Reste']
+    headers = TRANCHES_EXPORT_HEADERS
 
-    from django.db.models import Sum
-    from datetime import date
-    from decimal import Decimal
-
-    def annee_vers_dates(annee_scolaire: str):
-        try:
-            deb, fin = annee_scolaire.split('-')
-            an_deb = int(deb)
-            an_fin = int(fin)
-            return an_deb, an_fin
-        except Exception:
-            today = timezone.now().date()
-            y = today.year
-            if today.month >= 9:
-                return y, y + 1
-            return y - 1, y
-
-    for idx, classe in enumerate(classes, start=1):
+    for classe in classes:
         sheet_name = f"{classe.nom[:25]}"  # Limite Excel <=31
         ws = wb.create_sheet(title=sheet_name)
-        ws.append([f"Classe: {classe.nom} – {getattr(classe.ecole, 'nom', '')}"])
+        ws.append([f"Classe: {classe.nom} - {getattr(classe.ecole, 'nom', '')}"])
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=13)
+        ws['A1'].fill = PatternFill('solid', fgColor='DCEAF3')
+        ws['A1'].font = Font(color='174A6E', bold=True, size=13)
+        ws['A1'].alignment = Alignment(horizontal='left', vertical='center')
         ws.append(headers)
 
         eleves_mgr = getattr(classe, 'eleves', None)
         eleves = eleves_mgr.all().order_by('nom', 'prenom') if eleves_mgr is not None else []
 
         for e in eleves:
-            eche = getattr(e, 'echeancier', None)
-            insc = t1 = t2 = t3 = Decimal('0')
-            total_du = total_paye = reste = Decimal('0')
-            if eche is not None and (not annee_scolaire or eche.annee_scolaire == annee_scolaire):
-                insc = eche.frais_inscription_paye or 0
-                t1 = eche.tranche_1_payee or 0
-                t2 = eche.tranche_2_payee or 0
-                t3 = eche.tranche_3_payee or 0
-                total_du = (eche.frais_inscription_du or 0) + (eche.tranche_1_due or 0) + (eche.tranche_2_due or 0) + (eche.tranche_3_due or 0)
-                total_paye = (insc or 0) + (t1 or 0) + (t2 or 0) + (t3 or 0)
-                reste = (total_du or 0) - (total_paye or 0)
-            else:
-                paiements = Paiement.objects.filter(eleve=e, statut='VALIDE')
-                if annee_scolaire:
-                    an_deb, an_fin = annee_vers_dates(annee_scolaire)
-                    start = date(an_deb, 9, 1)
-                    end = date(an_fin, 8, 31)
-                    paiements = paiements.filter(date_paiement__range=(start, end))
-                insc = paiements.filter(type_paiement__nom__icontains='inscription').aggregate(total=Sum('montant'))['total'] or 0
-                t1 = paiements.filter(type_paiement__nom__icontains='tranche 1').aggregate(total=Sum('montant'))['total'] or 0
-                t2 = paiements.filter(type_paiement__nom__icontains='tranche 2').aggregate(total=Sum('montant'))['total'] or 0
-                t3 = paiements.filter(type_paiement__nom__icontains='tranche 3').aggregate(total=Sum('montant'))['total'] or 0
-                total_du = Decimal('0')
-                total_paye = (insc or 0) + (t1 or 0) + (t2 or 0) + (t3 or 0)
-                reste = Decimal('0')
+            ligne = _donnees_tranches_eleve(e, annee_scolaire)
 
             ws.append([
                 getattr(e, 'nom_complet', f"{e.prenom} {e.nom}"),
-                int(insc), int(t1), int(t2), int(t3), int(total_du), int(total_paye), int(reste)
+                int(ligne['inscription']),
+                int(ligne['reinscription']),
+                int(ligne['tranche_1']),
+                int(ligne['tranche_2']),
+                int(ligne['tranche_3']),
+                int(ligne['total_du']),
+                int(ligne['total_paye']),
+                int(ligne['remise']),
+                float(ligne['pourcentage_remise'] / Decimal('100')),
+                int(ligne['total_couvert']),
+                int(ligne['reste']),
+                ligne['situation'],
             ])
 
-        # Ajuster largeur colonnes simple
-        for col in range(1, 9):
-            ws.column_dimensions[get_column_letter(col)].width = 22 if col == 1 else 16
+        for cell_header in ws[2]:
+            cell_header.fill = PatternFill('solid', fgColor='174A6E')
+            cell_header.font = Font(color='FFFFFF', bold=True)
+            cell_header.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        ws.freeze_panes = 'A3'
+        ws.auto_filter.ref = f"A2:M{ws.max_row}"
+        for row in ws.iter_rows(min_row=3, min_col=2, max_col=12):
+            for cell_value in row:
+                cell_value.number_format = '#,##0'
+        for cell_value in ws['J'][2:]:
+            cell_value.number_format = '0.0%'
+        for col in range(1, 14):
+            if col == 1:
+                width = 27
+            elif col == 13:
+                width = 29
+            else:
+                width = 16
+            ws.column_dimensions[get_column_letter(col)].width = width
 
         # Index line
         ws_index.append([getattr(classe.ecole, 'nom', ''), classe.nom, sheet_name])
@@ -338,6 +456,15 @@ def export_tranches_par_classe_excel(request):
     # Supprimer la feuille par défaut si vide
     if ws_index.max_row == 2:
         ws_index.append(['Aucune classe'])
+    ws_index['A1'].fill = PatternFill('solid', fgColor='174A6E')
+    ws_index['A1'].font = Font(color='FFFFFF', bold=True, size=13)
+    ws_index['B1'].fill = PatternFill('solid', fgColor='174A6E')
+    ws_index['B1'].font = Font(color='FFFFFF', bold=True)
+    ws_index['A2'].font = Font(color='174A6E', bold=True)
+    ws_index.column_dimensions['A'].width = 36
+    ws_index.column_dimensions['B'].width = 27
+    ws_index.column_dimensions['C'].width = 29
+    ws_index.freeze_panes = 'A3'
 
     from io import BytesIO
     stream = BytesIO()

@@ -16,15 +16,13 @@ from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import (
-    Case, When, Value, F, Q, Sum, Count, DecimalField, ExpressionWrapper,
-)
-from django.db.models.functions import Coalesce, Least
+from django.db.models import F
 from django.http import HttpResponse
 
 from eleves.models import Classe, Eleve
 from utilisateurs.utils import filter_by_user_school, user_school
 from .models import Paiement, EcheancierPaiement, Relance
+from .services import calculer_situations_echeanciers
 
 
 def _fmt_gnf(v):
@@ -66,37 +64,31 @@ def _collecter_donnees(request):
         paiements_par_classe.setdefault(p.eleve.classe_id, []).append(p)
 
     # ── 2. Retards (même logique que rapport_retards) ─────────────────
-    today = date.today()
-    exigible_expr = (
-        Case(When(date_echeance_inscription__lt=today, then=F('frais_inscription_du')),
-             default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
-        + Case(When(date_echeance_tranche_1__lt=today, then=F('tranche_1_due')),
-               default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
-        + Case(When(date_echeance_tranche_2__lt=today, then=F('tranche_2_due')),
-               default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
-        + Case(When(date_echeance_tranche_3__lt=today, then=F('tranche_3_due')),
-               default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
+    try:
+        today = date.fromisoformat(au) if au else date.today()
+    except ValueError:
+        today = date.today()
+    echeanciers = (EcheancierPaiement.objects
+                    .filter(
+                        eleve__classe_id__in=classes_ids,
+                        eleve__statut='ACTIF',
+                        annee_scolaire=F('eleve__classe__annee_scolaire'),
+                    )
+                    .select_related('eleve', 'eleve__classe'))
+    retards = []
+    echeanciers = list(echeanciers)
+    situations = calculer_situations_echeanciers(
+        echeanciers,
+        date_reference=today,
+        date_limite=today if au else None,
     )
-    remises_expr = Coalesce(
-        Sum('eleve__paiements__remises__montant_remise', filter=Q(eleve__paiements__statut='VALIDE')),
-        Value(0), output_field=DecimalField(max_digits=12, decimal_places=0),
-    )
-    remises_applicables = Least(remises_expr, exigible_expr)
-    paye_effectif_expr = (
-        F('frais_inscription_paye') + F('tranche_1_payee')
-        + F('tranche_2_payee') + F('tranche_3_payee') + remises_applicables
-    )
-    retard_expr = ExpressionWrapper(
-        exigible_expr - paye_effectif_expr,
-        output_field=DecimalField(max_digits=12, decimal_places=0),
-    )
-    retards = (EcheancierPaiement.objects
-               .filter(eleve__classe_id__in=classes_ids, eleve__statut='ACTIF')
-               .select_related('eleve', 'eleve__classe')
-               .annotate(retard=retard_expr, exigible=exigible_expr)
-               .filter(retard__gt=0)
-               .order_by('eleve__classe__nom', '-retard'))
-    retards = list(retards)
+    for echeancier in echeanciers:
+        situation = situations[echeancier.pk]
+        if situation['retard'] > 0:
+            echeancier.retard = situation['retard']
+            echeancier.exigible = situation['exigible']
+            retards.append(echeancier)
+    retards.sort(key=lambda item: (item.eleve.classe.nom, -item.retard))
 
     retards_par_classe = {}
     for e in retards:

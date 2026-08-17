@@ -1,6 +1,8 @@
 from django.db import models
 from django.contrib.auth.models import User
-from decimal import Decimal
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
+from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime
 from eleves.models import Classe, Ecole
 from synchronisation.mixins import SyncTrackedModel
@@ -12,7 +14,14 @@ class TypeEnseignant(models.TextChoices):
     MATERNELLE = 'MATERNELLE', 'Maternelle'
     PRIMAIRE = 'PRIMAIRE', 'Primaire'
     SECONDAIRE = 'SECONDAIRE', 'Secondaire (taux horaire)'
-    ADMINISTRATEUR = 'ADMINISTRATEUR', 'Administrateur'
+    ADMINISTRATEUR = 'ADMINISTRATEUR', 'Cadre / Administrateur'
+
+
+class SourceHeuresSalaire(models.TextChoices):
+    NON_APPLICABLE = '', 'Non applicable'
+    POINTAGE = 'POINTAGE', 'Pointages arrivée / départ'
+    SAISIE_MENSUELLE = 'SAISIE_MENSUELLE', 'Saisie mensuelle globale'
+    SALAIRE_FIXE = 'SALAIRE_FIXE', 'Salaire fixe négocié'
 
 
 class StatutEnseignant(models.TextChoices):
@@ -54,7 +63,8 @@ class Enseignant(SyncTrackedModel):
         null=True, 
         blank=True,
         verbose_name="Taux horaire (GNF)",
-        help_text="Pour les enseignants du secondaire uniquement"
+        help_text="Pour les enseignants du secondaire uniquement",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     salaire_fixe = models.DecimalField(
         max_digits=12, 
@@ -62,15 +72,20 @@ class Enseignant(SyncTrackedModel):
         null=True, 
         blank=True,
         verbose_name="Salaire fixe (GNF)",
-        help_text="Pour garderie, maternelle, primaire et administrateurs"
+        help_text="Montant mensuel négocié pour garderie, maternelle, primaire et cadres/administrateurs",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     heures_mensuelles = models.DecimalField(
         max_digits=6, 
         decimal_places=2, 
         null=True, 
         blank=True,
-        verbose_name="Heures mensuelles",
-        help_text="Nombre d'heures de travail prévues par mois (pour calcul précis du salaire)"
+        verbose_name="Volume mensuel indicatif",
+        help_text="Volume indicatif du contrat. Le salaire réel utilise les pointages ou la saisie globale de la période.",
+        validators=[
+            MinValueValidator(Decimal('0')),
+            MaxValueValidator(Decimal('200')),
+        ],
     )
     
     # Dates
@@ -114,7 +129,7 @@ class Enseignant(SyncTrackedModel):
         ]
     
     def clean(self):
-        from django.core.exceptions import ValidationError
+        super().clean()
         
         if self.est_taux_horaire and not self.taux_horaire:
             raise ValidationError({
@@ -125,6 +140,12 @@ class Enseignant(SyncTrackedModel):
             raise ValidationError({
                 'salaire_fixe': f'Le salaire fixe est obligatoire pour les {self.get_type_enseignant_display().lower()}.'
             })
+
+    def save(self, *args, **kwargs):
+        # Les validateurs doivent aussi protéger les imports, scripts et API,
+        # pas uniquement les ModelForm de l'interface.
+        self.full_clean()
+        super().save(*args, **kwargs)
     
     def calculer_salaire_mensuel(self, heures_realisees=None):
         """
@@ -190,7 +211,11 @@ class AffectationClasse(SyncTrackedModel):
         null=True, 
         blank=True,
         verbose_name="Heures par semaine",
-        help_text="Nombre d'heures d'enseignement par semaine dans cette classe"
+        help_text="Nombre d'heures d'enseignement par semaine dans cette classe",
+        validators=[
+            MinValueValidator(Decimal('0')),
+            MaxValueValidator(Decimal('168')),
+        ],
     )
     
     # Matière enseignée (optionnel)
@@ -221,7 +246,7 @@ class AffectationClasse(SyncTrackedModel):
         return f"{self.enseignant.nom_complet} - {self.classe.nom}"
     
     def clean(self):
-        from django.core.exceptions import ValidationError
+        super().clean()
         
         if self.enseignant.est_taux_horaire and not self.heures_par_semaine:
             raise ValidationError({
@@ -232,6 +257,18 @@ class AffectationClasse(SyncTrackedModel):
             raise ValidationError({
                 'date_fin': 'La date de fin ne peut pas être antérieure à la date de début.'
             })
+        if (
+            self.enseignant_id
+            and self.classe_id
+            and self.enseignant.ecole_id != self.classe.ecole_id
+        ):
+            raise ValidationError({
+                'classe': "La classe et l'enseignant doivent appartenir à la même école."
+            })
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 
 class PeriodeSalaire(SyncTrackedModel):
@@ -250,7 +287,11 @@ class PeriodeSalaire(SyncTrackedModel):
         decimal_places=2, 
         default=Decimal('4.33'),
         verbose_name="Nombre de semaines",
-        help_text="Nombre moyen de semaines dans le mois (défaut: 4.33)"
+        help_text="Nombre moyen de semaines dans le mois (défaut: 4.33)",
+        validators=[
+            MinValueValidator(Decimal('0.01')),
+            MaxValueValidator(Decimal('6')),
+        ],
     )
     
     # Statut
@@ -290,6 +331,10 @@ class PeriodeSalaire(SyncTrackedModel):
             'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
         ]
         return f"{mois_noms[self.mois]} {self.annee} - {self.ecole.nom}"
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
     
     @property
     def nom_periode(self):
@@ -298,6 +343,83 @@ class PeriodeSalaire(SyncTrackedModel):
             'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
         ]
         return f"{mois_noms[self.mois]} {self.annee}"
+
+
+class SaisieHeuresMensuelles(SyncTrackedModel):
+    """Heures réelles saisies globalement pour un enseignant et une période.
+
+    Une ligne remplace explicitement la somme des pointages du mois. Une
+    valeur égale à zéro signifie donc bien qu'aucune heure n'est payable.
+    """
+
+    enseignant = models.ForeignKey(
+        Enseignant,
+        on_delete=models.CASCADE,
+        related_name='saisies_heures_mensuelles',
+        verbose_name="Enseignant",
+    )
+    periode = models.ForeignKey(
+        PeriodeSalaire,
+        on_delete=models.CASCADE,
+        related_name='saisies_heures_mensuelles',
+        verbose_name="Période",
+    )
+    heures = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        verbose_name="Heures mensuelles réalisées",
+        validators=[
+            MinValueValidator(Decimal('0')),
+            MaxValueValidator(Decimal('744')),
+        ],
+    )
+    saisi_par = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='saisies_heures_mensuelles',
+        verbose_name="Saisi par",
+    )
+    date_creation = models.DateTimeField(auto_now_add=True)
+    date_modification = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Saisie mensuelle d'heures"
+        verbose_name_plural = "Saisies mensuelles d'heures"
+        ordering = ['-periode__annee', '-periode__mois', 'enseignant__nom']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['enseignant', 'periode'],
+                name='sal_uniq_heures_ens_periode',
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.enseignant.nom_complet} - {self.periode.nom_periode}: {self.heures} h"
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.enseignant_id and not self.enseignant.est_taux_horaire:
+            errors['enseignant'] = (
+                "La saisie mensuelle d'heures est réservée aux enseignants au taux horaire."
+            )
+        if (
+            self.enseignant_id
+            and self.periode_id
+            and self.enseignant.ecole_id != self.periode.ecole_id
+        ):
+            errors['enseignant'] = (
+                "L'enseignant et la période doivent appartenir à la même école."
+            )
+        if self.periode_id and self.periode.cloturee:
+            errors['periode'] = "Une période clôturée ne peut plus être modifiée."
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 
 class EtatSalaire(SyncTrackedModel):
@@ -325,29 +447,50 @@ class EtatSalaire(SyncTrackedModel):
         verbose_name="Total heures",
         help_text="Total des heures enseignées dans le mois"
     )
+    taux_horaire_applique = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Taux horaire appliqué",
+        help_text="Taux conservé au moment du calcul pour l'historique",
+        validators=[MinValueValidator(Decimal('0'))],
+    )
+    source_heures = models.CharField(
+        max_length=24,
+        choices=SourceHeuresSalaire.choices,
+        default=SourceHeuresSalaire.NON_APPLICABLE,
+        blank=True,
+        verbose_name="Source du calcul",
+        help_text="Origine des heures ou du montant utilisé pour calculer le salaire",
+    )
     
     # Montants
     salaire_base = models.DecimalField(
         max_digits=12, 
         decimal_places=2,
-        verbose_name="Salaire de base"
+        verbose_name="Salaire de base",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     primes = models.DecimalField(
         max_digits=10, 
         decimal_places=2, 
         default=Decimal('0'),
-        verbose_name="Primes"
+        verbose_name="Primes",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     deductions = models.DecimalField(
         max_digits=10, 
         decimal_places=2, 
         default=Decimal('0'),
-        verbose_name="Déductions"
+        verbose_name="Déductions",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     salaire_net = models.DecimalField(
         max_digits=12, 
         decimal_places=2,
-        verbose_name="Salaire net"
+        verbose_name="Salaire net",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     
     # Statut
@@ -395,16 +538,61 @@ class EtatSalaire(SyncTrackedModel):
     
     def __str__(self):
         return f"{self.enseignant.nom_complet} - {self.periode.nom_periode}"
+
+    def clean(self):
+        super().clean()
+        salaire_base = self.salaire_base or Decimal('0')
+        primes = self.primes or Decimal('0')
+        deductions = self.deductions or Decimal('0')
+        errors = {}
+
+        if deductions > salaire_base + primes:
+            errors['deductions'] = (
+                'Les retenues ne peuvent pas dépasser le salaire de base et les primes.'
+            )
+
+        if (
+            self.enseignant_id
+            and self.periode_id
+            and self.enseignant.ecole_id != self.periode.ecole_id
+        ):
+            errors['enseignant'] = (
+                "L'enseignant et la période doivent appartenir à la même école."
+            )
+
+        if errors:
+            raise ValidationError(errors)
     
     def save(self, *args, **kwargs):
         # Calcul automatique du salaire net
-        self.salaire_net = self.salaire_base + self.primes - self.deductions
+        salaire_base = self.salaire_base or Decimal('0')
+        primes = self.primes or Decimal('0')
+        deductions = self.deductions or Decimal('0')
+        self.salaire_net = (salaire_base + primes - deductions).quantize(
+            Decimal('0.01'), rounding=ROUND_HALF_UP
+        )
+        self.full_clean()
+        if kwargs.get('update_fields') is not None:
+            kwargs['update_fields'] = set(kwargs['update_fields']) | {'salaire_net'}
         super().save(*args, **kwargs)
     
     @property
     def peut_etre_valide(self):
         """Vérifie si l'état de salaire peut être validé"""
-        return not self.valide and not self.periode.cloturee
+        from calendar import monthrange
+        from datetime import date
+
+        dernier_jour = date(
+            self.periode.annee,
+            self.periode.mois,
+            monthrange(self.periode.annee, self.periode.mois)[1],
+        )
+        return (
+            not self.valide
+            and not self.periode.cloturee
+            and self.enseignant.statut == 'ACTIF'
+            and self.enseignant.date_embauche <= dernier_jour
+        )
     
     @property
     def peut_etre_paye(self):
@@ -457,7 +645,11 @@ class PresenceEnseignant(SyncTrackedModel):
         null=True,
         blank=True,
         verbose_name="Heures travaillées",
-        help_text="Calculé automatiquement ou saisi manuellement"
+        help_text="Calculé automatiquement ou saisi manuellement",
+        validators=[
+            MinValueValidator(Decimal('0')),
+            MaxValueValidator(Decimal('24')),
+        ],
     )
     
     # Observations
@@ -497,6 +689,32 @@ class PresenceEnseignant(SyncTrackedModel):
     
     def __str__(self):
         return f"{self.enseignant.nom_complet} - {self.date} - {self.get_statut_display()}"
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        heures = self.heures_travaillees
+
+        if bool(self.heure_arrivee) != bool(self.heure_depart):
+            errors['heure_depart'] = (
+                "L'heure d'arrivée et l'heure de départ doivent être renseignées ensemble."
+            )
+
+        if self.statut in {'ABSENT', 'CONGE', 'MALADIE'}:
+            if self.heure_arrivee or self.heure_depart or (heures is not None and heures > 0):
+                errors['heures_travaillees'] = (
+                    'Aucune heure travaillée ne peut être enregistrée pour ce statut.'
+                )
+        elif self.statut in {'PRESENT', 'RETARD'}:
+            if not (self.heure_arrivee and self.heure_depart) and not (
+                heures is not None and heures > 0
+            ):
+                errors['heures_travaillees'] = (
+                    "Renseignez les heures d'arrivée et de départ, ou le total travaillé."
+                )
+
+        if errors:
+            raise ValidationError(errors)
     
     def save(self, *args, **kwargs):
         # Calcul automatique des heures travaillées si arrivée et départ fournis
@@ -511,12 +729,19 @@ class PresenceEnseignant(SyncTrackedModel):
             
             delta = depart - arrivee
             # Toujours recalculer les heures travaillées
-            self.heures_travaillees = Decimal(str(round(delta.total_seconds() / 3600, 2)))
+            self.heures_travaillees = (
+                Decimal(str(delta.total_seconds())) / Decimal('3600')
+            ).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         elif not self.heure_arrivee or not self.heure_depart:
             # Si pas d'heures d'arrivée/départ, mettre à 0 si non défini
             if self.heures_travaillees is None:
                 self.heures_travaillees = Decimal('0')
-        
+
+        self.full_clean()
+        if kwargs.get('update_fields') is not None:
+            kwargs['update_fields'] = set(kwargs['update_fields']) | {
+                'heures_travaillees'
+            }
         super().save(*args, **kwargs)
     
     @property
@@ -549,25 +774,29 @@ class DetailHeuresClasse(SyncTrackedModel):
         max_digits=6, 
         decimal_places=2,
         verbose_name="Heures prévues",
-        help_text="Heures prévues selon l'affectation"
+        help_text="Heures prévues selon l'affectation",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     heures_realisees = models.DecimalField(
         max_digits=6, 
         decimal_places=2,
         verbose_name="Heures réalisées",
-        help_text="Heures effectivement enseignées"
+        help_text="Heures effectivement enseignées",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     
     taux_horaire_applique = models.DecimalField(
         max_digits=10, 
         decimal_places=2,
-        verbose_name="Taux horaire appliqué"
+        verbose_name="Taux horaire appliqué",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     
     montant = models.DecimalField(
         max_digits=10, 
         decimal_places=2,
-        verbose_name="Montant"
+        verbose_name="Montant",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     
     class Meta:
@@ -580,5 +809,10 @@ class DetailHeuresClasse(SyncTrackedModel):
     
     def save(self, *args, **kwargs):
         # Calcul automatique du montant
-        self.montant = self.heures_realisees * self.taux_horaire_applique
+        self.montant = (self.heures_realisees * self.taux_horaire_applique).quantize(
+            Decimal('0.01'), rounding=ROUND_HALF_UP
+        )
+        self.full_clean()
+        if kwargs.get('update_fields') is not None:
+            kwargs['update_fields'] = set(kwargs['update_fields']) | {'montant'}
         super().save(*args, **kwargs)

@@ -15,6 +15,9 @@ from reportlab.lib.units import inch
 
 from eleves.models import Eleve, Ecole
 from paiements.models import Paiement, EcheancierPaiement, PaiementRemise
+from paiements.calculs import filtre_types_scolarite
+from paiements.reporting import repartir_encaissements
+from paiements.services import calculer_situations_echeanciers
 from depenses.models import Depense
 from salaires.models import Enseignant, EtatSalaire
 from utilisateurs.utils import user_is_admin, user_is_superadmin, user_school
@@ -47,7 +50,10 @@ def _draw_header_and_watermark(c, doc, ecole=None, titre_override=None):
     - Filigrane: logo agrandi (~500% largeur) centré, faible opacité si disponible
     - Entête: logo à gauche + nom de l'établissement
     """
-    width, height = A4
+    # Respecter le format reel du document (notamment les exports A4 paysage).
+    # L'ancienne valeur A4 en dur comprimait l'en-tete sur la partie gauche
+    # des rapports en paysage.
+    width, height = getattr(doc, 'pagesize', None) or getattr(c, '_pagesize', A4)
     logo_path = _get_logo_path(ecole)
 
     c.saveState()
@@ -100,7 +106,7 @@ def _draw_header_and_watermark(c, doc, ecole=None, titre_override=None):
         # Si un titre explicite est fourni par l'appelant, l'afficher à droite
         header_text = school_name
         if titre_override:
-            header_text = f"{school_name} — {titre_override}" if school_name else titre_override
+            header_text = f"{school_name} - {titre_override}" if school_name else titre_override
         c.drawString(margin_x + 70, height - margin_y - 10, header_text)
 
         # Ligne de séparation
@@ -189,92 +195,36 @@ def collecter_donnees_periode(debut, fin, type_periode, user=None):
         # Paiements de la période (liaison via Eleve -> Classe -> École)
         paiements_periode = Paiement.objects.filter(
             eleve__classe__ecole=ecole,
-            date_paiement__range=[debut, fin]
-        ).exclude(statut='ANNULE')
-
-        # Si pas de paiements dans la période, fallback: tous les paiements validés de l'école
-        if not paiements_periode.exists():
-            paiements_periode = Paiement.objects.filter(
-                eleve__classe__ecole=ecole,
-                statut='VALIDE'
-            )
+            date_paiement__range=[debut, fin],
+            statut='VALIDE',
+        )
 
         donnees_ecole['paiements']['nombre'] = paiements_periode.count()
         montant_total_paiements = paiements_periode.aggregate(total=Sum('montant'))['total'] or Decimal('0')
         # Total des remises sur la période
-        total_remises = PaiementRemise.objects.filter(paiement__in=paiements_periode).aggregate(total=Sum('montant_remise'))['total'] or Decimal('0')
+        total_remises = PaiementRemise.objects.filter(
+            paiement__in=paiements_periode
+        ).filter(
+            filtre_types_scolarite('paiement__type_paiement')
+        ).aggregate(total=Sum('montant_remise'))['total'] or Decimal('0')
         donnees_ecole['paiements']['montant_total'] = montant_total_paiements
         donnees_ecole['paiements']['total_remises'] = total_remises
         donnees_ecole['paiements']['montant_original'] = montant_total_paiements + total_remises
 
-        # Classification sans double comptage
-        frais_inscription = Decimal('0')
-        reinscription = Decimal('0')
-        scolarite = Decimal('0')
-        non_categorises = Decimal('0')
-
-        for p in paiements_periode.select_related('type_paiement'):
-            montant = p.montant or Decimal('0')
-            nom = (getattr(getattr(p, 'type_paiement', None), 'nom', '') or '').lower()
-
-            # "réinscription" contient la sous-chaîne "inscription": on la teste en premier
-            has_reinscription = ('réinscription' in nom) or ('reinscription' in nom)
-            has_inscription = ('inscription' in nom) and not has_reinscription
-            has_scolarite = ('scolar' in nom) or ('tranche' in nom) or ('1ère tranche' in nom) or ('2ème tranche' in nom) or ('3ème tranche' in nom)
-
-            if has_reinscription and has_scolarite:
-                # Paiement combiné: 30 000 GNF pour réinscription, reste en scolarité
-                part_ins = min(Decimal('30000'), montant)
-                part_sco = montant - part_ins
-                reinscription += part_ins
-                scolarite += part_sco
-            elif has_reinscription:
-                reinscription += montant
-            elif has_inscription and has_scolarite:
-                # Paiement combiné: 30 000 GNF pour inscription, reste en scolarité
-                part_ins = min(Decimal('30000'), montant)
-                part_sco = montant - part_ins
-                frais_inscription += part_ins
-                scolarite += part_sco
-            elif has_inscription:
-                # Pur frais d'inscription
-                frais_inscription += montant
-            elif has_scolarite:
-                scolarite += montant
-            else:
-                non_categorises += montant
-
-        # Estimation/fallback: couvrir les frais d'inscription théoriques avec non catégorisés si besoin
-        nb_nouveaux = donnees_ecole['nouveaux_eleves']
-        theorique_insc = Decimal('30000') * nb_nouveaux
-
-        if frais_inscription == 0 and nb_nouveaux > 0 and non_categorises > 0:
-            a_affecter = min(theorique_insc, non_categorises)
-            frais_inscription += a_affecter
-            non_categorises -= a_affecter
-
-        # Plafond: ne jamais dépasser 30 000 GNF par nouvel élève
-        if nb_nouveaux > 0 and frais_inscription > theorique_insc:
-            excedent = frais_inscription - theorique_insc
-            frais_inscription = theorique_insc
-            scolarite += excedent
-
-        # Cohérence: si 0 nouveaux élèves, ne pas compter des frais d'inscription → reclasser en scolarité
-        if nb_nouveaux == 0 and frais_inscription > 0:
-            scolarite += frais_inscription
-            frais_inscription = Decimal('0')
-
-        # Ajouter le reste non catégorisé à la scolarité (par défaut)
-        scolarite += non_categorises
-
-        donnees_ecole['paiements']['frais_inscription'] = frais_inscription
-        donnees_ecole['paiements']['reinscription'] = reinscription
-        donnees_ecole['paiements']['scolarite'] = scolarite
+        repartition = repartir_encaissements(
+            paiements_periode.select_related('type_paiement')
+        )
+        donnees_ecole['paiements']['frais_inscription'] = repartition['frais_inscription']
+        donnees_ecole['paiements']['reinscription'] = repartition['reinscription']
+        donnees_ecole['paiements']['scolarite'] = repartition['scolarite']
+        donnees_ecole['paiements']['autres'] = repartition['autres']
 
         # Totaux des remises par catégorie (motif du geste commercial sur ce paiement)
         motif_labels = dict(PaiementRemise.MOTIF_CHOICES)
         remises_categorie_qs = PaiementRemise.objects.filter(
             paiement__in=paiements_periode
+        ).filter(
+            filtre_types_scolarite('paiement__type_paiement')
         ).values('motif').annotate(total=Sum('montant_remise')).order_by('-total')
         donnees_ecole['remises_par_categorie'] = [
             {
@@ -295,9 +245,9 @@ def collecter_donnees_periode(debut, fin, type_periode, user=None):
         )
         eleves_concernes_ids |= inscrits_ids
 
-        # Déterminer la/les années scolaires couvertes par la période (pivot: août)
+        # Déterminer la/les années scolaires couvertes par la période (septembre).
         def annee_scolaire_for(d):
-            return f"{d.year}-{d.year + 1}" if d.month >= 8 else f"{d.year - 1}-{d.year}"
+            return f"{d.year}-{d.year + 1}" if d.month >= 9 else f"{d.year - 1}-{d.year}"
         annees_couvertes = {annee_scolaire_for(debut), annee_scolaire_for(fin)}
 
         # Calculs Total dû (Scolarité normale) et Reste à payer + répartition par classe
@@ -309,6 +259,8 @@ def collecter_donnees_periode(debut, fin, type_periode, user=None):
         try:
             remises_group = PaiementRemise.objects.filter(
                 paiement__in=paiements_periode
+            ).filter(
+                filtre_types_scolarite('paiement__type_paiement')
             ).values(
                 'paiement__eleve__classe_id'
             ).annotate(
@@ -318,30 +270,29 @@ def collecter_donnees_periode(debut, fin, type_periode, user=None):
         except Exception:
             remises_par_classe_map = {}
         if eleves_concernes_ids:
-            qs_ech = EcheancierPaiement.objects.filter(
-                eleve_id__in=list(eleves_concernes_ids),
-                annee_scolaire__in=list(annees_couvertes)
-            ).values(
-                'eleve__classe_id', 'eleve__classe__nom',
-                'frais_inscription_du', 'tranche_1_due', 'tranche_2_due', 'tranche_3_due',
-                'frais_inscription_paye', 'tranche_1_payee', 'tranche_2_payee', 'tranche_3_payee'
+            date_fin = fin.date() if hasattr(fin, 'date') else fin
+            echeanciers = list(
+                EcheancierPaiement.objects.filter(
+                    eleve_id__in=list(eleves_concernes_ids),
+                    annee_scolaire__in=list(annees_couvertes),
+                ).select_related('eleve', 'eleve__classe')
             )
-            for row in qs_ech:
-                classe_id = row.get('eleve__classe_id')
-                classe_nom = row.get('eleve__classe__nom') or 'Classe'
-                du = (row.get('frais_inscription_du') or Decimal('0')) \
-                     + (row.get('tranche_1_due') or Decimal('0')) \
-                     + (row.get('tranche_2_due') or Decimal('0')) \
-                     + (row.get('tranche_3_due') or Decimal('0'))
-                paye = (row.get('frais_inscription_paye') or Decimal('0')) \
-                       + (row.get('tranche_1_payee') or Decimal('0')) \
-                       + (row.get('tranche_2_payee') or Decimal('0')) \
-                       + (row.get('tranche_3_payee') or Decimal('0'))
-                solde = du - paye
+            # Même service que les tableaux de bord : une remise reste bornée
+            # aux tranches qu'elle vise, elle n'est jamais déduite en bloc.
+            situations = calculer_situations_echeanciers(
+                echeanciers, date_reference=date_fin, date_limite=date_fin
+            )
+            for echeancier in echeanciers:
+                situation = situations[echeancier.pk]
+                classe = getattr(echeancier.eleve, 'classe', None)
+                classe_id = classe.id if classe else None
+                classe_nom = getattr(classe, 'nom', None) or 'Classe'
+                du = situation['total_du']
+                paye = situation['encaisse']
+                solde = situation['reste']
 
                 total_du_concernes += du
-                if solde > 0:
-                    reste_a_payer += solde
+                reste_a_payer += solde
 
                 if classe_id not in classes_map:
                     classes_map[classe_id] = {
@@ -356,8 +307,7 @@ def collecter_donnees_periode(debut, fin, type_periode, user=None):
                 cm['effectif'] += 1
                 cm['total_du'] += du
                 cm['total_paye'] += paye
-                if solde > 0:
-                    cm['reste'] += solde
+                cm['reste'] += solde
                 # Injecter remises agrégées pour cette classe
                 try:
                     cm['remises'] = remises_par_classe_map.get(classe_id, cm['remises'])

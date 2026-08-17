@@ -10,7 +10,8 @@ from eleves.models import Eleve
 from utilisateurs.utils import filter_by_user_school
 
 from .models_recouvrement import (
-    AbonnementInformatique, DepenseCuisine, DepenseDocument, Versement,
+    AbonnementInformatique, DepenseCuisine, DepenseDocument, Entree, MembrePersonnel,
+    Versement,
 )
 
 
@@ -28,6 +29,19 @@ class _BaseOperationForm(forms.ModelForm):
         if montant is not None and montant <= 0:
             raise forms.ValidationError("Le montant doit être supérieur à zéro.")
         return montant
+
+
+class EntreeForm(_BaseOperationForm):
+    """Saisie d'une entrée d'argent : provenance, nature et mode d'encaissement."""
+
+    class Meta:
+        model = Entree
+        fields = ['source', 'type_entree', 'mode_paiement', 'reference', 'montant', 'observation']
+        widgets = {
+            'source': forms.TextInput(attrs={'placeholder': "Ex. : don d'un parent, location de la salle"}),
+            'reference': forms.TextInput(attrs={'placeholder': "Ex. : reçu n° 042 (facultatif)"}),
+            'observation': forms.Textarea(attrs={'rows': 2}),
+        }
 
 
 class DepenseCuisineForm(_BaseOperationForm):
@@ -86,3 +100,40 @@ class AbonnementInformatiqueForm(_BaseOperationForm):
         if debut and fin and fin < debut:
             self.add_error('date_fin', "La fin de l'abonnement précède son début.")
         return donnees
+
+
+class MembrePersonnelForm(forms.ModelForm):
+    """Saisie d'un membre du personnel : identité, fonction et groupe.
+
+    Les montants mensuels ne figurent pas ici : ils se saisissent directement
+    dans le tableau du module, mois par mois.
+    """
+
+    class Meta:
+        model = MembrePersonnel
+        fields = ['prenom', 'nom', 'fonction', 'groupe', 'actif', 'observation']
+        widgets = {
+            'prenom': forms.TextInput(attrs={'placeholder': 'Ex. : Mariama'}),
+            'nom': forms.TextInput(attrs={'placeholder': 'Ex. : Camara'}),
+            'fonction': forms.TextInput(attrs={'placeholder': 'Ex. : Enseignante CP1, Surveillant, Directeur'}),
+            'observation': forms.Textarea(attrs={'rows': 2, 'placeholder': 'Facultatif'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for nom, champ in self.fields.items():
+            if isinstance(champ.widget, forms.CheckboxInput):
+                champ.widget.attrs.setdefault('class', 'form-check-input')
+            elif isinstance(champ.widget, forms.Select):
+                champ.widget.attrs.setdefault('class', 'form-select')
+            else:
+                champ.widget.attrs.setdefault('class', 'form-control')
+
+    def clean_prenom(self):
+        return (self.cleaned_data.get('prenom') or '').strip()
+
+    def clean_nom(self):
+        return (self.cleaned_data.get('nom') or '').strip()
+
+    def clean_fonction(self):
+        return (self.cleaned_data.get('fonction') or '').strip()

@@ -5,30 +5,47 @@
     {% load static_versioned %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}G.S HKD{% endblock %}</title>
+    {% comment %}Titre et description suivent le domaine servi (voir ecole_moderne/identite_site.py) :
+       sur lesjardinswosewa.com, aucune page ne doit annoncer le logiciel hôte.{% endcomment %}
+    <title>{% block title %}{{ site.titre }}{% endblock %}</title>
 
     {# SEO : description par défaut, écrasable par les pages via le bloc meta_description #}
-    <meta name="description" content="{% block meta_description %}Myschool — système de gestion scolaire moderne : élèves, paiements, salaires, transport, notes et statistiques pour les établissements en Guinée.{% endblock %}">
+    <meta name="description" content="{% block meta_description %}{{ site.description }}{% endblock %}">
     <meta name="robots" content="{% block meta_robots %}index,follow{% endblock %}">
     <meta name="theme-color" content="#0d6efd">
     <link rel="canonical" href="{% block canonical_url %}{{ request.build_absolute_uri }}{% endblock %}">
 
     {# Open Graph (Facebook, WhatsApp, LinkedIn, etc.) #}
+    {% comment %}Le nom du site suit le domaine servi : un lien de lesjardinswosewa.com
+       partagé sur WhatsApp ou Facebook doit annoncer l'école, pas le logiciel.{% endcomment %}
     <meta property="og:type" content="website">
-    <meta property="og:site_name" content="Myschool">
-    <meta property="og:title" content="{% block og_title %}{{ self.title|default:'Myschool' }}{% endblock %}">
-    <meta property="og:description" content="{% block og_description %}Gestion scolaire moderne — automatisation des inscriptions, paiements, notes et bulletins.{% endblock %}">
+    <meta property="og:site_name" content="{% block og_site_name %}{{ site.nom }}{% endblock %}">
+    <meta property="og:title" content="{% block og_title %}{{ site.titre }}{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}{{ site.description_partage }}{% endblock %}">
     <meta property="og:url" content="{% block og_url %}{{ request.build_absolute_uri }}{% endblock %}">
     <meta property="og:image" content="{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/optimized/ecole.webp' %}{% endblock %}">
     <meta property="og:locale" content="fr_FR">
 
     {# Twitter Card #}
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="{% block twitter_title %}{{ self.title|default:'Myschool' }}{% endblock %}">
-    <meta name="twitter:description" content="{% block twitter_description %}Gestion scolaire moderne, automatisée et fiable pour les établissements scolaires.{% endblock %}">
+    <meta name="twitter:title" content="{% block twitter_title %}{{ site.titre }}{% endblock %}">
+    <meta name="twitter:description" content="{% block twitter_description %}{{ site.description_partage }}{% endblock %}">
     <meta name="twitter:image" content="{% block twitter_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/optimized/ecole.webp' %}{% endblock %}">
 
     {% block structured_data %}
+    {% comment %}Sur le domaine de l'école, annoncer un SoftwareApplication hébergé
+       sur un autre domaine désindexe la page : le type suit donc le site servi.{% endcomment %}
+    {% if site.est_ecole %}
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "{{ site.schema_type|escapejs }}",
+      "name": "{{ site.nom|escapejs }}",
+      "url": "{{ request.scheme }}://{{ request.get_host }}/",
+      "description": "{{ site.description|escapejs }}"
+    }
+    </script>
+    {% else %}
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -46,6 +63,7 @@
       }
     }
     </script>
+    {% endif %}
     {% endblock %}
 
     {% if is_offline %}
@@ -204,8 +222,8 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary fixed-top">
         <div class="container-fluid">
             <a class="navbar-brand d-flex align-items-center" href="{% url 'home' %}">
-                <img src="{% static_versioned 'logos/logo.png' %}" alt="Logo Myschool" width="36" height="36" loading="eager" decoding="async" fetchpriority="high">
-                <span>Myschool</span>
+                <img src="{% static_versioned 'logos/logo.png' %}" alt="Logo {{ site.nom }}" width="36" height="36" loading="eager" decoding="async" fetchpriority="high">
+                <span>{{ site.nom }}</span>
             </a>
 
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -556,16 +574,20 @@
             <div class="row align-items-center">
                 <div class="col-md-6">
                     <small>
-                        &copy; {% now "Y" %} Myschool. Tous droits réservés.
+                        &copy; {% now "Y" %} {{ site.nom }}. Tous droits réservés.
                     </small>
                 </div>
                 <div class="col-md-6 text-md-end mt-2 mt-md-0">
                     <a href="{% url 'home' %}" class="text-light text-decoration-none me-3">
                         <i class="fas fa-home me-1"></i>Accueil
                     </a>
-                    <span class="me-3"><i class="fas fa-phone me-1"></i> +224 622613559</span>
-                    <a href="mailto:contact@myschoolgn.space" class="text-light text-decoration-none">
-                        <i class="fas fa-envelope me-1"></i> contact@myschoolgn.space
+                    {% comment %}Coordonnées du site servi : sur lesjardinswosewa.com, un parent
+                       doit joindre l'école, pas l'éditeur du logiciel.{% endcomment %}
+                    <a href="tel:{{ site.telephone }}" class="text-light text-decoration-none me-3">
+                        <i class="fas fa-phone me-1"></i> {{ site.telephone_affiche }}
+                    </a>
+                    <a href="mailto:{{ site.email_contact }}" class="text-light text-decoration-none">
+                        <i class="fas fa-envelope me-1"></i> {{ site.email_contact }}
                     </a>
                 </div>
             </div>

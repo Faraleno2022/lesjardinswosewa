@@ -11,14 +11,14 @@ from datetime import date
 from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
-from django.db.models import (
-    Q, F, Case, When, Value, DecimalField, ExpressionWrapper,
-)
+from django.db.models import Q, F
 from django.http import HttpResponse
 
-from eleves.models import Classe
-from utilisateurs.utils import filter_by_user_school
+from eleves.models import Classe, Ecole
+from rapports.utils import _draw_header_and_watermark
+from utilisateurs.utils import filter_by_user_school, user_school
 from .models import Paiement, EcheancierPaiement, ModePaiement, TypePaiement
+from .services import calculer_situations_echeanciers
 
 
 def _fmt_gnf(v):
@@ -26,6 +26,29 @@ def _fmt_gnf(v):
         return f"{int(v):,}".replace(',', ' ')
     except (TypeError, ValueError):
         return '0'
+
+
+def _ecole_export_paiements(request, qs):
+    """Retourne l'ecole unique couverte par l'export, si elle existe."""
+    classe_id = (request.GET.get('classe_id') or '').strip()
+    if classe_id.isdigit():
+        classes = filter_by_user_school(
+            Classe.objects.select_related('ecole'), request.user, 'ecole'
+        )
+        classe = classes.filter(pk=int(classe_id)).first()
+        if classe:
+            return classe.ecole
+
+    ecole_utilisateur = user_school(request.user)
+    if ecole_utilisateur:
+        return ecole_utilisateur
+
+    ecole_ids = list(
+        qs.order_by().values_list('eleve__classe__ecole_id', flat=True).distinct()[:2]
+    )
+    if len(ecole_ids) == 1:
+        return Ecole.objects.filter(pk=ecole_ids[0]).first()
+    return None
 
 
 def filtrer_paiements(request):
@@ -59,7 +82,7 @@ def filtrer_paiements(request):
         qs = qs.filter(statut=statut)
         libelles.append(f'Statut : {statut}')
     if annee:
-        qs = qs.filter(eleve__classe__annee_scolaire=annee)
+        qs = qs.filter(annee_scolaire=annee)
         libelles.append(f'Année : {annee}')
     if classe_id.isdigit():
         qs = qs.filter(eleve__classe_id=int(classe_id))
@@ -76,34 +99,29 @@ def filtrer_paiements(request):
 
     if situation in ('retard', 'reste', 'solde'):
         today = date.today()
-        exig = (
-            Case(When(date_echeance_inscription__lt=today, then=F('frais_inscription_du')),
-                 default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
-            + Case(When(date_echeance_tranche_1__lt=today, then=F('tranche_1_due')),
-                   default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
-            + Case(When(date_echeance_tranche_2__lt=today, then=F('tranche_2_due')),
-                   default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
-            + Case(When(date_echeance_tranche_3__lt=today, then=F('tranche_3_due')),
-                   default=Value(0), output_field=DecimalField(max_digits=12, decimal_places=0))
-        )
-        paye = (F('frais_inscription_paye') + F('tranche_1_payee')
-                + F('tranche_2_payee') + F('tranche_3_payee'))
-        du_total = (F('frais_inscription_du') + F('tranche_1_due')
-                    + F('tranche_2_due') + F('tranche_3_due'))
-        eche = EcheancierPaiement.objects.annotate(
-            _retard=ExpressionWrapper(exig - paye, output_field=DecimalField(max_digits=12, decimal_places=0)),
-            _reste=ExpressionWrapper(du_total - paye, output_field=DecimalField(max_digits=12, decimal_places=0)),
-        )
+        eche = EcheancierPaiement.objects
+        if annee:
+            eche = eche.filter(annee_scolaire=annee)
+        else:
+            eche = eche.filter(annee_scolaire=F('eleve__classe__annee_scolaire'))
+        eleve_ids = []
+        echeanciers = list(eche)
+        situations = calculer_situations_echeanciers(echeanciers, today)
+        for echeancier in echeanciers:
+            etat = situations[echeancier.pk]
+            if situation == 'retard' and etat['retard'] > 0:
+                eleve_ids.append(echeancier.eleve_id)
+            elif situation == 'reste' and etat['reste'] > 0:
+                eleve_ids.append(echeancier.eleve_id)
+            elif situation == 'solde' and etat['reste'] <= 0:
+                eleve_ids.append(echeancier.eleve_id)
         if situation == 'retard':
-            eche = eche.filter(_retard__gt=0)
             libelles.append('Niveau : en retard')
         elif situation == 'reste':
-            eche = eche.filter(_reste__gt=0)
             libelles.append('Niveau : reste à payer')
         elif situation == 'solde':
-            eche = eche.filter(_reste__lte=0)
             libelles.append('Niveau : soldé')
-        qs = qs.filter(eleve_id__in=list(eche.values_list('eleve_id', flat=True)))
+        qs = qs.filter(eleve_id__in=eleve_ids)
 
     return qs, libelles
 
@@ -130,7 +148,7 @@ def export_paiements_filtres_excel(request):
     bordure = Border(left=thin, right=thin, top=thin, bottom=thin)
 
     ws.merge_cells('A1:J1')
-    ws['A1'] = 'LISTE DES PAIEMENTS' + (f" — {' | '.join(libelles)}" if libelles else '')
+    ws['A1'] = 'LISTE DES PAIEMENTS' + (f" - {' | '.join(libelles)}" if libelles else '')
     ws['A1'].font = Font(bold=True, size=12, color='007BFF')
     ws['A1'].alignment = centre
 
@@ -198,10 +216,11 @@ def export_paiements_filtres_pdf(request):
     from reportlab.lib.enums import TA_CENTER
 
     qs, libelles = filtrer_paiements(request)
+    ecole = _ecole_export_paiements(request, qs)
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(A4),
-                            topMargin=0.8 * cm, bottomMargin=0.8 * cm,
+                            topMargin=2.8 * cm, bottomMargin=0.8 * cm,
                             leftMargin=0.8 * cm, rightMargin=0.8 * cm)
     styles = getSampleStyleSheet()
     titre = ParagraphStyle('T', parent=styles['Heading1'], fontSize=13,
@@ -212,7 +231,7 @@ def export_paiements_filtres_pdf(request):
     elements = [Paragraph("<b>LISTE DES PAIEMENTS</b>", titre)]
     ligne_filtres = ' | '.join(libelles) if libelles else 'Aucun filtre'
     elements.append(Paragraph(
-        f"Filtres : {ligne_filtres} — édité le {date.today().strftime('%d/%m/%Y')}", sous))
+        f"Filtres : {ligne_filtres} - édité le {date.today().strftime('%d/%m/%Y')}", sous))
 
     data = [['N°', 'Matricule', 'Élève', 'Classe', 'Nature', 'Mode', 'Date', 'N° Reçu', 'Statut', 'Montant (GNF)']]
     total = Decimal('0')
@@ -253,9 +272,21 @@ def export_paiements_filtres_pdf(request):
     elements.append(table)
     elements.append(Spacer(1, 0.3 * cm))
     elements.append(Paragraph(
-        f"Total : {len(data) - 2} paiement(s) — {_fmt_gnf(total)} GNF", styles['Normal']))
+        f"Total : {len(data) - 2} paiement(s) - {_fmt_gnf(total)} GNF", styles['Normal']))
 
-    doc.build(elements)
+    def dessiner_entete(canvas, document):
+        _draw_header_and_watermark(
+            canvas,
+            document,
+            ecole=ecole,
+            titre_override='Liste des paiements',
+        )
+
+    doc.build(
+        elements,
+        onFirstPage=dessiner_entete,
+        onLaterPages=dessiner_entete,
+    )
     buffer.seek(0)
     response = HttpResponse(buffer, content_type='application/pdf')
     response['Content-Disposition'] = (

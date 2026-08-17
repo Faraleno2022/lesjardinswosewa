@@ -117,6 +117,23 @@ class SchoolFilteringTests(TestCase):
         self.assertIn(self.paiement1.id, ids)
         self.assertNotIn(self.paiement2.id, ids)
 
+    def test_tableau_modes_encaissement_isole_les_ecoles(self):
+        self.login1()
+        response = self.client.get(
+            reverse("paiements:modes_encaissement_eleves"),
+            {
+                "date_debut": "2024-09-01",
+                "date_fin": "2024-09-30",
+                "annee_scolaire": "2024-2025",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ALPHA A")
+        self.assertNotContains(response, "BRAVO B")
+        self.assertEqual(response.context["student_count"], 1)
+        self.assertEqual(response.context["total_amount"], 30000)
+
     def test_api_paiement_detail_for_other_school_is_404(self):
         self.login1()
         url = reverse("paiements:api_paiement_detail", kwargs={"pk": self.paiement2.id})

@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Heures mensuelles - {{ periode.nom_periode }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <div>
+            <h2 class="mb-1"><i class="fas fa-clock text-primary me-2"></i>Heures mensuelles globales</h2>
+            <p class="text-muted mb-0">{{ periode.nom_periode }} - {{ periode.ecole.nom }}</p>
+        </div>
+        <a href="{% url 'salaires:gestion_periodes' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i>Retour aux périodes
+        </a>
+    </div>
+
+    <div class="alert alert-info">
+        <strong>Deux modes de calcul sont disponibles.</strong>
+        Laissez la saisie globale vide pour utiliser automatiquement la somme des pointages
+        arrivée/départ. Si vous entrez un total mensuel, ce total remplace les pointages pour
+        cette période. Le salaire est recalculé dès l'enregistrement.
+    </div>
+
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <strong>Enseignants du secondaire payés à l'heure</strong>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-striped table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Enseignant</th>
+                            <th class="text-end">Taux horaire</th>
+                            <th class="text-end">Pointages du mois</th>
+                            <th style="min-width: 190px;">Heures mensuelles globales</th>
+                            <th>Source appliquée</th>
+                            <th class="text-end">Salaire calculé</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ligne in lignes %}
+                        <tr>
+                            <td>
+                                <strong>{{ ligne.enseignant.nom_complet }}</strong>
+                                {% if ligne.verrouille %}
+                                <div class="small text-danger">
+                                    <i class="fas fa-lock me-1"></i>État validé ou payé
+                                </div>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">{{ ligne.enseignant.taux_horaire|floatformat:0|intcomma }} GNF/h</td>
+                            <td class="text-end">{{ ligne.heures_pointage|floatformat:2 }} h</td>
+                            <td>
+                                {{ ligne.champ }}
+                                {% for error in ligne.champ.errors %}
+                                <div class="text-danger small">{{ error }}</div>
+                                {% endfor %}
+                                <div class="form-text">Vide = utiliser les pointages</div>
+                            </td>
+                            <td>
+                                {% if ligne.saisie_globale %}
+                                <span class="badge bg-warning text-dark">Saisie mensuelle globale</span>
+                                {% else %}
+                                <span class="badge bg-info text-dark">Pointages arrivée / départ</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end fw-bold text-primary">
+                                {{ ligne.salaire_calcule|floatformat:0|intcomma }} GNF
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">
+                                Aucun enseignant actif payé à l'heure pour cette période.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="card-footer d-flex justify-content-end gap-2">
+                <a href="{% url 'salaires:etats_salaire' %}?periode={{ periode.id }}" class="btn btn-outline-primary">
+                    Voir les états de salaire
+                </a>
+                <button type="submit" class="btn btn-success" {% if not lignes %}disabled{% endif %}>
+                    <i class="fas fa-calculator me-1"></i>Enregistrer et calculer les salaires
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
