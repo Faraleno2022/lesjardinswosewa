@@ -206,6 +206,27 @@ class RapportComptableProfessionnelTests(TestCase):
         summary_values = [workbook["Synthèse"].cell(row, 1).value for row in range(1, 15)]
         self.assertIn("Référence", summary_values)
 
+    def test_apercu_pdf_affiche_le_rapport_complet_sans_telechargement_force(self):
+        response = self.client.get(
+            reverse("paiements:apercu_comptabilite_pdf"),
+            {
+                "classe_id": self.classe.pk,
+                "du": "2026-01-01",
+                "au": "2026-01-31",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertTrue(response["Content-Disposition"].startswith("inline;"))
+        self.assertEqual(response["Cache-Control"], "private, no-store")
+        self.assertTrue(response.content.startswith(b"%PDF"))
+        pages = PdfReader(BytesIO(response.content)).pages
+        self.assertGreaterEqual(len(pages), 1)
+        pdf_text = "\n".join(page.extract_text() or "" for page in pages)
+        self.assertIn("RAPPORT COMPTABLE DES ENCAISSEMENTS", pdf_text)
+        self.assertIn("RCE-001 MARIAMA DIALLO", pdf_text)
+
     def test_exports_par_mode_contiennent_les_montants_et_totaux(self):
         params = {
             "classe_id": self.classe.pk,
@@ -395,6 +416,19 @@ class RapportComptableProfessionnelTests(TestCase):
         self.assertContains(
             report, reverse("paiements:modes_encaissement_eleves")
         )
+        self.assertContains(
+            report, reverse("paiements:apercu_comptabilite_pdf")
+        )
+
+        payment_list = self.client.get(reverse("paiements:liste_paiements"))
+        self.assertContains(
+            payment_list, reverse("paiements:apercu_comptabilite_pdf")
+        )
+
+        modes = self.client.get(reverse("paiements:modes_encaissement_eleves"))
+        self.assertContains(
+            modes, reverse("paiements:apercu_comptabilite_pdf")
+        )
 
     def test_remise_solde_la_scolarite_et_le_rapport_le_precise(self):
         self._payment(
@@ -434,6 +468,7 @@ class RapportComptableProfessionnelTests(TestCase):
         self.client.force_login(simple_user)
 
         for url_name in (
+            "paiements:apercu_comptabilite_pdf",
             "paiements:export_comptabilite_pdf",
             "paiements:export_modes_encaissement_pdf",
             "paiements:export_modes_encaissement_excel",
