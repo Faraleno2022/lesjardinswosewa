@@ -14,6 +14,9 @@
   <a href="{% url 'paiements:rapport_comptable' %}" class="btn btn-outline-secondary">
     <i class="fas fa-arrow-left me-1"></i>Rapport comptable
   </a>
+  <a id="previewAccountingPdf" href="{% url 'paiements:apercu_comptabilite_pdf' %}" class="btn btn-outline-danger" target="_blank" rel="noopener">
+    <i class="fas fa-eye me-1"></i>Aperçu du rapport PDF
+  </a>
 </div>
 {% endblock %}
 
@@ -138,6 +141,7 @@
   const school = document.getElementById('modeEcole');
   const year = document.getElementById('modeAnnee');
   const classSelect = document.getElementById('modeClasse');
+  const previewAccountingPdf = document.getElementById('previewAccountingPdf');
   let debounceTimer = null;
   let currentRequest = null;
 
@@ -191,6 +195,17 @@
     return cleaned;
   }
 
+  function updateAccountingPreviewLink() {
+    const url = new URL('{% url "paiements:apercu_comptabilite_pdf" %}', window.location.origin);
+    const params = cleanParams(new URLSearchParams(new FormData(form)));
+    params.delete('mode_id');
+    params.delete('statut');
+    params.delete('situation');
+    params.delete('q');
+    url.search = params.toString();
+    previewAccountingPdf.href = url.toString();
+  }
+
   async function refreshResults(sourceUrl) {
     if (currentRequest) currentRequest.abort();
     currentRequest = new AbortController();
@@ -224,6 +239,7 @@
     event.preventDefault();
     refreshResults();
   });
+  previewAccountingPdf.addEventListener('click', updateAccountingPreviewLink);
   form.querySelectorAll('.modes-auto-filter').forEach(function (control) {
     control.addEventListener('change', function () {
       if (control === school) filterYearOptions(true);
@@ -243,6 +259,7 @@
   });
   filterYearOptions(false);
   filterClassOptions(false);
+  updateAccountingPreviewLink();
 })();
 </script>
 {% endblock %}

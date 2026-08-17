@@ -116,17 +116,24 @@ def _scope(request):
         raise ValueError("La date de début doit précéder la date de fin.")
     end = min(requested_end or today, today)
 
+    school_id = (request.GET.get("ecole_id") or "").strip()
     class_id = (request.GET.get("classe_id") or request.GET.get("classe") or "").strip()
     classes = filter_by_user_school(
         Classe.objects.select_related("ecole").order_by("ecole__nom", "niveau", "nom"),
         request.user,
         "ecole",
     )
+    if school_id:
+        if not school_id.isdigit():
+            raise ValueError("L'école sélectionnée est invalide.")
+        classes = classes.filter(ecole_id=int(school_id))
     if class_id:
         if not class_id.isdigit():
             raise ValueError("La classe sélectionnée est invalide.")
         classes = classes.filter(pk=int(class_id))
     classes = list(classes)
+    if school_id and not classes:
+        raise ValueError("L'école sélectionnée est introuvable ou non autorisée.")
     if class_id and not classes:
         raise ValueError("La classe sélectionnée est introuvable ou non autorisée.")
 
@@ -1234,15 +1241,32 @@ def _modes_filename(data, extension):
     )
 
 
-@can_view_reports
-def export_comptabilite_pdf(request):
+def _accounting_pdf_response(request, disposition):
     try:
         data = collect_accounting_data(request)
     except ValueError as exc:
         return _bad_request(exc)
-    response = HttpResponse(build_accounting_pdf(data).getvalue(), content_type="application/pdf")
-    response["Content-Disposition"] = f'attachment; filename="{_filename(data, "pdf")}"'
+    response = HttpResponse(
+        build_accounting_pdf(data).getvalue(),
+        content_type="application/pdf",
+    )
+    response["Content-Disposition"] = (
+        f'{disposition}; filename="{_filename(data, "pdf")}"'
+    )
+    response["Cache-Control"] = "private, no-store"
+    response["X-Content-Type-Options"] = "nosniff"
     return response
+
+
+@can_view_reports
+def apercu_comptabilite_pdf(request):
+    """Affiche dans le navigateur le PDF exact proposé au téléchargement."""
+    return _accounting_pdf_response(request, "inline")
+
+
+@can_view_reports
+def export_comptabilite_pdf(request):
+    return _accounting_pdf_response(request, "attachment")
 
 
 @can_view_reports
