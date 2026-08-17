@@ -68,9 +68,14 @@ urlpatterns = [
     path('rapport/comptabilite/pdf/', export_rapport_comptable_pdf, name='export_rapport_comptable_pdf'),
     path('rapport/comptabilite/excel/', export_rapport_comptable_excel, name='export_rapport_comptable_excel'),
     path(
-        'rapport/modes-encaissement/eleves/',
+        'rapport/modes-encaissement/',
         payment_modes_students,
         name='modes_encaissement_eleves',
+    ),
+    path(
+        'rapport/modes-encaissement/eleves/',
+        payment_modes_students,
+        name='modes_encaissement_eleves_legacy',
     ),
     
     # Élèves soldés (année scolaire réglée)
