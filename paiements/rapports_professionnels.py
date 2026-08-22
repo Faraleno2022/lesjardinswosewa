@@ -190,10 +190,10 @@ def _period_label(data):
 
 def _payments(data):
     queryset = (
-        Paiement.objects.filter(eleve__classe_id__in=data["class_ids"])
+        Paiement.objects.pour_classes(data["class_ids"])
         .select_related(
             "eleve", "eleve__classe", "type_paiement", "mode_paiement",
-            "cree_par", "valide_par",
+            "classe_encaissement", "ecole_encaissement", "cree_par", "valide_par",
         )
         .order_by("date_paiement", "numero_recu", "pk")
     )
@@ -364,7 +364,7 @@ def collect_accounting_data(request):
         discount = discount_by_payment[payment.pk]
         mode = payment.mode_paiement.nom if payment.mode_paiement_id else "Non précisé"
         payment_type = payment.type_paiement.nom if payment.type_paiement_id else "Non précisé"
-        class_name = payment.eleve.classe.nom
+        class_name = payment.classe_reference.nom
         external_reference_required = _requires_reference(mode)
         has_reference = bool((payment.reference_externe or "").strip())
         mode_row = by_mode[mode]

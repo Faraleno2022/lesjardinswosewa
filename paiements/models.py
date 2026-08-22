@@ -84,6 +84,61 @@ class ModePaiement(SyncTrackedModel):
     def __str__(self):
         return self.nom
 
+
+class PaiementQuerySet(models.QuerySet):
+    """Portée historique des paiements, indépendante des transferts d'élève."""
+
+    def pour_ecole(self, ecole):
+        ecole_id = getattr(ecole, 'pk', ecole)
+        if not ecole_id:
+            return self.none()
+        return self.filter(
+            models.Q(ecole_encaissement_id=ecole_id)
+            | models.Q(
+                ecole_encaissement__isnull=True,
+                eleve__classe__ecole_id=ecole_id,
+            )
+        )
+
+    def pour_ecoles(self, ecoles):
+        ecole_ids = [getattr(ecole, 'pk', ecole) for ecole in ecoles]
+        ecole_ids = [value for value in ecole_ids if value]
+        if not ecole_ids:
+            return self.none()
+        return self.filter(
+            models.Q(ecole_encaissement_id__in=ecole_ids)
+            | models.Q(
+                ecole_encaissement__isnull=True,
+                eleve__classe__ecole_id__in=ecole_ids,
+            )
+        )
+
+    def pour_classe(self, classe):
+        classe_id = getattr(classe, 'pk', classe)
+        if not classe_id:
+            return self.none()
+        return self.filter(
+            models.Q(classe_encaissement_id=classe_id)
+            | models.Q(
+                classe_encaissement__isnull=True,
+                eleve__classe_id=classe_id,
+            )
+        )
+
+    def pour_classes(self, classes):
+        classe_ids = [getattr(classe, 'pk', classe) for classe in classes]
+        classe_ids = [value for value in classe_ids if value]
+        if not classe_ids:
+            return self.none()
+        return self.filter(
+            models.Q(classe_encaissement_id__in=classe_ids)
+            | models.Q(
+                classe_encaissement__isnull=True,
+                eleve__classe_id__in=classe_ids,
+            )
+        )
+
+
 class Paiement(SyncTrackedModel):
     """Modèle principal pour les paiements"""
     STATUT_CHOICES = [
@@ -97,6 +152,27 @@ class Paiement(SyncTrackedModel):
     eleve = models.ForeignKey(Eleve, on_delete=models.CASCADE, related_name='paiements')
     type_paiement = models.ForeignKey(TypePaiement, on_delete=models.CASCADE)
     mode_paiement = models.ForeignKey(ModePaiement, on_delete=models.CASCADE)
+    # Ces deux références sont figées lors de l'encaissement. Elles empêchent
+    # un transfert ultérieur de déplacer artificiellement le reçu dans les
+    # rapports de la nouvelle école ou de la nouvelle classe.
+    ecole_encaissement = models.ForeignKey(
+        'eleves.Ecole',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='paiements_encaisses',
+        verbose_name="École lors de l'encaissement",
+    )
+    classe_encaissement = models.ForeignKey(
+        'eleves.Classe',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='paiements_encaisses',
+        verbose_name="Classe lors de l'encaissement",
+    )
+
+    objects = PaiementQuerySet.as_manager()
     
     # Informations du paiement
     numero_recu = models.CharField(max_length=20, unique=True, verbose_name="Numéro de reçu")
@@ -146,6 +222,14 @@ class Paiement(SyncTrackedModel):
             models.Index(fields=['numero_recu']),          # Recherche par numéro de reçu
             models.Index(fields=['date_paiement']),         # Filtrage par date seule
             models.Index(fields=['date_creation']),         # Tri par date de création
+            models.Index(
+                fields=['ecole_encaissement', 'date_paiement'],
+                name='paiements_ecole_date_idx',
+            ),
+            models.Index(
+                fields=['classe_encaissement', 'date_paiement'],
+                name='paiements_classe_date_idx',
+            ),
         ]
         constraints = [
             models.CheckConstraint(
@@ -199,7 +283,8 @@ class Paiement(SyncTrackedModel):
             })
     
     AUDIT_FIELDS = (
-        'eleve_id', 'type_paiement_id', 'mode_paiement_id', 'montant',
+        'eleve_id', 'type_paiement_id', 'mode_paiement_id',
+        'ecole_encaissement_id', 'classe_encaissement_id', 'montant',
         'annee_scolaire', 'date_paiement', 'statut', 'reference_externe', 'observations',
         'valide_par_id', 'date_validation',
     )
@@ -213,6 +298,18 @@ class Paiement(SyncTrackedModel):
 
     def save(self, *args, **kwargs):
         """Génère le reçu et mémorise chaque modification du paiement."""
+        snapshot_fields = set()
+        if self.eleve_id and (
+            not self.classe_encaissement_id or not self.ecole_encaissement_id
+        ):
+            classe = getattr(self.eleve, 'classe', None)
+            if classe is not None:
+                if not self.classe_encaissement_id:
+                    self.classe_encaissement = classe
+                    snapshot_fields.add('classe_encaissement')
+                if not self.ecole_encaissement_id:
+                    self.ecole_encaissement_id = classe.ecole_id
+                    snapshot_fields.add('ecole_encaissement')
         year_was_missing = not self.annee_scolaire
         if not self.annee_scolaire and self.eleve_id:
             self.annee_scolaire = (
@@ -227,8 +324,10 @@ class Paiement(SyncTrackedModel):
         if self.montant is None or Decimal(str(self.montant)) <= 0:
             raise ValidationError({'montant': 'Le montant doit être supérieur à zéro.'})
         self.clean()
-        if year_was_missing and kwargs.get('update_fields') is not None:
-            kwargs['update_fields'] = set(kwargs['update_fields']) | {'annee_scolaire'}
+        if kwargs.get('update_fields') is not None:
+            kwargs['update_fields'] = set(kwargs['update_fields']) | snapshot_fields
+            if year_was_missing:
+                kwargs['update_fields'].add('annee_scolaire')
 
         before = self._audit_snapshot(self.pk) if self.pk else None
 
@@ -299,6 +398,17 @@ class Paiement(SyncTrackedModel):
     @property
     def montant_avec_frais(self):
         return self.montant + self.mode_paiement.frais_supplementaires
+
+    @property
+    def classe_reference(self):
+        """Classe du reçu, figée à l'encaissement avec repli historique."""
+        return self.classe_encaissement or getattr(self.eleve, 'classe', None)
+
+    @property
+    def ecole_reference(self):
+        """École du reçu, figée à l'encaissement avec repli historique."""
+        classe = self.classe_reference
+        return self.ecole_encaissement or getattr(classe, 'ecole', None)
 
 
 class HistoriqueModificationPaiement(models.Model):

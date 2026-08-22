@@ -153,7 +153,11 @@ def recu_public_pdf(request, paiement_id):
         import os
         
         paiement = get_object_or_404(
-            Paiement.objects.select_related('eleve', 'type_paiement', 'mode_paiement', 'eleve__classe', 'eleve__classe__ecole'),
+            Paiement.objects.select_related(
+                'eleve', 'type_paiement', 'mode_paiement',
+                'eleve__classe', 'eleve__classe__ecole',
+                'classe_encaissement', 'ecole_encaissement',
+            ),
             id=paiement_id,
             statut='VALIDE'
         )
@@ -210,7 +214,7 @@ def recu_public_pdf(request, paiement_id):
 
         # Filigrane
         try:
-            ecole_obj = paiement.eleve.classe.ecole if paiement.eleve.classe else None
+            ecole_obj = paiement.ecole_reference
             draw_logo_watermark(c, width, height, ecole=ecole_obj)
         except Exception:
             pass
@@ -225,7 +229,7 @@ def recu_public_pdf(request, paiement_id):
         c.drawString(left, top, "REÇU DE PAIEMENT")
         top -= 25
 
-        ecole_obj = paiement.eleve.classe.ecole if paiement.eleve.classe else None
+        ecole_obj = paiement.ecole_reference
         if ecole_obj:
             c.setFont('Helvetica-Bold', 12)
             c.drawString(left, top, ecole_obj.nom)
@@ -256,8 +260,8 @@ def recu_public_pdf(request, paiement_id):
         top -= line_h
         c.drawString(left, top, f"Matricule: {paiement.eleve.matricule or 'N/A'}")
         top -= line_h
-        if paiement.eleve.classe:
-            c.drawString(left, top, f"Classe: {paiement.eleve.classe.nom}")
+        if paiement.classe_reference:
+            c.drawString(left, top, f"Classe: {paiement.classe_reference.nom}")
             top -= line_h
         top -= line_h
 

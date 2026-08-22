@@ -44,7 +44,7 @@ def _ecole_export_paiements(request, qs):
         return ecole_utilisateur
 
     ecole_ids = list(
-        qs.order_by().values_list('eleve__classe__ecole_id', flat=True).distinct()[:2]
+        qs.order_by().values_list('ecole_encaissement_id', flat=True).distinct()[:2]
     )
     if len(ecole_ids) == 1:
         return Ecole.objects.filter(pk=ecole_ids[0]).first()
@@ -64,6 +64,7 @@ def filtrer_paiements(request):
 
     qs = (Paiement.objects
           .select_related('eleve', 'eleve__classe', 'eleve__classe__ecole',
+                          'classe_encaissement', 'ecole_encaissement',
                           'type_paiement', 'mode_paiement')
           .exclude(statut='ANNULE')
           .order_by('eleve__classe__nom', 'eleve__nom', 'eleve__prenom', '-date_paiement'))
@@ -85,7 +86,7 @@ def filtrer_paiements(request):
         qs = qs.filter(annee_scolaire=annee)
         libelles.append(f'Année : {annee}')
     if classe_id.isdigit():
-        qs = qs.filter(eleve__classe_id=int(classe_id))
+        qs = qs.pour_classe(int(classe_id))
         c = Classe.objects.filter(pk=int(classe_id)).first()
         libelles.append(f'Classe : {c.nom}' if c else 'Classe')
     if mode_id.isdigit():
@@ -169,7 +170,7 @@ def export_paiements_filtres_excel(request):
         total += p.montant or Decimal('0')
         valeurs = [
             i, p.eleve.matricule or '', f"{p.eleve.prenom} {p.eleve.nom}",
-            p.eleve.classe.nom if p.eleve.classe else '',
+            p.classe_reference.nom if p.classe_reference else '',
             p.type_paiement.nom if p.type_paiement else '',
             p.mode_paiement.nom if p.mode_paiement else '',
             p.date_paiement.strftime('%d/%m/%Y') if p.date_paiement else '',
@@ -240,7 +241,7 @@ def export_paiements_filtres_pdf(request):
         total += p.montant or Decimal('0')
         data.append([
             str(i), p.eleve.matricule or '', f"{p.eleve.prenom} {p.eleve.nom}",
-            p.eleve.classe.nom if p.eleve.classe else '',
+            p.classe_reference.nom if p.classe_reference else '',
             p.type_paiement.nom if p.type_paiement else '',
             p.mode_paiement.nom if p.mode_paiement else '',
             p.date_paiement.strftime('%d/%m/%Y') if p.date_paiement else '',
