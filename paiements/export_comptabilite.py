@@ -50,8 +50,10 @@ def _collecter_donnees(request):
 
     # ── 1. Paiements validés ──────────────────────────────────────────
     paiements = (Paiement.objects
-                 .filter(statut='VALIDE', eleve__classe_id__in=classes_ids)
-                 .select_related('eleve', 'eleve__classe', 'type_paiement', 'mode_paiement')
+                 .pour_classes(classes_ids)
+                 .filter(statut='VALIDE')
+                 .select_related('eleve', 'eleve__classe', 'classe_encaissement',
+                                 'ecole_encaissement', 'type_paiement', 'mode_paiement')
                  .order_by('eleve__classe__nom', 'date_paiement', 'numero_recu'))
     if du:
         paiements = paiements.filter(date_paiement__gte=du)
@@ -61,7 +63,7 @@ def _collecter_donnees(request):
 
     paiements_par_classe = {}
     for p in paiements:
-        paiements_par_classe.setdefault(p.eleve.classe_id, []).append(p)
+        paiements_par_classe.setdefault(p.classe_reference.id, []).append(p)
 
     # ── 2. Retards (même logique que rapport_retards) ─────────────────
     try:
@@ -117,7 +119,7 @@ def _collecter_donnees(request):
         s = stats_modes.setdefault(mode, {'nb': 0, 'total': Decimal('0')})
         s['nb'] += 1
         s['total'] += p.montant or Decimal('0')
-        cle = (p.eleve.classe_id, mode)
+        cle = (p.classe_reference.id, mode)
         matrice[cle] = matrice.get(cle, Decimal('0')) + (p.montant or Decimal('0'))
     modes_ordonnes = sorted(stats_modes.keys())
 

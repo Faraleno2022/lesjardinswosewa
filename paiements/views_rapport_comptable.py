@@ -54,6 +54,7 @@ def _rapport_data(request):
     paiements = filter_by_user_school(
         Paiement.objects.select_related(
             "eleve", "eleve__classe", "eleve__classe__ecole",
+            "classe_encaissement", "ecole_encaissement",
             "type_paiement", "mode_paiement",
         ),
         request.user,
@@ -62,7 +63,7 @@ def _rapport_data(request):
     if statut != "TOUS":
         paiements = paiements.filter(statut=statut)
     if classe_selectionnee:
-        paiements = paiements.filter(eleve__classe=classe_selectionnee)
+        paiements = paiements.pour_classe(classe_selectionnee)
     paiements = paiements.order_by("eleve__classe__nom", "-date_paiement", "eleve__nom")
 
     echeanciers = filter_by_user_school(
@@ -131,7 +132,7 @@ def _rapport_data(request):
 
     classes_stats = {}
     for paiement in paiements_list:
-        classe = paiement.eleve.classe
+        classe = paiement.classe_reference
         ligne = classes_stats.setdefault(classe.id, {
             "classe": classe, "paiements": 0, "montant": Decimal("0"),
             "retards": Decimal("0"), "relances": 0,

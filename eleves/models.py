@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.models import User
 from django.core.validators import RegexValidator
 from decimal import Decimal
@@ -548,6 +548,11 @@ class Eleve(SyncTrackedModel):
         """Désactivée pour éviter les conflits UNIQUE"""
         pass
     def save(self, *args, **kwargs):
+        """Enregistre un transfert de classe comme une opération atomique."""
+        with transaction.atomic():
+            return self._save_atomic(*args, **kwargs)
+
+    def _save_atomic(self, *args, **kwargs):
         """Génère automatiquement le matricule au format CODE-### si absent.
         - CODE déterminé par la classe via `_code_classe_from_nom_ou_niveau`
         - ### est une séquence à 3 chiffres, incrémentée par classe (et donc par école)
@@ -568,6 +573,19 @@ class Eleve(SyncTrackedModel):
                 old_instance = Eleve.objects.get(pk=self.pk)
                 if old_instance.classe_id != self.classe_id:
                     # Changement de classe détecté
+                    # Figer d'abord la portée des anciens reçus encore dépourvus
+                    # de snapshot (données historiques/importées). Après le
+                    # transfert, la classe courante ne permettrait plus de
+                    # retrouver leur école d'encaissement réelle.
+                    from paiements.models import Paiement
+
+                    Paiement.objects.filter(eleve_id=self.pk).filter(
+                        models.Q(ecole_encaissement__isnull=True)
+                        | models.Q(classe_encaissement__isnull=True)
+                    ).update(
+                        ecole_encaissement_id=old_instance.classe.ecole_id,
+                        classe_encaissement_id=old_instance.classe_id,
+                    )
                     regenerer_matricule = True
                     ancienne_classe = old_instance.classe
                     ancien_matricule = self.matricule
@@ -681,6 +699,18 @@ class Eleve(SyncTrackedModel):
         
         # Créer l'historique du changement de classe après la sauvegarde
         if changement_classe_info:
+            # Le tarif de la classe cible est appliqué avant de finaliser
+            # l'historique. Si une erreur inattendue survient, transaction.atomic
+            # annule aussi le changement de classe et de matricule.
+            from paiements.services import reconcilier_transfert_classe
+
+            self._financial_transfer_info = reconcilier_transfert_classe(
+                self,
+                ancienne_classe,
+                self.classe,
+                cree_par=changement_classe_info['utilisateur'],
+            )
+
             # Transférer les notes vers la nouvelle classe
             transfert_result = self._transferer_notes_vers_nouvelle_classe(ancienne_classe, self.classe)
             notes_transferees = transfert_result.get('transferees', 0)

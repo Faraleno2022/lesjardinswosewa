@@ -1331,11 +1331,11 @@ def liste_paiements(request):
     annee_active = get_annee_active(request, ecole_for_annee) if ecole_for_annee else None
 
     # Queryset optimisé avec prefetch
-    qs = OptimizedQueryMixin.get_optimized_paiements_queryset(user_school_obj)
+    qs = OptimizedQueryMixin.get_optimized_paiements_queryset()
 
-    # Restreindre par école de l'utilisateur (sauf admin)
-    if not user_is_admin(request.user) and user_school_obj:
-        qs = qs.filter(eleve__classe__ecole=user_school_obj)
+    # Seul le superutilisateur voit toutes les écoles. Pour un paiement, la
+    # portée est celle de l'encaissement, pas la classe actuelle de l'élève.
+    qs = filter_by_user_school(qs, request.user, 'eleve__classe__ecole')
 
     # Filtre par année scolaire (via la classe de l'élève)
     if annee_filtre:
@@ -1366,7 +1366,7 @@ def liste_paiements(request):
     situation = (request.GET.get('situation') or '').strip()  # retard / reste / solde
 
     if classe_filtre.isdigit():
-        qs = qs.filter(eleve__classe_id=int(classe_filtre))
+        qs = qs.pour_classe(int(classe_filtre))
     if mode_filtre.isdigit():
         qs = qs.filter(mode_paiement_id=int(mode_filtre))
     if type_filtre.isdigit():
@@ -3349,7 +3349,11 @@ def generer_recu_pdf(request, paiement_id:int):
     - Inclut les informations clés du paiement et de l'élève
     - Liste les remises appliquées et affiche le total des remises
     """
-    paiement_qs = Paiement.objects.select_related('eleve', 'type_paiement', 'mode_paiement', 'eleve__classe', 'eleve__classe__ecole')
+    paiement_qs = Paiement.objects.select_related(
+        'eleve', 'type_paiement', 'mode_paiement',
+        'eleve__classe', 'eleve__classe__ecole',
+        'classe_encaissement', 'ecole_encaissement',
+    )
     paiement_qs = filter_by_user_school(paiement_qs, request.user, 'eleve__classe__ecole')
     paiement = get_object_or_404(paiement_qs, pk=paiement_id)
 
@@ -3381,7 +3385,7 @@ def generer_recu_pdf(request, paiement_id:int):
 
     # Filigrane: toujours actif pour les reçus PDF, spécifique à l'école du paiement
     try:
-        ecole_obj = getattr(getattr(paiement.eleve, 'classe', None), 'ecole', None)
+        ecole_obj = paiement.ecole_reference
         draw_logo_watermark(c, width, height, ecole=ecole_obj)
     except Exception:
         pass
@@ -3705,8 +3709,8 @@ def generer_recu_pdf(request, paiement_id:int):
     draw_line(f"Nom : {paiement.eleve.nom_complet}")
     if getattr(paiement.eleve, 'matricule', None):
         draw_line(f"Matricule : {paiement.eleve.matricule}")
-    if getattr(paiement.eleve, 'classe', None):
-        draw_line(f"Classe : {paiement.eleve.classe}")
+    if paiement.classe_reference:
+        draw_line(f"Classe : {paiement.classe_reference}")
 
     # Échéances (si disponibles sur l'échéancier de l'élève)
     try:

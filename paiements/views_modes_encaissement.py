@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from django.core.paginator import Paginator
 from django.db.models import Count, Max, Q, Sum
+from django.db.models.functions import Coalesce
 from django.shortcuts import render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
@@ -142,17 +143,18 @@ def _payment_modes_detail_data(request):
 
     payments = filter_by_user_school(
         Paiement.objects.select_related(
-            "eleve", "eleve__classe", "eleve__classe__ecole", "mode_paiement"
+            "eleve", "eleve__classe", "eleve__classe__ecole", "mode_paiement",
+            "classe_encaissement", "ecole_encaissement",
         ),
         request.user,
         "eleve__classe__ecole",
     ).filter(date_paiement__range=(start, end))
     if selected_school_id:
-        payments = payments.filter(eleve__classe__ecole_id=selected_school_id)
+        payments = payments.pour_ecole(selected_school_id)
     if selected_year:
         payments = payments.filter(annee_scolaire=selected_year)
     if selected_class:
-        payments = payments.filter(eleve__classe_id=selected_class.pk)
+        payments = payments.pour_classe(selected_class.pk)
     if status != "TOUS":
         payments = payments.filter(statut=status)
     if selected_mode_id:
@@ -167,15 +169,25 @@ def _payment_modes_detail_data(request):
         )
 
     grouped = list(
-        payments.order_by()
+        payments.annotate(
+            classe_reference_id=Coalesce(
+                "classe_encaissement_id", "eleve__classe_id"
+            ),
+            classe_reference_nom=Coalesce(
+                "classe_encaissement__nom", "eleve__classe__nom"
+            ),
+            ecole_reference_nom=Coalesce(
+                "ecole_encaissement__nom", "eleve__classe__ecole__nom"
+            ),
+        ).order_by()
         .values(
             "eleve_id",
             "eleve__matricule",
             "eleve__nom",
             "eleve__prenom",
-            "eleve__classe_id",
-            "eleve__classe__nom",
-            "eleve__classe__ecole__nom",
+            "classe_reference_id",
+            "classe_reference_nom",
+            "ecole_reference_nom",
             "annee_scolaire",
             "mode_paiement_id",
             "mode_paiement__nom",
@@ -187,7 +199,7 @@ def _payment_modes_detail_data(request):
         )
         .order_by(
             "mode_paiement__nom",
-            "eleve__classe__nom",
+            "classe_reference_nom",
             "eleve__nom",
             "eleve__prenom",
         )
@@ -225,8 +237,8 @@ def _payment_modes_detail_data(request):
             "student": " ".join(
                 filter(None, [item["eleve__nom"], item["eleve__prenom"]])
             ),
-            "school": item["eleve__classe__ecole__nom"],
-            "class": item["eleve__classe__nom"],
+            "school": item["ecole_reference_nom"],
+            "class": item["classe_reference_nom"],
             "school_year": item["annee_scolaire"],
             "mode_id": item["mode_paiement_id"],
             "mode": item["mode_paiement__nom"] or "Non précisé",

@@ -916,6 +916,43 @@ def modifier_eleve(request, eleve_id):
                 elif nb_trans == 0 and nb_ign > 0:
                     messages.warning(request, f"Attention : {nb_ign} note(s) n'ont pas pu etre transferees (matieres sans equivalent dans la nouvelle classe).")
 
+            # Présenter immédiatement l'incidence financière du transfert.
+            finance_info = getattr(eleve, '_financial_transfer_info', None)
+            if finance_info:
+                if finance_info.get('grille_manquante'):
+                    messages.warning(
+                        request,
+                        "Classe modifiee, mais aucune grille tarifaire exacte "
+                        "n'existe pour la nouvelle classe et son annee scolaire. "
+                        "L'echeancier n'a donc pas ete modifie.",
+                    )
+                elif finance_info.get('echeancier_mis_a_jour'):
+                    total = int(finance_info.get('nouveau_total_du') or 0)
+                    conserve = int(finance_info.get('encaissements_conserves') or 0)
+                    remises = int(finance_info.get('remises_conservees') or 0)
+                    reste = int(finance_info.get('solde_restant') or 0)
+                    if finance_info.get('changement_annee'):
+                        prefixe = (
+                            "Nouvel echeancier cree; l'historique financier "
+                            "de l'ancienne annee est conserve."
+                        )
+                    else:
+                        prefixe = "Echeancier recalcule selon la nouvelle classe."
+                    messages.success(
+                        request,
+                        f"{prefixe} Total du : {total:,} GNF; "
+                        f"paiements conserves : {conserve:,} GNF; "
+                        f"remises conservees : {remises:,} GNF; "
+                        f"reste : {reste:,} GNF.",
+                    )
+                    credit = int(finance_info.get('credit_non_affecte') or 0)
+                    if credit > 0:
+                        messages.warning(
+                            request,
+                            f"Le nouveau tarif est inferieur aux encaissements : "
+                            f"un credit de {credit:,} GNF doit etre regularise.",
+                        )
+
             # Créer l'historique si des changements ont été effectués
             if changements:
                 try:
