@@ -11,7 +11,14 @@ except ImportError:
     load_dotenv = None
 
 # =================== Base ===================
-BASE_DIR = Path(__file__).resolve().parent.parent
+# Dans l'executable PyInstaller, ``__file__`` pointe vers le dossier interne
+# temporaire de l'application. Les donnees modifiables (SQLite, medias, logs,
+# configuration) doivent au contraire rester a cote de MySchoolGN.exe afin
+# d'etre preservees par l'installateur et les sauvegardes.
+BASE_DIR = Path(
+    os.environ.get('MYSCHOOL_BASE_DIR')
+    or Path(__file__).resolve().parent.parent
+)
 
 
 def _load_plain_env(path):
@@ -362,6 +369,10 @@ PHONE_VERIFY_TTL_SECONDS = int(os.environ.get('PHONE_VERIFY_TTL_SECONDS', 4 * 36
 
 # =================== Synchronisation offline/online ===================
 MYSCHOOL_SYNC_SERVER_URL = os.environ.get('MYSCHOOL_SYNC_SERVER_URL', '').rstrip('/')
+# URL publique utilisee par l'administration pour fabriquer les configurations
+# des postes offline. Si elle n'est pas definie, l'URL HTTPS de la requete est
+# utilisee automatiquement.
+MYSCHOOL_SYNC_PUBLIC_URL = os.environ.get('MYSCHOOL_SYNC_PUBLIC_URL', '').rstrip('/')
 MYSCHOOL_SYNC_DEVICE_ID = os.environ.get('MYSCHOOL_SYNC_DEVICE_ID', '')
 MYSCHOOL_SYNC_TOKEN = os.environ.get('MYSCHOOL_SYNC_TOKEN', '')
 MYSCHOOL_SYNC_ADMIN_TOKEN = os.environ.get('MYSCHOOL_SYNC_ADMIN_TOKEN', '')

@@ -79,6 +79,7 @@ def run_pyinstaller():
     spec_file = os.path.join(BASE_DIR, 'myschool.spec')
     if not os.path.exists(spec_file):
         print(f"  [ERREUR] Fichier spec introuvable: {spec_file}")
+        print("  Utilisez le fichier myschool.spec versionne avec le projet.")
         sys.exit(1)
 
     # Nettoyer les anciens builds
@@ -141,6 +142,21 @@ def copy_extra_files():
         if os.path.exists(dev_dst):
             os.remove(dev_dst)
             print(f"  [INFO] {dev_file} du dev supprime du build")
+
+    # Ne jamais embarquer par defaut le jeton d'une ecole dans l'installateur
+    # generique. Un build volontairement personnalise reste possible avec
+    # MYSCHOOL_EMBED_SYNC_CONFIG=1.
+    sync_config_src = os.path.join(BASE_DIR, 'sync_config.json')
+    sync_config_dst = os.path.join(OUTPUT_DIR, 'sync_config.json')
+    embed_sync_config = os.environ.get(
+        'MYSCHOOL_EMBED_SYNC_CONFIG', '',
+    ).strip().lower() in {'1', 'true', 'yes', 'oui'}
+    if embed_sync_config and os.path.exists(sync_config_src):
+        shutil.copy2(sync_config_src, sync_config_dst)
+        print("  [OK] Configuration de synchronisation client copiee")
+    elif os.path.exists(sync_config_dst):
+        os.remove(sync_config_dst)
+        print("  [OK] Build generique : aucune configuration d'ecole embarquee")
 
     # Creer les dossiers necessaires
     for folder in ['logs', 'media', 'backups']:

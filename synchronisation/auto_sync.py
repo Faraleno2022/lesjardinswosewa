@@ -46,19 +46,33 @@ def _state_path() -> str:
 
 
 def _load_since_id():
+    return _load_state().get('since_id')
+
+
+def _load_state():
     try:
         with open(_state_path(), 'r', encoding='utf-8') as f:
-            return json.load(f).get('since_id')
+            state = json.load(f)
+            return state if isinstance(state, dict) else {}
     except Exception:
-        return None
+        return {}
 
 
 def _save_since_id(value) -> None:
     if not value:
         return
+    _save_state(since_id=value)
+
+
+def _save_state(*, since_id=None, initial_done=None) -> None:
+    state = _load_state()
+    if since_id:
+        state['since_id'] = since_id
+    if initial_done is not None:
+        state['initial_done'] = bool(initial_done)
     try:
         with open(_state_path(), 'w', encoding='utf-8') as f:
-            json.dump({'since_id': value}, f)
+            json.dump(state, f)
     except Exception:
         pass
 
@@ -218,14 +232,8 @@ def _retry_failed(ecole) -> int:
     return sum(1 for change in failed if _try_apply(change))
 
 
-def _pull(server, device_id, token, ecole):
+def _apply_pull_response(response, ecole):
     from .models import SyncChange
-    since_id = _load_since_id()
-    suffix = f'?since_id={since_id}' if since_id else ''
-    response = _request_json(
-        f'{server}/api/v1/sync/pull/{suffix}', device_id, token,
-        payload=None, method='GET',
-    )
     if not response.get('ok'):
         return 0
     created = 0
@@ -251,6 +259,94 @@ def _pull(server, device_id, token, ecole):
     return created
 
 
+def _pull(server, device_id, token, ecole):
+    since_id = _load_since_id()
+    suffix = f'?since_id={since_id}' if since_id else ''
+    response = _request_json(
+        f'{server}/api/v1/sync/pull/{suffix}', device_id, token,
+        payload=None, method='GET',
+    )
+    return _apply_pull_response(response, ecole)
+
+
+def _bootstrap_school(server, device_id, token, configured_ecole_id):
+    """Cree l'ecole locale depuis le snapshot d'un poste neuf.
+
+    ``SyncChange`` possede une cle etrangere vers Ecole. Sur une installation
+    vierge, il faut donc amorcer l'objet Ecole avant de pouvoir enregistrer et
+    appliquer le reste du snapshot initial.
+    """
+    from uuid import UUID
+
+    from django.db import models
+
+    from eleves.models import Ecole
+    from .context import mute_sync
+    from .engine import SYNC_FIELD_NAMES, deserialize_field
+
+    response = _request_json(
+        f'{server}/api/v1/sync/pull/?initial=1', device_id, token,
+        payload=None, method='GET', timeout=120,
+    )
+    if not response.get('ok'):
+        return None
+    if str(response.get('ecole_id') or '') != str(configured_ecole_id):
+        logger.error(
+            "[Sync] L'ecole retournee par le serveur (%s) ne correspond pas "
+            "a la configuration locale (%s).",
+            response.get('ecole_id'), configured_ecole_id,
+        )
+        return None
+
+    school_item = next((
+        item for item in response.get('changes', [])
+        if (item.get('model_label') or item.get('model')) == 'eleves.Ecole'
+        and item.get('operation') != 'DELETE'
+    ), None)
+    if not school_item:
+        logger.error("[Sync] Snapshot initial sans fiche ecole.")
+        return None
+
+    payload = school_item.get('payload') or {}
+    raw_uuid = school_item.get('object_uuid') or payload.get('sync_uuid')
+    if not raw_uuid:
+        logger.error("[Sync] Snapshot initial sans UUID d'ecole.")
+        return None
+
+    existing = Ecole.objects.filter(sync_uuid=raw_uuid).first()
+    if existing:
+        ecole = existing
+    else:
+        ecole = Ecole(sync_uuid=UUID(str(raw_uuid)))
+        try:
+            local_pk = int(configured_ecole_id)
+        except (TypeError, ValueError):
+            local_pk = None
+        if local_pk and not Ecole.objects.filter(pk=local_pk).exists():
+            ecole.pk = local_pk
+
+        for field in Ecole._meta.concrete_fields:
+            if field.name == 'id' or field.name in SYNC_FIELD_NAMES:
+                continue
+            if field.name not in payload:
+                continue
+            value = deserialize_field(field, payload.get(field.name))
+            if (
+                value is None and not field.null and not field.blank
+                and isinstance(field, (models.ForeignKey, models.OneToOneField))
+            ):
+                continue
+            setattr(ecole, field.name, value)
+        ecole.is_synced = True
+        with mute_sync():
+            ecole.save()
+
+    _apply_pull_response(response, ecole)
+    _save_state(initial_done=True)
+    logger.info("[Sync] Initialisation locale terminee pour l'ecole %s.", ecole.pk)
+    return ecole
+
+
 def _run_once() -> bool:
     """Une passe push + pull. Retourne True si le serveur a repondu."""
     cfg = _config()
@@ -261,7 +357,13 @@ def _run_once() -> bool:
         from eleves.models import Ecole
         ecole = Ecole.objects.filter(pk=ecole_id).first()
         if not ecole:
-            return False
+            ecole = _bootstrap_school(server, device_id, token, ecole_id)
+            if not ecole:
+                return False
+            # Le snapshot vient d'etre applique. Le prochain cycle enverra les
+            # eventuels changements locaux et passera en pull incremental.
+            _retry_failed(ecole)
+            return True
         _push(server, device_id, token, ecole)
         _pull(server, device_id, token, ecole)
         # Le lot qui vient d'arriver apporte peut-etre la dependance qui
