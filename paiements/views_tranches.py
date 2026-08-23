@@ -32,13 +32,49 @@ TRANCHES_EXPORT_HEADERS = [
 ]
 
 
-def _pourcentage_remise(montant_remise, base_scolarite):
-    """Taux effectif de remise sur les trois tranches de scolarité."""
-    montant_remise = Decimal(str(montant_remise or 0))
-    base_scolarite = Decimal(str(base_scolarite or 0))
-    if montant_remise <= 0 or base_scolarite <= 0:
-        return Decimal('0')
-    return min(Decimal('100'), (montant_remise * Decimal('100')) / base_scolarite)
+def _pourcentages_remise_selectionnes(eleve, annee_scolaire=None):
+    """Retourne les taux réellement sélectionnés pour les remises validées.
+
+    Le montant accordé peut être plafonné par le reste dû et ne permet donc
+    pas de retrouver fidèlement le taux choisi par l'utilisateur. La source de
+    vérité est ``RemiseReduction.valeur`` pour les remises de type pourcentage.
+    Une remise fixe ne doit jamais produire artificiellement un pourcentage.
+    """
+    lignes = PaiementRemise.objects.filter(
+        paiement__eleve=eleve,
+        paiement__statut='VALIDE',
+        montant_remise__gt=0,
+        remise__type_remise='POURCENTAGE',
+    ).filter(filtre_types_scolarite(prefix='paiement__type_paiement'))
+    if annee_scolaire:
+        lignes = lignes.filter(paiement__annee_scolaire=annee_scolaire)
+
+    taux = {
+        Decimal(str(valeur))
+        for valeur in lignes.values_list('remise__valeur', flat=True)
+        if valeur is not None
+    }
+    return tuple(sorted(taux))
+
+
+def _pourcentages_pdf(taux):
+    """Formate sans recalcul les taux sélectionnés pour le PDF."""
+    if not taux:
+        return ''
+    return ' + '.join(
+        f"{format(valeur.normalize(), 'f')} %" for valeur in taux
+    )
+
+
+def _pourcentages_excel(taux):
+    """Conserve un vrai pourcentage Excel quand un seul taux est présent."""
+    if not taux:
+        return None
+    if len(taux) == 1:
+        return float(taux[0] / Decimal('100'))
+    return ' + '.join(
+        f"{format(valeur.normalize(), 'f')} %" for valeur in taux
+    )
 
 
 def _paiements_fallback_par_poste(eleve, annee_scolaire=None):
@@ -99,7 +135,9 @@ def _donnees_tranches_eleve(eleve, annee_scolaire=None):
     tranche_1 = tranche_2 = tranche_3 = Decimal('0')
     total_du = total_paye = remise = reste = Decimal('0')
     total_couvert = Decimal('0')
-    pourcentage_remise = Decimal('0')
+    pourcentages_remise = _pourcentages_remise_selectionnes(
+        eleve, annee_scolaire
+    )
     situation = 'Échéancier absent'
 
     if echeancier is not None:
@@ -114,12 +152,6 @@ def _donnees_tranches_eleve(eleve, annee_scolaire=None):
         total_du = Decimal(str(echeancier.total_du or 0))
         total_paye = inscription + reinscription + tranche_1 + tranche_2 + tranche_3
         remise = Decimal(str(echeancier.total_remises_valides or 0))
-        base_scolarite = sum((
-            Decimal(str(echeancier.tranche_1_due or 0)),
-            Decimal(str(echeancier.tranche_2_due or 0)),
-            Decimal(str(echeancier.tranche_3_due or 0)),
-        ), Decimal('0'))
-        pourcentage_remise = _pourcentage_remise(remise, base_scolarite)
         total_couvert = min(total_du, total_paye + remise)
         reste = max(Decimal('0'), total_du - total_couvert)
         if total_du <= 0:
@@ -148,7 +180,7 @@ def _donnees_tranches_eleve(eleve, annee_scolaire=None):
         'total_du': total_du,
         'total_paye': Decimal(str(total_paye or 0)),
         'remise': remise,
-        'pourcentage_remise': pourcentage_remise,
+        'pourcentages_remise': pourcentages_remise,
         'total_couvert': total_couvert,
         'reste': reste,
         'situation': situation,
@@ -290,7 +322,7 @@ def export_tranches_par_classe_pdf(request):
                 f"{ligne['total_du']:,}".replace(',', ' '),
                 f"{ligne['total_paye']:,}".replace(',', ' '),
                 f"{ligne['remise']:,}".replace(',', ' '),
-                f"{ligne['pourcentage_remise']:.1f} %",
+                _pourcentages_pdf(ligne['pourcentages_remise']),
                 f"{ligne['total_couvert']:,}".replace(',', ' '),
                 f"{ligne['reste']:,}".replace(',', ' '),
                 P(ligne['situation']),
@@ -424,7 +456,7 @@ def export_tranches_par_classe_excel(request):
                 int(ligne['total_du']),
                 int(ligne['total_paye']),
                 int(ligne['remise']),
-                float(ligne['pourcentage_remise'] / Decimal('100')),
+                _pourcentages_excel(ligne['pourcentages_remise']),
                 int(ligne['total_couvert']),
                 int(ligne['reste']),
                 ligne['situation'],
