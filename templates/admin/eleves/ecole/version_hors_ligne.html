@@ -54,12 +54,17 @@
         <input id="id_nom" name="nom" type="text" maxlength="120"
                value="Poste direction" required>
 
-        <label for="id_intervalle">Synchronisation toutes les</label>
+        <label for="id_intervalle">Vérification au repos toutes les</label>
         <div>
           <input id="id_intervalle" name="intervalle" type="number"
-                 value="60" min="10" max="3600" required style="width: 110px;">
+                 value="10" min="2" max="3600" required style="width: 110px;">
           secondes
         </div>
+        <p class="help" style="margin-top:4px;">
+          Un ajout fait sur ce poste part <strong>immédiatement</strong> ; dès que
+          des données circulent, le poste passe de lui-même à 2 secondes. Cette
+          valeur ne règle que le rythme des vérifications quand tout est calme.
+        </p>
 
         <div class="offline-warning">
           Conservez le fichier <strong>sync_config.json</strong> en lieu sûr.

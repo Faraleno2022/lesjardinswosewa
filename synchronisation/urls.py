@@ -11,4 +11,5 @@ urlpatterns = [
     path('devices/register/', views.register_device, name='register_device'),
     path('push/', views.push, name='push'),
     path('pull/', views.pull, name='pull'),
+    path('state/', views.state, name='state'),
 ]

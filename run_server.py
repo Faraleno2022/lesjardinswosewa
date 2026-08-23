@@ -143,7 +143,8 @@ os.environ['MYSCHOOL_BASE_DIR'] = BASE_DIR
 # Chaque poste definit son serveur EN LIGNE et son appareil via un fichier JSON
 # local (jamais embarque dans le build). Cle attendues :
 #   MYSCHOOL_SYNC_SERVER_URL, MYSCHOOL_SYNC_ECOLE_ID,
-#   MYSCHOOL_SYNC_DEVICE_ID, MYSCHOOL_SYNC_TOKEN, MYSCHOOL_SYNC_INTERVAL
+#   MYSCHOOL_SYNC_DEVICE_ID, MYSCHOOL_SYNC_TOKEN, MYSCHOOL_SYNC_INTERVAL,
+#   MYSCHOOL_SYNC_FAST_INTERVAL
 def _load_sync_config():
     import json
     candidates = [
@@ -153,7 +154,7 @@ def _load_sync_config():
     keys = (
         'MYSCHOOL_SYNC_SERVER_URL', 'MYSCHOOL_SYNC_ECOLE_ID',
         'MYSCHOOL_SYNC_DEVICE_ID', 'MYSCHOOL_SYNC_TOKEN',
-        'MYSCHOOL_SYNC_INTERVAL',
+        'MYSCHOOL_SYNC_INTERVAL', 'MYSCHOOL_SYNC_FAST_INTERVAL',
     )
     for path in candidates:
         try:
@@ -890,11 +891,17 @@ def main():
     try:
         from synchronisation import auto_sync
         try:
-            _sync_interval = int(os.environ.get('MYSCHOOL_SYNC_INTERVAL', '60'))
+            _sync_interval = int(os.environ.get('MYSCHOOL_SYNC_INTERVAL', '10'))
         except (TypeError, ValueError):
-            _sync_interval = 60
-        if auto_sync.start(interval=_sync_interval, boot_delay=25):
-            print(f"[Sync] Synchronisation automatique active (intervalle {_sync_interval}s).")
+            _sync_interval = 10
+        try:
+            _sync_fast = int(os.environ.get('MYSCHOOL_SYNC_FAST_INTERVAL', '2'))
+        except (TypeError, ValueError):
+            _sync_fast = 2
+        if auto_sync.start(interval=_sync_interval, boot_delay=8, fast_interval=_sync_fast):
+            print(f"[Sync] Synchronisation automatique active "
+                  f"(envoi immediat, verification {_sync_fast}s en activite, "
+                  f"{_sync_interval}s au repos).")
     except Exception as _sync_err:
         print(f"[Sync] Synchronisation automatique non démarrée : {_sync_err}")
 

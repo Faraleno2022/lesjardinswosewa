@@ -1,7 +1,9 @@
+from django.db import transaction
 from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
 from django.apps import apps as django_apps
 
+from .auto_sync import notify_local_change
 from .context import sync_is_muted
 from .engine import ecole_for_instance, is_sync_model, model_label_for, serialize_instance
 from .models import SyncChange
@@ -10,6 +12,18 @@ from .models import SyncChange
 def _is_historical_model(sender):
     """Ignore migration-time model classes from Django's historical app registry."""
     return getattr(sender._meta, 'apps', django_apps) is not django_apps
+
+
+def _reveiller_apres_commit():
+    """
+    Reveille la synchronisation une fois la transaction validee.
+
+    Le reveil doit attendre le commit : le worker vit dans un autre thread et
+    lirait sinon une base ou le changement n'existe pas encore — au mieux il
+    repartirait les mains vides, au pire il buterait sur le verrou d'ecriture
+    de SQLite. Hors transaction, Django execute le rappel immediatement.
+    """
+    transaction.on_commit(notify_local_change)
 
 
 @receiver(post_save)
@@ -28,6 +42,9 @@ def create_sync_change_on_save(sender, instance, created, **kwargs):
         operation=SyncChange.OPERATION_CREATE if created else SyncChange.OPERATION_UPDATE,
         payload=serialize_instance(instance),
     )
+    # Reveille la synchronisation : la donnee part dans la seconde, sans
+    # attendre la fin du cycle en cours.
+    _reveiller_apres_commit()
 
 
 @receiver(pre_delete)
@@ -56,3 +73,4 @@ def create_sync_change_on_delete(sender, instance, **kwargs):
         operation=SyncChange.OPERATION_DELETE,
         payload={'sync_uuid': str(instance.sync_uuid)},
     )
+    _reveiller_apres_commit()

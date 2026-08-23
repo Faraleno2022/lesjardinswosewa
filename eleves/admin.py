@@ -13,6 +13,14 @@ from django.utils.html import format_html
 from .models import Ecole, Classe, Eleve, EleveCorbeille, GrilleTarifaire
 
 
+# Cadences ecrites dans la configuration hors ligne telechargee. Au repos, la
+# verification se limite a un repere minuscule : rien ne justifie d'attendre
+# plus longtemps, et c'est ce qui fait qu'un ajout apparait tout de suite sur
+# les autres postes.
+INTERVALLE_SYNC_DEFAUT = 10
+INTERVALLE_SYNC_RAPIDE = 2
+
+
 @admin.register(Ecole)
 class EcoleAdmin(admin.ModelAdmin):
     list_display = (
@@ -107,15 +115,15 @@ class EcoleAdmin(admin.ModelAdmin):
             if action == 'creer':
                 nom = (request.POST.get('nom') or 'Poste local').strip()[:120]
                 try:
-                    intervalle = int(request.POST.get('intervalle') or 60)
+                    intervalle = int(request.POST.get('intervalle') or INTERVALLE_SYNC_DEFAUT)
                 except (TypeError, ValueError):
                     intervalle = 0
 
                 if not nom:
                     messages.error(request, "Indiquez le nom du poste.")
                     return redirect(page_url)
-                if intervalle < 10 or intervalle > 3600:
-                    messages.error(request, "L'intervalle doit être compris entre 10 et 3 600 secondes.")
+                if intervalle < 2 or intervalle > 3600:
+                    messages.error(request, "L'intervalle doit être compris entre 2 et 3 600 secondes.")
                     return redirect(page_url)
 
                 token = secrets.token_urlsafe(32)
@@ -129,7 +137,12 @@ class EcoleAdmin(admin.ModelAdmin):
                     'MYSCHOOL_SYNC_ECOLE_ID': ecole.pk,
                     'MYSCHOOL_SYNC_DEVICE_ID': str(device.device_id),
                     'MYSCHOOL_SYNC_TOKEN': token,
+                    # Cadence au repos, puis cadence rapide des qu'une donnee
+                    # circule. Un ajout part de toute facon immediatement : ces
+                    # deux valeurs ne reglent que la detection de ce qui vient
+                    # des autres postes.
                     'MYSCHOOL_SYNC_INTERVAL': intervalle,
+                    'MYSCHOOL_SYNC_FAST_INTERVAL': INTERVALLE_SYNC_RAPIDE,
                 }
                 response = HttpResponse(
                     json.dumps(configuration, ensure_ascii=False, indent=2),
