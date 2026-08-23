@@ -122,19 +122,31 @@ def copy_extra_files():
         shutil.copytree(static_src, static_dst)
         print("  [OK] Fichiers statiques copies")
 
-    # Copier le dossier media
-    media_src = os.path.join(BASE_DIR, 'media')
-    media_dst = os.path.join(OUTPUT_DIR, 'media')
-    if os.path.exists(media_src) and not os.path.exists(media_dst):
-        shutil.copytree(media_src, media_dst)
-        print("  [OK] Dossier media copie")
+    # Ne copier que les ressources generiques. Le dossier media du poste de
+    # compilation contient des photos d'eleves, logos d'ecoles et documents
+    # reels qui ne doivent jamais etre livres dans l'installateur generique.
+    generic_media = [
+        (os.path.join('ecoles', 'default'), os.path.join('ecoles', 'default')),
+        (os.path.join('eleves', 'default'), os.path.join('eleves', 'default')),
+    ]
+    for source_rel, destination_rel in generic_media:
+        source = os.path.join(BASE_DIR, 'media', source_rel)
+        destination = os.path.join(OUTPUT_DIR, 'media', destination_rel)
+        if os.path.isdir(source):
+            os.makedirs(os.path.dirname(destination), exist_ok=True)
+            shutil.copytree(source, destination, dirs_exist_ok=True)
+    print("  [OK] Medias generiques copies (aucune donnee d'ecole)")
 
     # NE PAS copier la base de données du développeur dans le build
     # run_server.py créera une base vierge via 'migrate' au premier démarrage
-    db_dst = os.path.join(OUTPUT_DIR, 'db.sqlite3')
-    if os.path.exists(db_dst):
-        os.remove(db_dst)
-        print("  [INFO] db.sqlite3 du dev supprimee du build (sera creee au 1er demarrage)")
+    db_paths = [
+        os.path.join(OUTPUT_DIR, 'db.sqlite3'),
+        os.path.join(OUTPUT_DIR, '_internal', 'db.sqlite3'),
+    ]
+    for db_dst in db_paths:
+        if os.path.exists(db_dst):
+            os.remove(db_dst)
+            print("  [INFO] db.sqlite3 du dev supprimee du build (sera creee au 1er demarrage)")
 
     # Supprimer les fichiers de licence/essai du dev s'ils ont été copiés
     for dev_file in ['license.dat', '.trial_start', '.secret_key', '.env']:

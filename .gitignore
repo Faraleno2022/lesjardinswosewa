@@ -79,6 +79,7 @@ MySchoolGN_Output/
 *.exe
 *.rar
 *.spec
+!/myschool.spec
 .codex-tools/
 
 # Secret Django propre à chaque poste (généré par run_server.py)
@@ -106,5 +107,6 @@ sauvegardes/
 myschoolgn_sauvegarde_*.zip
 sauvegarde_config.json
 sync_config.json
+.sync_state.json
 db.sqlite3.avant_restauration_*
 media_avant_restauration_*
