@@ -43,7 +43,7 @@ from .forms import PaiementForm, ModificationPaiementForm, EcheancierForm, Reche
 from .allocation import (
     allocate_amount_sequentially,
     allocate_discounts,
-    build_payment_allocation_history,
+    build_document_payment_allocation_history,
     due_balances,
     remaining_balances,
 )
@@ -3661,11 +3661,6 @@ def generer_recu_pdf(request, paiement_id:int):
     # L'encaissement et la remise sont deux composantes distinctes de la couverture.
     draw_line(f"Montant encaissé : {str(f'{paiement.montant:,.0f}').replace(',', ' ')} GNF", bold=True)
 
-    if remises_total and int(remises_total) > 0:
-        draw_line(f"Remise accordée : {str(f'{int(remises_total):,}').replace(',', ' ')} GNF")
-    couverture_recu = max(0, int(paiement.montant + (remises_total or 0)))
-    draw_line(f"Dette couverte par ce reçu : {str(f'{couverture_recu:,}').replace(',', ' ')} GNF", bold=True)
-
     # Affectation du paiement courant sur les tranches (simulation déterministe)
     # Objectif: montrer, pour CE reçu, quelle partie couvre Inscription/T1/T2/T3
     try:
@@ -3682,14 +3677,25 @@ def generer_recu_pdf(request, paiement_id:int):
                     annee_scolaire=paiement.annee_scolaire,
                     statut='VALIDE',
                 )
+                .filter(filtre_types_scolarite())
+                .prefetch_related('remises')
                 .order_by('date_paiement', 'date_creation', 'id')
             )
-            allocations, _ = build_payment_allocation_history(
-                echeancier_for_alloc, paiements_valides.iterator()
+            allocations, _ = build_document_payment_allocation_history(
+                echeancier_for_alloc, paiements_valides
             )
 
             current_allocation = allocations.get(paiement.id)
             if current_allocation:
+                montant_affecte = sum(
+                    current_allocation.values(), Decimal('0')
+                )
+                if montant_affecte != Decimal(str(paiement.montant or 0)):
+                    draw_line(
+                        "Montant affecté aux échéances : "
+                        f"{str(f'{int(montant_affecte):,}').replace(',', ' ')} GNF",
+                        bold=True,
+                    )
                 top -= 6
                 draw_line("Affectation du paiement", bold=True)
                 a_insc = current_allocation["inscription"]

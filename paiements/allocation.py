@@ -85,6 +85,63 @@ def build_payment_allocation_history(echeancier, payments):
     return allocations, balances
 
 
+def _document_last_key(payment, discounts):
+    """Dernier poste explicitement couvert par le libellé du reçu remisé."""
+    if not discounts:
+        return None
+    from .calculs import normaliser_libelle
+
+    label = normaliser_libelle(
+        getattr(getattr(payment, "type_paiement", None), "nom", "")
+    )
+    compact = "".join(label.split())
+    if "annuel" in compact or "tranche3" in compact:
+        return "tranche_3"
+    if "tranche2" in compact:
+        return "tranche_2"
+    if "tranche1" in compact:
+        return "tranche_1"
+    return None
+
+
+def build_document_payment_allocation_history(echeancier, payments):
+    """Reconstruit l'affectation nette présentée sur les documents.
+
+    Cette fonction ne modifie ni le paiement ni l'échéancier. Le montant brut
+    encaissé reste disponible dans les totaux comptables, tandis que les
+    colonnes Inscription/T1/T2/T3 ne répètent jamais une remise.
+    """
+    balances = due_balances(echeancier)
+    allocations = {}
+
+    for payment in payments:
+        manager = getattr(payment, "remises", None)
+        discounts = list(manager.all()) if manager is not None else []
+        _, discounted_balances = allocate_discounts(
+            echeancier, discounts, balances=balances
+        )
+
+        last_key = _document_last_key(payment, discounts)
+        allocation_balances = dict(discounted_balances)
+        if last_key is not None:
+            last_index = ALLOCATION_KEYS.index(last_key)
+            for key in ALLOCATION_KEYS[last_index + 1:]:
+                # Le reçu n'annonçait pas ces tranches : une remise sur la
+                # dernière tranche citée ne doit pas y créer un faux paiement.
+                allocation_balances[key] = Decimal("0")
+
+        allocation, _, _ = allocate_amount_sequentially(
+            getattr(payment, "montant", 0), allocation_balances
+        )
+        balances = {
+            key: max(Decimal("0"), discounted_balances[key] - allocation[key])
+            for key in ALLOCATION_KEYS
+        }
+        allocations[payment.pk] = allocation
+
+    return allocations, balances
+
+
 def allocate_discounts(echeancier, discounts, balances=None):
     """Ventile les remises validées sur les tranches réellement concernées.
 

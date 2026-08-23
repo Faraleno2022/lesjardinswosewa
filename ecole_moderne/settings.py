@@ -172,7 +172,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    # Vérification licence : bloque l'accès web si essai/licence expiré
+    # Contrôle d'intégrité uniquement : la licence ne bloque jamais l'accès
     'ecole_moderne.licence_middleware.LicenceMiddleware',
     # Protection anti brute-force
     'axes.middleware.AxesMiddleware',

@@ -7,6 +7,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from openpyxl import load_workbook
+from pypdf import PdfReader
 
 from eleves.models import Classe, Ecole, Eleve, GrilleTarifaire, Responsable
 from paiements.models import (
@@ -159,7 +160,7 @@ class InscriptionReinscriptionReportingTests(TestCase):
             [
                 "Élève", "Inscription payée", "Réinscription payée",
                 "Tranche 1 payée", "Tranche 2 payée", "Tranche 3 payée",
-                "Total dû", "Total payé", "Remise (GNF)", "Remise (%)",
+                "Total dû", "Encaissé", "Remise (GNF)", "Remise (%)",
                 "Total couvert", "Reste", "Situation",
             ],
         )
@@ -288,6 +289,99 @@ class InscriptionReinscriptionReportingTests(TestCase):
         ligne = _donnees_tranches_eleve(student, "2025-2026")
         self.assertEqual(ligne["pourcentages_remise"], ())
         self.assertEqual(_pourcentages_pdf(ligne["pourcentages_remise"]), "")
+
+    def test_remise_t1_ne_s_affiche_jamais_comme_paiement_t2_ou_t3(self):
+        """Reproduit le reçu REC20260001 décrit par l'utilisateur."""
+        student = self._student("PN1-001", "Fara")
+        schedule = self._schedule(
+            student, "INSCRIPTION", 50000, tranche_1=500000,
+            admission_paye=50000,
+        )
+        schedule.tranche_1_payee = Decimal("475000")
+        schedule.tranche_2_due = Decimal("500000")
+        schedule.tranche_2_payee = Decimal("25000")
+        schedule.tranche_3_due = Decimal("500000")
+        schedule.save(update_fields=[
+            "tranche_1_payee", "tranche_2_due", "tranche_2_payee",
+            "tranche_3_due",
+        ])
+        payment_type = TypePaiement.objects.create(
+            nom="Inscription + Tranche 1", categorie="SCOLARITE",
+        )
+        mode = ModePaiement.objects.create(nom="Cache")
+        payment = Paiement.objects.create(
+            eleve=student,
+            type_paiement=payment_type,
+            mode_paiement=mode,
+            numero_recu="REC20260001",
+            montant=Decimal("550000"),
+            annee_scolaire="2025-2026",
+            date_paiement=date(2026, 8, 23),
+            statut="VALIDE",
+        )
+        discount = RemiseReduction.objects.create(
+            nom="Remise scolarité 5% (T1)",
+            type_remise="POURCENTAGE",
+            valeur=Decimal("5"),
+            motif="AUTRE",
+            date_debut=date(2025, 9, 1),
+            date_fin=date(2026, 8, 31),
+        )
+        PaiementRemise.objects.create(
+            paiement=payment,
+            remise=discount,
+            montant_remise=Decimal("25000"),
+            motif="GESTE_COMMERCIAL",
+            tranches_concernees="1",
+            base_calcul="TRANCHES_DUES",
+            deduite_du_paiement=False,
+        )
+
+        ligne = _donnees_tranches_eleve(student, "2025-2026")
+        self.assertEqual(ligne["inscription"], Decimal("50000"))
+        self.assertEqual(ligne["tranche_1"], Decimal("475000"))
+        self.assertEqual(ligne["tranche_2"], Decimal("0"))
+        self.assertEqual(ligne["tranche_3"], Decimal("0"))
+        self.assertEqual(ligne["total_paye"], Decimal("550000"))
+        self.assertEqual(ligne["remise"], Decimal("25000"))
+        self.assertEqual(ligne["reste"], Decimal("975000"))
+
+        params = {"annee_scolaire": "2025-2026", "classe": self.classe.pk}
+        excel = self.client.get(
+            reverse("paiements:export_tranches_par_classe_excel"), params
+        )
+        workbook = load_workbook(BytesIO(excel.content), data_only=True)
+        worksheet = next(ws for ws in workbook.worksheets if ws.title != "Index")
+        headers = [cell.value for cell in worksheet[2]]
+        values = [cell.value for cell in worksheet[3]]
+        self.assertEqual(headers[7], "Encaissé")
+        self.assertEqual(values[1:6], [50000, 0, 475000, 0, 0])
+        self.assertEqual(values[7:12], [550000, 25000, 0.05, 575000, 975000])
+
+        pdf_tranches = self.client.get(
+            reverse("paiements:export_tranches_par_classe_pdf"), params
+        )
+        self.assertEqual(pdf_tranches.status_code, 200)
+        self.assertTrue(pdf_tranches.content.startswith(b"%PDF"))
+
+        receipt = self.client.get(
+            reverse("paiements:generer_recu_pdf", args=[payment.pk])
+        )
+        self.assertEqual(receipt.status_code, 200)
+        receipt_text = "\n".join(
+            page.extract_text() or ""
+            for page in PdfReader(BytesIO(receipt.content)).pages
+        )
+        self.assertIn("Montant encaissé : 550 000 GNF", receipt_text)
+        self.assertIn(
+            "Montant affecté aux échéances : 525 000 GNF", receipt_text
+        )
+        self.assertIn("1ère tranche: 475 000 GNF", receipt_text)
+        self.assertIn("2ème tranche: 0 GNF", receipt_text)
+        self.assertIn("3ème tranche: 0 GNF", receipt_text)
+        self.assertIn("Remises appliquées", receipt_text)
+        self.assertIn("Remise scolarité 5% (T1)", receipt_text)
+        self.assertNotIn("Remise accordée", receipt_text)
 
     @patch("paiements.views.timezone.localdate", return_value=date(2025, 10, 1))
     def test_reenrollment_plus_first_installment_sets_nature_and_allocates(self, _localdate):

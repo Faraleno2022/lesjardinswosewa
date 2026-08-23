@@ -7,6 +7,7 @@ from decimal import Decimal
 from eleves.models import Classe, Ecole
 from eleves.utils_annee import get_annee_active
 from paiements.models import Paiement, PaiementRemise
+from paiements.allocation import build_document_payment_allocation_history
 from paiements.calculs import filtre_types_scolarite, normaliser_libelle
 from utilisateurs.utils import user_is_admin, user_school
 from rapports.utils import _draw_header_and_watermark
@@ -23,7 +24,7 @@ TRANCHES_EXPORT_HEADERS = [
     'Tranche 2 payée',
     'Tranche 3 payée',
     'Total dû',
-    'Total payé',
+    'Encaissé',
     'Remise (GNF)',
     'Remise (%)',
     'Total couvert',
@@ -141,17 +142,56 @@ def _donnees_tranches_eleve(eleve, annee_scolaire=None):
     situation = 'Échéancier absent'
 
     if echeancier is not None:
-        admission_payee = Decimal(str(echeancier.frais_inscription_paye or 0))
+        paiements = list(
+            Paiement.objects.filter(
+                eleve=eleve,
+                statut='VALIDE',
+                **({'annee_scolaire': annee_scolaire} if annee_scolaire else {}),
+            )
+            .filter(filtre_types_scolarite())
+            .select_related('type_paiement')
+            .prefetch_related('remises')
+            .order_by('date_paiement', 'date_creation', 'id')
+        )
+        if paiements:
+            allocations, _ = build_document_payment_allocation_history(
+                echeancier, paiements
+            )
+            allocation_totale = {
+                key: sum(
+                    (allocation[key] for allocation in allocations.values()),
+                    Decimal('0'),
+                )
+                for key in ('inscription', 'tranche_1', 'tranche_2', 'tranche_3')
+            }
+            admission_payee = allocation_totale['inscription']
+            tranche_1 = allocation_totale['tranche_1']
+            tranche_2 = allocation_totale['tranche_2']
+            tranche_3 = allocation_totale['tranche_3']
+            total_paye = sum(
+                (Decimal(str(paiement.montant or 0)) for paiement in paiements),
+                Decimal('0'),
+            )
+            remise = sum(
+                (
+                    Decimal(str(ligne.montant_remise or 0))
+                    for paiement in paiements
+                    for ligne in paiement.remises.all()
+                ),
+                Decimal('0'),
+            )
+        else:
+            admission_payee = Decimal(str(echeancier.frais_inscription_paye or 0))
+            tranche_1 = Decimal(str(echeancier.tranche_1_payee or 0))
+            tranche_2 = Decimal(str(echeancier.tranche_2_payee or 0))
+            tranche_3 = Decimal(str(echeancier.tranche_3_payee or 0))
+            total_paye = admission_payee + tranche_1 + tranche_2 + tranche_3
+            remise = Decimal(str(echeancier.total_remises_valides or 0))
         if echeancier.nature_frais == 'REINSCRIPTION':
             reinscription = admission_payee
         else:
             inscription = admission_payee
-        tranche_1 = Decimal(str(echeancier.tranche_1_payee or 0))
-        tranche_2 = Decimal(str(echeancier.tranche_2_payee or 0))
-        tranche_3 = Decimal(str(echeancier.tranche_3_payee or 0))
         total_du = Decimal(str(echeancier.total_du or 0))
-        total_paye = inscription + reinscription + tranche_1 + tranche_2 + tranche_3
-        remise = Decimal(str(echeancier.total_remises_valides or 0))
         total_couvert = min(total_du, total_paye + remise)
         reste = max(Decimal('0'), total_du - total_couvert)
         if total_du <= 0:
