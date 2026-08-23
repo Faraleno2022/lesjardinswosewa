@@ -1,7 +1,7 @@
 ﻿; MySchoolGN - Inno Setup Installer Script
 ; ==========================================
 ; Auteur  : GS Hadja Kanfing Dian
-; Version : 1.2.0
+; Version : 1.2.1
 ;
 ; Prérequis : Inno Setup 6+ (https://jrsoftware.org/isinfo.php)
 ;
@@ -19,8 +19,8 @@
 ; ── Identification ─────────────────────────────────────────────────────────────
 AppId={{B7E4A2D1-F3C8-4B91-A5E6-GS2024HADJA01}
 AppName=MySchoolGN
-AppVersion=1.2.0
-AppVerName=MySchoolGN 1.2.0
+AppVersion=1.2.1
+AppVerName=MySchoolGN 1.2.1
 AppPublisher=GS Hadja Kanfing Dian
 AppPublisherURL=https://www.lesjardinswosewa.com
 AppSupportURL=https://www.lesjardinswosewa.com
@@ -40,7 +40,7 @@ RestartApplications=no
 
 ; ── Sortie ─────────────────────────────────────────────────────────────────────
 OutputDir=Output
-OutputBaseFilename=MySchoolGN_Setup_v1.2.0_Generic
+OutputBaseFilename=MySchoolGN_Setup_v1.2.1_Generic
 
 ; ── Icône et splash ────────────────────────────────────────────────────────────
 SetupIconFile=myschool.ico
@@ -61,7 +61,7 @@ UninstallDisplayIcon={autopf}\MySchoolGN\MySchoolGN.exe
 CreateUninstallRegKey=yes
 
 ; ── Version info (visible dans Programmes et fonctionnalités) ──────────────────
-VersionInfoVersion=1.2.0.0
+VersionInfoVersion=1.2.1.0
 VersionInfoCompany=GS Hadja Kanfing Dian
 VersionInfoDescription=MySchoolGN - Système de Gestion Scolaire
 VersionInfoCopyright=Copyright © 2024 GS Hadja Kanfing Dian
@@ -113,7 +113,7 @@ Name: "{userstartup}\MySchoolGN"; Filename: "{app}\MySchoolGN.exe"; WorkingDir: 
 
 [Registry]
 ; Enregistrement pour le panneau "Programmes et fonctionnalités"
-Root: HKCU; Subkey: "Software\GS Hadja Kanfing Dian\MySchoolGN"; ValueType: string; ValueName: "Version";    ValueData: "1.2.0"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\GS Hadja Kanfing Dian\MySchoolGN"; ValueType: string; ValueName: "Version";    ValueData: "1.2.1"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\GS Hadja Kanfing Dian\MySchoolGN"; ValueType: string; ValueName: "InstallDir"; ValueData: "{app}";  Flags: uninsdeletevalue
 
 [Run]
@@ -365,7 +365,7 @@ begin
     if IsUpdate then
     begin
       WizardForm.WelcomeLabel1.Caption := 'Mise à jour de MySchoolGN';
-      WelcomeMsg := 'Ce programme va mettre à jour MySchoolGN vers la version 1.2.0 sur votre ordinateur.' + #13#10 + #13#10 +
+      WelcomeMsg := 'Ce programme va mettre à jour MySchoolGN vers la version 1.2.1 sur votre ordinateur.' + #13#10 + #13#10 +
         'Vos données seront automatiquement préservées :' + #13#10 +
         '  • Base de données (élèves, notes, etc.)' + #13#10 +
         '  • Configuration de synchronisation' + #13#10 +

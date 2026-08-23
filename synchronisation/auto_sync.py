@@ -28,6 +28,27 @@ logger = logging.getLogger(__name__)
 _started = False
 _lock = threading.Lock()
 
+# Reveil immediat du worker. Le signal `post_save` le declenche des qu'une
+# donnee est enregistree sur ce poste : l'envoi part dans la seconde au lieu
+# d'attendre la fin du cycle en cours.
+_wake = threading.Event()
+
+# Horodatage du dernier echange non vide. Tant qu'il est recent, le poste
+# reste en cadence rapide : une saisie arrive rarement seule, et c'est
+# exactement le moment ou l'utilisateur attend de voir les donnees apparaitre.
+_last_transfer = 0.0
+
+# Duree pendant laquelle le poste reste en cadence rapide apres un echange.
+HOT_WINDOW_SECONDS = 120
+
+# Court delai avant l'envoi declenche par une saisie : une operation ecrit
+# souvent plusieurs objets a la suite (un paiement, ses remises, l'echeancier),
+# qui partent ainsi dans un seul lot.
+DEBOUNCE_SECONDS = 1.0
+
+# Plafond de la cadence au repos, quelle que soit la configuration du poste.
+MAX_IDLE_INTERVAL = 15
+
 # Les payloads embarquent le contenu des fichiers : on borne le lot pousse par
 # sa taille pour rester sous DATA_UPLOAD_MAX_MEMORY_SIZE (5 Mo) cote serveur.
 MAX_PUSH_BYTES = 3 * 1024 * 1024
@@ -64,12 +85,14 @@ def _save_since_id(value) -> None:
     _save_state(since_id=value)
 
 
-def _save_state(*, since_id=None, initial_done=None) -> None:
+def _save_state(*, since_id=None, initial_done=None, school_sync_uuid=None) -> None:
     state = _load_state()
     if since_id:
         state['since_id'] = since_id
     if initial_done is not None:
         state['initial_done'] = bool(initial_done)
+    if school_sync_uuid:
+        state['school_sync_uuid'] = str(school_sync_uuid)
     try:
         with open(_state_path(), 'w', encoding='utf-8') as f:
             json.dump(state, f)
@@ -112,6 +135,20 @@ def _config():
 
 def _is_configured() -> bool:
     return _config() is not None
+
+
+def notify_local_change() -> None:
+    """Reveille le worker : une donnee vient d'etre enregistree localement."""
+    _wake.set()
+
+
+def _mark_transfer() -> None:
+    global _last_transfer
+    _last_transfer = time.monotonic()
+
+
+def _is_hot() -> bool:
+    return (time.monotonic() - _last_transfer) < HOT_WINDOW_SECONDS
 
 
 # ─── Une passe de synchronisation ─────────────────────────────────────────────
@@ -259,6 +296,33 @@ def _apply_pull_response(response, ecole):
     return created
 
 
+def _server_watermark(server, device_id, token):
+    """
+    Dernier changement connu du serveur, en une requete minuscule.
+
+    C'est ce qui autorise une cadence de quelques secondes : tant que le
+    repere n'a pas bouge, le poste n'a rien a demander et le serveur n'a rien
+    a serialiser. Retourne None si le serveur ne connait pas encore cette
+    route (version anterieure) : on retombe alors sur le pull complet.
+    """
+    try:
+        response = _request_json(
+            f'{server}/api/v1/sync/state/', device_id, token,
+            payload=None, method='GET', timeout=20,
+        )
+    except HTTPError as exc:
+        if exc.code == 404:
+            return None
+        raise
+    if not response.get('ok'):
+        return None
+    valeur = response.get('last_change_id')
+    try:
+        return int(valeur)
+    except (TypeError, ValueError):
+        return None
+
+
 def _pull(server, device_id, token, ecole):
     since_id = _load_since_id()
     suffix = f'?since_id={since_id}' if since_id else ''
@@ -267,6 +331,20 @@ def _pull(server, device_id, token, ecole):
         payload=None, method='GET',
     )
     return _apply_pull_response(response, ecole)
+
+
+def _pull_if_needed(server, device_id, token, ecole):
+    """Ne telecharge que si le serveur a effectivement du nouveau."""
+    try:
+        local = int(_load_since_id() or 0)
+    except (TypeError, ValueError):
+        # Fichier d'etat illisible : on redemande tout plutot que de risquer
+        # de sauter un changement.
+        local = 0
+    distant = _server_watermark(server, device_id, token)
+    if distant is not None and distant <= local:
+        return 0
+    return _pull(server, device_id, token, ecole)
 
 
 def _bootstrap_school(server, device_id, token, configured_ecole_id):
@@ -313,38 +391,59 @@ def _bootstrap_school(server, device_id, token, configured_ecole_id):
         logger.error("[Sync] Snapshot initial sans UUID d'ecole.")
         return None
 
-    existing = Ecole.objects.filter(sync_uuid=raw_uuid).first()
-    if existing:
-        ecole = existing
-    else:
+    try:
+        local_pk = int(configured_ecole_id)
+    except (TypeError, ValueError):
+        local_pk = None
+
+    # Une reinstallation ou une mise a jour peut restaurer une ancienne base
+    # contenant deja l'ecole avec le meme identifiant local, mais sans fichier
+    # d'etat de synchronisation. Il ne faut pas prendre cette simple presence
+    # pour un bootstrap termine : on rattache cette fiche a l'UUID canonique du
+    # serveur, puis on applique l'instantane complet.
+    ecole = Ecole.objects.filter(sync_uuid=raw_uuid).first()
+    if not ecole and local_pk:
+        ecole = Ecole.objects.filter(pk=local_pk).first()
+    if not ecole:
         ecole = Ecole(sync_uuid=UUID(str(raw_uuid)))
-        try:
-            local_pk = int(configured_ecole_id)
-        except (TypeError, ValueError):
-            local_pk = None
         if local_pk and not Ecole.objects.filter(pk=local_pk).exists():
             ecole.pk = local_pk
+    else:
+        ecole.sync_uuid = UUID(str(raw_uuid))
 
-        for field in Ecole._meta.concrete_fields:
-            if field.name == 'id' or field.name in SYNC_FIELD_NAMES:
-                continue
-            if field.name not in payload:
-                continue
-            value = deserialize_field(field, payload.get(field.name))
-            if (
-                value is None and not field.null and not field.blank
-                and isinstance(field, (models.ForeignKey, models.OneToOneField))
-            ):
-                continue
-            setattr(ecole, field.name, value)
-        ecole.is_synced = True
-        with mute_sync():
-            ecole.save()
+    for field in Ecole._meta.concrete_fields:
+        if field.name == 'id' or field.name in SYNC_FIELD_NAMES:
+            continue
+        if field.name not in payload:
+            continue
+        value = deserialize_field(field, payload.get(field.name))
+        if (
+            value is None and not field.null and not field.blank
+            and isinstance(field, (models.ForeignKey, models.OneToOneField))
+        ):
+            continue
+        setattr(ecole, field.name, value)
+    ecole.is_synced = True
+    with mute_sync():
+        ecole.save()
 
     _apply_pull_response(response, ecole)
-    _save_state(initial_done=True)
+    _save_state(initial_done=True, school_sync_uuid=ecole.sync_uuid)
     logger.info("[Sync] Initialisation locale terminee pour l'ecole %s.", ecole.pk)
     return ecole
+
+
+def _local_school(configured_ecole_id):
+    """Retrouve l'ecole locale canonique apres le bootstrap initial."""
+    from eleves.models import Ecole
+
+    state = _load_state()
+    school_sync_uuid = state.get('school_sync_uuid')
+    if school_sync_uuid:
+        ecole = Ecole.objects.filter(sync_uuid=school_sync_uuid).first()
+        if ecole:
+            return ecole
+    return Ecole.objects.filter(pk=configured_ecole_id).first()
 
 
 def _run_once() -> bool:
@@ -354,21 +453,27 @@ def _run_once() -> bool:
         return False
     server, device_id, token, ecole_id = cfg
     try:
-        from eleves.models import Ecole
-        ecole = Ecole.objects.filter(pk=ecole_id).first()
-        if not ecole:
+        state = _load_state()
+        ecole = _local_school(ecole_id)
+        # L'absence du marqueur est volontairement prioritaire sur la presence
+        # d'une fiche Ecole : une base restauree peut contenir cette fiche sans
+        # avoir jamais recu les classes, eleves et paiements du serveur.
+        if not state.get('initial_done'):
             ecole = _bootstrap_school(server, device_id, token, ecole_id)
             if not ecole:
                 return False
             # Le snapshot vient d'etre applique. Le prochain cycle enverra les
             # eventuels changements locaux et passera en pull incremental.
             _retry_failed(ecole)
+            _mark_transfer()
             return True
-        _push(server, device_id, token, ecole)
-        _pull(server, device_id, token, ecole)
+        echanges = _push(server, device_id, token, ecole)
+        echanges += _pull_if_needed(server, device_id, token, ecole)
         # Le lot qui vient d'arriver apporte peut-etre la dependance qui
         # manquait aux echecs precedents : on les rejoue tout de suite.
-        _retry_failed(ecole)
+        echanges += _retry_failed(ecole)
+        if echanges:
+            _mark_transfer()
         return True
     except (HTTPError, URLError, OSError):
         # Hors-ligne ou serveur injoignable -> reessai au prochain cycle.
@@ -377,29 +482,52 @@ def _run_once() -> bool:
         return False
 
 
-# ─── Worker ───────────────────────────────────────────────────────────────────
-def _worker(interval: int, boot_delay: int):
-    time.sleep(max(0, boot_delay))  # laisser Django + le serveur demarrer
-    fast = max(10, min(interval, 20))  # reessai rapproche quand hors-ligne
+# ─── Worker ─────────────────────────────────────────────────────────────────
+def _next_delay(ok: bool, fast_interval: int, interval: int) -> float:
+    """
+    Delai avant le prochain cycle.
+
+    Hors-ligne : reessai rapproche, pour rattraper des le retour du reseau.
+    Juste apres un echange : cadence rapide, l'utilisateur attend de voir la
+    donnee apparaitre. Au repos : cadence lente, chaque verification restant
+    de toute facon minuscule grace au repere de fraicheur.
+    """
+    if not ok:
+        return max(5, min(fast_interval * 2, 15))
+    return fast_interval if _is_hot() else interval
+
+
+def _worker(interval: int, boot_delay: int, fast_interval: int):
+    # `wait` plutot que `sleep` : une saisie faite pendant le demarrage
+    # declenche immediatement le premier cycle.
+    _wake.wait(max(0, boot_delay))
     while True:
+        declenche_par_saisie = _wake.is_set()
+        _wake.clear()
+        if declenche_par_saisie:
+            # Laisse le temps a l'operation en cours d'ecrire tous ses objets.
+            time.sleep(DEBOUNCE_SECONDS)
+            _wake.clear()
         try:
             if not _is_configured():
-                time.sleep(interval * 10)  # poste non configure -> veille longue
+                # Poste non configure : la configuration est lue au demarrage,
+                # elle ne changera pas en cours de route -> veille longue.
+                time.sleep(max(300, interval * 10))
                 continue
             ok = _run_once()
         except Exception:
             ok = False
-        # En ligne : cadence normale. Hors-ligne : reessai rapide pour
-        # rattraper des que la connexion revient.
-        time.sleep(interval if ok else fast)
+        _wake.wait(_next_delay(ok, fast_interval, interval))
 
 
-def start(interval: int = 60, boot_delay: int = 20) -> bool:
+def start(interval: int = 10, boot_delay: int = 8, fast_interval: int = 2) -> bool:
     """
     Demarre le worker de synchronisation automatique (idempotent).
 
-    interval    : secondes entre deux synchros lorsque le serveur repond.
-    boot_delay  : delai initial avant la premiere tentative.
+    interval      : secondes entre deux verifications au repos.
+    boot_delay    : delai initial avant la premiere tentative.
+    fast_interval : cadence apres une saisie ou une reception, pour que les
+                    donnees apparaissent tout de suite sur les autres postes.
     Retourne True si le thread vient d'etre demarre.
     """
     global _started
@@ -407,8 +535,15 @@ def start(interval: int = 60, boot_delay: int = 20) -> bool:
         if _started:
             return False
         _started = True
+    fast_interval = max(1, min(fast_interval, interval))
+    # Les postes deja installes portent un `sync_config.json` ecrit quand
+    # l'intervalle valait 60 s, voire davantage. Le laisser tel quel les
+    # priverait du temps reel sans que personne ne s'en apercoive : au repos
+    # aussi, la verification se limite desormais a un repere minuscule, donc
+    # rien ne justifie d'attendre plus que ce plafond.
+    interval = max(fast_interval, min(interval, MAX_IDLE_INTERVAL))
     thread = threading.Thread(
-        target=_worker, args=(interval, boot_delay),
+        target=_worker, args=(interval, boot_delay, fast_interval),
         name='auto-sync', daemon=True,
     )
     thread.start()

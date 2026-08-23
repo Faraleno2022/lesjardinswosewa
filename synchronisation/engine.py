@@ -4,7 +4,7 @@ from uuid import UUID
 
 from django.apps import apps
 from django.contrib.auth import get_user_model
-from django.core.exceptions import FieldDoesNotExist
+from django.core.exceptions import FieldDoesNotExist, ValidationError
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.db import models

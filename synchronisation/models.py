@@ -1,6 +1,8 @@
+import hashlib
+import secrets
 import uuid
 
-from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.hashers import check_password
 from django.db import models
 from django.utils import timezone
 
@@ -26,11 +28,35 @@ class SyncDevice(models.Model):
             models.Index(fields=['derniere_connexion']),
         ]
 
+    # Prefixe des empreintes rapides. Les jetons de synchronisation sont des
+    # secrets aleatoires de 256 bits, pas des mots de passe choisis par un
+    # humain : une empreinte SHA-256 les protege aussi bien qu'un PBKDF2, sans
+    # son cout. Ce cout n'etait pas neutre : chaque appel de synchronisation
+    # verifie le jeton, et une cadence de quelques secondes aurait consomme le
+    # processeur du serveur en pur hachage.
+    FAST_HASH_PREFIX = 'sha256$'
+
+    @classmethod
+    def _empreinte_rapide(cls, token):
+        return cls.FAST_HASH_PREFIX + hashlib.sha256(token.encode('utf-8')).hexdigest()
+
     def definir_token(self, token):
-        self.token_hash = make_password(token)
+        self.token_hash = self._empreinte_rapide(token)
 
     def verifier_token(self, token):
-        return bool(token) and check_password(token, self.token_hash)
+        if not token:
+            return False
+        stocke = self.token_hash or ''
+        if stocke.startswith(self.FAST_HASH_PREFIX):
+            return secrets.compare_digest(stocke, self._empreinte_rapide(token))
+        # Appareil enregistre par une version anterieure : on verifie avec
+        # l'ancien format, puis on convertit pour que la lenteur ne se
+        # reproduise pas au prochain appel.
+        if not check_password(token, stocke):
+            return False
+        self.token_hash = self._empreinte_rapide(token)
+        self.save(update_fields=['token_hash', 'date_modification'])
+        return True
 
     def marquer_connexion(self):
         self.derniere_connexion = timezone.now()

@@ -1,5 +1,6 @@
 import json
 import os
+import secrets
 import shutil
 import tempfile
 import uuid
@@ -243,7 +244,11 @@ class SynchronisationApiTests(TestCase):
             HTTP_X_SYNC_TOKEN=device_two['sync_token'],
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.json()['changes']), 1)
+        # La creation de l'ecole (nee sur le serveur) et l'envoi du poste 1 :
+        # les deux origines sont livrees au poste 2.
+        recus = response.json()['changes']
+        self.assertEqual(len(recus), 2)
+        self.assertEqual({item['model_label'] for item in recus}, {'eleves.Ecole'})
 
 
 class SynchronisationConfigurationTests(TestCase):
@@ -317,6 +322,122 @@ class SynchronisationConfigurationTests(TestCase):
         ecole = Ecole.objects.get(pk=1)
         self.assertEqual(ecole.sync_uuid, school_uuid)
         self.assertEqual(ecole.nom.upper(), 'LES JARDINS WOSEWA')
+
+    @override_settings(
+        MYSCHOOL_SYNC_SERVER_URL='https://ecole.example',
+        MYSCHOOL_SYNC_DEVICE_ID='11111111-1111-1111-1111-111111111111',
+        MYSCHOOL_SYNC_TOKEN='token-client',
+        MYSCHOOL_SYNC_ECOLE_ID='1',
+    )
+    def test_base_existante_sans_etat_recoit_aussi_snapshot_initial(self):
+        ancienne_uuid = uuid.uuid4()
+        school_uuid = uuid.uuid4()
+        ecole_locale = Ecole.objects.create(
+            pk=1,
+            sync_uuid=ancienne_uuid,
+            nom='Ancienne fiche locale',
+            adresse='Conakry',
+            telephone='+224600000000',
+            directeur='Direction',
+            etat='VALIDE',
+        )
+        classe_uuid = uuid.uuid4()
+        response = {
+            'ok': True,
+            'ecole_id': 1,
+            'initial': True,
+            'latest_change_id': None,
+            'changes': [
+                {
+                    'id': None,
+                    'model': 'eleves.Ecole',
+                    'model_label': 'eleves.Ecole',
+                    'object_uuid': str(school_uuid),
+                    'operation': 'UPDATE',
+                    'payload': {
+                        'sync_uuid': str(school_uuid),
+                        'nom': 'Les Jardins Wosewa',
+                        'adresse': 'Conakry',
+                        'telephone': '+224600000099',
+                        'directeur': 'Direction',
+                        'etat': 'VALIDE',
+                    },
+                },
+                {
+                    'id': None,
+                    'model': 'eleves.Classe',
+                    'model_label': 'eleves.Classe',
+                    'object_uuid': str(classe_uuid),
+                    'operation': 'UPDATE',
+                    'payload': {
+                        'sync_uuid': str(classe_uuid),
+                        'ecole': {
+                            'model': 'eleves.Ecole',
+                            'sync_uuid': str(school_uuid),
+                            'pk': 1,
+                        },
+                        'nom': '1ere annee',
+                        'niveau': 'PRIMAIRE_1',
+                        'annee_scolaire': '2026-2027',
+                        'capacite_max': 35,
+                    },
+                },
+            ],
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = os.path.join(temp_dir, '.sync_state.json')
+            with mock.patch.object(auto_sync, '_state_path', return_value=state_path), mock.patch.object(
+                auto_sync, '_request_json', return_value=response,
+            ) as request_json:
+                self.assertTrue(auto_sync._run_once())
+
+            self.assertIn('initial=1', request_json.call_args.args[0])
+            with open(state_path, encoding='utf-8') as state_file:
+                state = json.load(state_file)
+            self.assertTrue(state['initial_done'])
+            self.assertEqual(state['school_sync_uuid'], str(school_uuid))
+
+        ecole_locale.refresh_from_db()
+        self.assertEqual(ecole_locale.sync_uuid, school_uuid)
+        self.assertEqual(ecole_locale.nom.upper(), 'LES JARDINS WOSEWA')
+        self.assertTrue(ecole_locale.classes.filter(sync_uuid=classe_uuid).exists())
+
+    @override_settings(
+        MYSCHOOL_SYNC_SERVER_URL='https://ecole.example',
+        MYSCHOOL_SYNC_DEVICE_ID='11111111-1111-1111-1111-111111111111',
+        MYSCHOOL_SYNC_TOKEN='token-client',
+        MYSCHOOL_SYNC_ECOLE_ID='1',
+    )
+    def test_base_initialisee_utilise_ensuite_le_pull_incremental(self):
+        ecole = Ecole.objects.create(
+            pk=1,
+            nom='Les Jardins Wosewa',
+            adresse='Conakry',
+            telephone='+224600000099',
+            directeur='Direction',
+            etat='VALIDE',
+        )
+        response = {
+            'ok': True,
+            'ecole_id': 1,
+            'latest_change_id': None,
+            'changes': [],
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = os.path.join(temp_dir, '.sync_state.json')
+            with open(state_path, 'w', encoding='utf-8') as state_file:
+                json.dump({
+                    'initial_done': True,
+                    'school_sync_uuid': str(ecole.sync_uuid),
+                }, state_file)
+            with mock.patch.object(auto_sync, '_state_path', return_value=state_path), mock.patch.object(
+                auto_sync, '_request_json', return_value=response,
+            ) as request_json:
+                self.assertTrue(auto_sync._run_once())
+
+        self.assertNotIn('initial=1', request_json.call_args.args[0])
 
 
 class SynchronisationRenvoiPushTests(TestCase):
@@ -678,3 +799,383 @@ class SynchronisationLotPousseTests(TestCase):
             auto_sync._push('https://serveur', 'device', 'token', self.ecole)
 
         self.assertEqual(envois[0][0]['client_change_id'], change.id)
+
+
+class PropagationImmediateTests(TestCase):
+    """
+    Ce qui fait qu'un ajout apparait tout de suite sur les autres postes.
+
+    Trois maillons sont couverts ici : la saisie reveille l'envoi sans
+    attendre le cycle, le serveur distribue aussi ce qui nait chez lui, et le
+    poste destinataire ne paie une requete complete que s'il y a du nouveau.
+    """
+
+    def setUp(self):
+        self.ecole = Ecole.objects.create(
+            nom='Ecole Temps Reel',
+            adresse='Conakry',
+            telephone='+224600000010',
+            directeur='Direction',
+            etat='VALIDE',
+        )
+        self.poste = self._creer_poste('Poste secretariat')
+        self.autre_poste = self._creer_poste('Poste direction')
+
+    def _creer_poste(self, nom):
+        token = secrets.token_urlsafe(32)
+        device = SyncDevice(ecole=self.ecole, nom=nom)
+        device.definir_token(token)
+        device.save()
+        return device, token
+
+    def _pull(self, poste, **params):
+        device, token = poste
+        return self.client.get(
+            reverse('synchronisation:pull'), params,
+            HTTP_X_SYNC_DEVICE=str(device.device_id),
+            HTTP_X_SYNC_TOKEN=token,
+        )
+
+    def test_une_saisie_faite_en_ligne_est_livree_aux_postes(self):
+        """
+        Le coeur du probleme : une saisie nee sur le serveur reste PENDING,
+        faute d'un poste a qui la pousser. Tant que `pull` ne servait que les
+        changements APPLIED, tout ce qui etait saisi sur le site en ligne
+        n'atteignait aucun poste, quelle que soit la duree d'attente.
+        """
+        Classe.objects.create(
+            ecole=self.ecole, nom='CP A', niveau='PRIMAIRE_1',
+            annee_scolaire='2026-2027',
+        )
+        nee_en_ligne = SyncChange.objects.filter(model_label='eleves.Classe').get()
+        self.assertEqual(nee_en_ligne.statut, SyncChange.STATUT_PENDING)
+        self.assertIsNone(nee_en_ligne.device)
+
+        recus = self._pull(self.poste).json()['changes']
+
+        self.assertIn('eleves.Classe', {item['model_label'] for item in recus})
+
+    def test_un_poste_ne_recoit_pas_son_propre_envoi(self):
+        device, _ = self.poste
+        SyncChange.objects.create(
+            ecole=self.ecole, device=device, model_label='eleves.Classe',
+            object_uuid=uuid.uuid4(), operation='CREATE',
+            payload={}, statut=SyncChange.STATUT_APPLIED,
+        )
+
+        recus = self._pull(self.poste).json()['changes']
+
+        self.assertEqual(
+            [item for item in recus if item['device_name'] == 'Poste secretariat'], [],
+        )
+
+    def test_le_repere_avance_meme_quand_le_lot_est_vide(self):
+        """
+        Sans cela, un poste dont le dernier changement ne le concerne pas
+        (le sien) garde un `since_id` fige : il redemande le meme intervalle a
+        chaque cycle, et la cadence courte devient intenable.
+        """
+        device, _ = self.poste
+        propre = SyncChange.objects.create(
+            ecole=self.ecole, device=device, model_label='eleves.Classe',
+            object_uuid=uuid.uuid4(), operation='CREATE',
+            payload={}, statut=SyncChange.STATUT_APPLIED,
+        )
+
+        reponse = self._pull(self.poste, since_id=propre.id - 1).json()
+
+        self.assertEqual(reponse['changes'], [])
+        self.assertEqual(reponse['latest_change_id'], propre.id)
+
+    def test_le_repere_ne_depasse_pas_un_envoi_en_cours_d_application(self):
+        """
+        Une ligne poussee par un autre poste et encore PENDING est sur le point
+        de devenir livrable. Avancer le repere par-dessus la rendrait invisible
+        a jamais.
+        """
+        autre, _ = self.autre_poste
+        en_cours = SyncChange.objects.create(
+            ecole=self.ecole, device=autre, model_label='eleves.Classe',
+            object_uuid=uuid.uuid4(), operation='CREATE',
+            payload={}, statut=SyncChange.STATUT_PENDING,
+        )
+
+        reponse = self._pull(self.poste, since_id=en_cours.id - 1).json()
+
+        self.assertEqual(reponse['changes'], [])
+        self.assertLess(reponse['latest_change_id'], en_cours.id)
+
+    def test_le_poste_neuf_reprend_le_fil_apres_l_instantane(self):
+        """
+        L'instantane initial contient deja l'etat courant. Renvoyer le poste au
+        debut de l'historique lui ferait rejouer des milliers de changements
+        deja contenus dedans.
+        """
+        Classe.objects.create(
+            ecole=self.ecole, nom='CP B', niveau='PRIMAIRE_1',
+            annee_scolaire='2026-2027',
+        )
+        dernier = SyncChange.objects.order_by('-id').first()
+
+        reponse = self._pull(self.poste, initial='1').json()
+
+        self.assertTrue(reponse['initial'])
+        self.assertEqual(reponse['latest_change_id'], dernier.id)
+
+    def test_l_etat_sert_de_repere_de_fraicheur(self):
+        device, token = self.poste
+        Classe.objects.create(
+            ecole=self.ecole, nom='CP C', niveau='PRIMAIRE_1',
+            annee_scolaire='2026-2027',
+        )
+        dernier = SyncChange.objects.order_by('-id').first()
+
+        reponse = self.client.get(
+            reverse('synchronisation:state'),
+            HTTP_X_SYNC_DEVICE=str(device.device_id),
+            HTTP_X_SYNC_TOKEN=token,
+        )
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(reponse.json()['last_change_id'], dernier.id)
+        self.assertIn('no-store', reponse['Cache-Control'])
+
+    def test_l_etat_refuse_un_appelant_sans_identite(self):
+        reponse = self.client.get(reverse('synchronisation:state'))
+        self.assertEqual(reponse.status_code, 401)
+
+    def test_l_etat_repond_a_une_page_ouverte_dans_le_navigateur(self):
+        utilisateur = User.objects.create_user(username='caissiere', password='secret123')
+        profil, _ = Profil.objects.get_or_create(user=utilisateur)
+        profil.role = 'ADMIN'
+        profil.ecole = self.ecole
+        profil.save(update_fields=['role', 'ecole'])
+        self.client.force_login(utilisateur)
+
+        reponse = self.client.get(reverse('synchronisation:state'))
+
+        self.assertEqual(reponse.status_code, 200)
+        self.assertEqual(reponse.json()['ecole_id'], self.ecole.pk)
+
+    def test_une_ecriture_locale_reveille_la_synchronisation(self):
+        """
+        Sans ce reveil, la donnee attendait la fin du cycle en cours avant de
+        partir. Le rappel est volontairement pose sur le commit : le worker vit
+        dans un autre thread et lirait sinon une base ou rien n'est encore
+        valide.
+        """
+        auto_sync._wake.clear()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            Classe.objects.create(
+                ecole=self.ecole, nom='CP D', niveau='PRIMAIRE_1',
+                annee_scolaire='2026-2027',
+            )
+            self.assertFalse(auto_sync._wake.is_set())  # pas avant le commit
+
+        self.assertTrue(auto_sync._wake.is_set())
+
+    def test_une_suppression_locale_reveille_aussi_la_synchronisation(self):
+        classe = Classe.objects.create(
+            ecole=self.ecole, nom='CP E', niveau='PRIMAIRE_1',
+            annee_scolaire='2026-2027',
+        )
+        auto_sync._wake.clear()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            classe.delete()
+
+        self.assertTrue(auto_sync._wake.is_set())
+
+
+class CadenceSynchronisationTests(TestCase):
+    """Le poste ne doit payer une requete complete que s'il y a du nouveau."""
+
+    def setUp(self):
+        self.ecole = Ecole.objects.create(
+            nom='Ecole Cadence',
+            adresse='Conakry',
+            telephone='+224600000011',
+            directeur='Direction',
+            etat='VALIDE',
+        )
+
+    def test_rien_de_neuf_ne_declenche_aucun_telechargement(self):
+        with mock.patch.object(auto_sync, '_load_since_id', return_value=57), \
+                mock.patch.object(auto_sync, '_server_watermark', return_value=57) as repere, \
+                mock.patch.object(auto_sync, '_pull') as pull:
+            self.assertEqual(
+                auto_sync._pull_if_needed('https://serveur', 'device', 'token', self.ecole), 0,
+            )
+
+        repere.assert_called_once()
+        pull.assert_not_called()
+
+    def test_un_repere_qui_avance_declenche_le_telechargement(self):
+        with mock.patch.object(auto_sync, '_load_since_id', return_value=57), \
+                mock.patch.object(auto_sync, '_server_watermark', return_value=58), \
+                mock.patch.object(auto_sync, '_pull', return_value=3) as pull:
+            self.assertEqual(
+                auto_sync._pull_if_needed('https://serveur', 'device', 'token', self.ecole), 3,
+            )
+
+        pull.assert_called_once()
+
+    def test_un_serveur_sans_la_route_retombe_sur_le_telechargement(self):
+        """Compatibilite : un serveur non mis a jour ignore `/state/`."""
+        with mock.patch.object(auto_sync, '_load_since_id', return_value=57), \
+                mock.patch.object(auto_sync, '_server_watermark', return_value=None), \
+                mock.patch.object(auto_sync, '_pull', return_value=1) as pull:
+            auto_sync._pull_if_needed('https://serveur', 'device', 'token', self.ecole)
+
+        pull.assert_called_once()
+
+    def test_la_cadence_suit_l_activite(self):
+        auto_sync._mark_transfer()
+        self.assertEqual(auto_sync._next_delay(True, 2, 10), 2)
+
+        auto_sync._last_transfer = 0.0  # aucune activite recente
+        self.assertEqual(auto_sync._next_delay(True, 2, 10), 10)
+
+        # Hors-ligne : reessai rapproche pour rattraper des le retour du reseau.
+        self.assertLessEqual(auto_sync._next_delay(False, 2, 3600), 15)
+
+    def test_une_configuration_ancienne_reste_reactive(self):
+        """
+        Les postes deja installes portent un intervalle de 60 s. Sans plafond,
+        ils resteraient a l'ancienne cadence sans que personne ne le voie.
+        """
+        with mock.patch.object(auto_sync.threading, 'Thread') as thread:
+            auto_sync._started = False
+            try:
+                auto_sync.start(interval=3600, boot_delay=0, fast_interval=2)
+            finally:
+                auto_sync._started = False
+
+        interval_retenu = thread.call_args.kwargs['args'][0]
+        self.assertEqual(interval_retenu, auto_sync.MAX_IDLE_INTERVAL)
+
+
+class JetonAppareilTests(TestCase):
+    """
+    Le jeton est verifie a chaque appel : son cout devient structurel des que
+    la cadence se resserre.
+    """
+
+    def setUp(self):
+        self.ecole = Ecole.objects.create(
+            nom='Ecole Jetons',
+            adresse='Conakry',
+            telephone='+224600000012',
+            directeur='Direction',
+            etat='VALIDE',
+        )
+
+    def test_un_jeton_valide_est_reconnu_et_un_autre_refuse(self):
+        token = secrets.token_urlsafe(32)
+        device = SyncDevice(ecole=self.ecole, nom='Poste')
+        device.definir_token(token)
+        device.save()
+
+        self.assertTrue(device.verifier_token(token))
+        self.assertFalse(device.verifier_token(token + 'x'))
+        self.assertFalse(device.verifier_token(''))
+        self.assertTrue(device.token_hash.startswith(SyncDevice.FAST_HASH_PREFIX))
+
+    def test_un_poste_enregistre_avant_la_bascule_continue_de_fonctionner(self):
+        from django.contrib.auth.hashers import make_password
+
+        token = secrets.token_urlsafe(32)
+        device = SyncDevice.objects.create(
+            ecole=self.ecole, nom='Poste ancien', token_hash=make_password(token),
+        )
+
+        self.assertTrue(device.verifier_token(token))
+
+        # Converti au passage : la lenteur ne se reproduit pas au prochain appel.
+        device.refresh_from_db()
+        self.assertTrue(device.token_hash.startswith(SyncDevice.FAST_HASH_PREFIX))
+        self.assertTrue(device.verifier_token(token))
+
+
+class ContratClientServeurTests(TestCase):
+    """
+    Le poste et le serveur sont les deux moities d'un meme echange, verifiees
+    jusqu'ici chacune de son cote avec un faux interlocuteur.
+
+    Ce test les branche l'un sur l'autre : le client parle a la vraie vue, par
+    la vraie URL, avec les vrais en-tetes. Une faute de chemin ou un nom de
+    champ divergent ne se verrait autrement qu'une fois deploye, sous la forme
+    d'une synchronisation qui redevient lente sans que rien ne signale l'erreur.
+    """
+
+    def setUp(self):
+        self.ecole = Ecole.objects.create(
+            nom='Ecole Contrat',
+            adresse='Conakry',
+            telephone='+224600000013',
+            directeur='Direction',
+            etat='VALIDE',
+        )
+        self.token = secrets.token_urlsafe(32)
+        self.device = SyncDevice(ecole=self.ecole, nom='Poste bout en bout')
+        self.device.definir_token(self.token)
+        self.device.save()
+
+    def _transport(self, url, device_id, token, payload=None, method='POST', timeout=None):
+        """Remplace urllib : la requete part vers la vraie vue Django."""
+        chemin = url.replace('https://serveur', '')
+        entetes = {'HTTP_X_SYNC_DEVICE': device_id, 'HTTP_X_SYNC_TOKEN': token}
+        if method == 'GET':
+            reponse = self.client.get(chemin, **entetes)
+        else:
+            reponse = self.client.post(
+                chemin, data=json.dumps(payload or {}),
+                content_type='application/json', **entetes,
+            )
+        self.assertEqual(reponse.status_code, 200, f'{chemin} -> {reponse.status_code}')
+        return json.loads(reponse.content.decode('utf-8'))
+
+    def test_le_repere_distant_est_lu_par_le_poste(self):
+        Classe.objects.create(
+            ecole=self.ecole, nom='CM1', niveau='PRIMAIRE_4',
+            annee_scolaire='2026-2027',
+        )
+        dernier = SyncChange.objects.order_by('-id').first()
+
+        with mock.patch.object(auto_sync, '_request_json', self._transport):
+            repere = auto_sync._server_watermark(
+                'https://serveur', str(self.device.device_id), self.token,
+            )
+
+        self.assertEqual(repere, dernier.id)
+
+    def test_une_saisie_en_ligne_atteint_le_poste_en_un_cycle(self):
+        classe_uuid = uuid.uuid4()
+        Classe.objects.create(
+            sync_uuid=classe_uuid, ecole=self.ecole, nom='CM2',
+            niveau='PRIMAIRE_5', annee_scolaire='2026-2027',
+        )
+
+        change_attendu = SyncChange.objects.get(object_uuid=classe_uuid)
+
+        with tempfile.TemporaryDirectory() as dossier:
+            etat = os.path.join(dossier, '.sync_state.json')
+            with mock.patch.object(auto_sync, '_state_path', return_value=etat), \
+                    mock.patch.object(auto_sync, '_request_json', self._transport):
+                recus = auto_sync._pull_if_needed(
+                    'https://serveur', str(self.device.device_id), self.token, self.ecole,
+                )
+
+            with open(etat, encoding='utf-8') as fichier:
+                repere_local = json.load(fichier)['since_id']
+
+        # La saisie nee en ligne a bien traverse, et le poste a memorise
+        # jusqu'ou il est alle : son prochain cycle repartira de la.
+        self.assertGreaterEqual(recus, 1)
+        self.assertGreaterEqual(repere_local, change_attendu.id)
+        self.assertTrue(
+            SyncChange.objects
+            .filter(payload__server_change_id=change_attendu.id)
+            .exists()
+        )

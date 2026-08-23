@@ -761,5 +761,81 @@
       });
     })();
     </script>
+    {% if user.is_authenticated %}
+    <script>
+    // Rafraichissement automatique des pages ouvertes.
+    //
+    // La synchronisation met a jour la base du poste en arriere-plan ; sans ce
+    // guetteur, l'ecran continuerait d'afficher l'etat d'avant l'ajout jusqu'a
+    // ce que quelqu'un actualise. Il interroge un repere minuscule (identifiant
+    // du dernier changement) et recharge des qu'il bouge.
+    (function(){
+      var URL_ETAT = "{% url 'synchronisation:state' %}";
+      // Le guetteur ne demande qu'un numero, jamais les donnees, et se tait
+      // quand l'onglet est en arriere-plan : une cadence courte reste sans
+      // effet sensible sur le serveur.
+      var INTERVALLE_MS = 3000;
+      var dernierRepere = null;
+      var requeteEnCours = false;
+
+      // Une saisie non enregistree ne doit jamais etre perdue par un
+      // rechargement automatique : dans ce cas on propose, on n'impose pas.
+      var saisieEnCours = false;
+      ['input', 'change'].forEach(function(evenement){
+        document.addEventListener(evenement, function(e){
+          var cible = e.target;
+          if (cible && /^(INPUT|SELECT|TEXTAREA)$/.test(cible.tagName)) { saisieEnCours = true; }
+        }, true);
+      });
+
+      function rechargementRisque(){
+        if (saisieEnCours) return true;
+        return !!document.querySelector('.modal.show, dialog[open]');
+      }
+
+      function recharger(){
+        // `replace` plutot que `reload` : sur une page arrivee par POST,
+        // recharger redemanderait l'envoi du formulaire.
+        window.location.replace(window.location.href);
+      }
+
+      function proposerRechargement(){
+        if (document.getElementById('sync-bandeau-maj')) return;
+        var bandeau = document.createElement('div');
+        bandeau.id = 'sync-bandeau-maj';
+        bandeau.className = 'position-fixed bottom-0 end-0 m-3 p-3 bg-primary text-white rounded shadow';
+        bandeau.style.zIndex = '1080';
+        bandeau.innerHTML = '<span class="me-3"><i class="fas fa-sync-alt me-2"></i>Nouvelles donnees synchronisees</span>'
+          + '<button type="button" class="btn btn-sm btn-light">Actualiser</button>';
+        bandeau.querySelector('button').addEventListener('click', recharger);
+        document.body.appendChild(bandeau);
+      }
+
+      function verifier(){
+        if (requeteEnCours || document.hidden) return;
+        requeteEnCours = true;
+        fetch(URL_ETAT, { credentials: 'same-origin', cache: 'no-store' })
+          .then(function(reponse){ return reponse.ok ? reponse.json() : null; })
+          .then(function(donnees){
+            if (!donnees || !donnees.ok) return;
+            var repere = donnees.last_change_id || 0;
+            if (dernierRepere === null) { dernierRepere = repere; return; }
+            if (repere > dernierRepere) {
+              dernierRepere = repere;
+              if (rechargementRisque()) { proposerRechargement(); } else { recharger(); }
+            }
+          })
+          .catch(function(){})
+          .then(function(){ requeteEnCours = false; });
+      }
+
+      document.addEventListener('visibilitychange', function(){ if (!document.hidden) verifier(); });
+      document.addEventListener('DOMContentLoaded', function(){
+        verifier();
+        setInterval(verifier, INTERVALLE_MS);
+      });
+    })();
+    </script>
+    {% endif %}
 </body>
 </html>
