@@ -1,10 +1,12 @@
 import json
+import os
 import shutil
 import tempfile
 import uuid
 from unittest import mock
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Permission, User
+from decimal import Decimal
 from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
@@ -24,9 +26,109 @@ from .engine import (
     FILES_PAYLOAD_KEY,
     MAX_SYNC_FILE_BYTES,
     apply_sync_change,
+    deserialize_field,
     serialize_instance,
 )
-from .models import SyncChange
+from .models import SyncChange, SyncDevice
+from .mixins import SyncTrackedModel
+from .registry import SYNC_MODEL_SET
+
+
+class EcoleOfflineAdminTests(TestCase):
+    def setUp(self):
+        self.superuser = User.objects.create_superuser(
+            username='superoffline', password='secret123', email='admin@example.com',
+        )
+        self.ecole = Ecole.objects.create(
+            nom='Ecole Offline',
+            adresse='Conakry',
+            telephone='+224600000001',
+            directeur='Direction',
+            etat='VALIDE',
+        )
+        self.client.force_login(self.superuser)
+        self.url = reverse(
+            'admin:eleves_ecole_version_hors_ligne', args=[self.ecole.pk],
+        )
+
+    def test_bouton_et_page_sont_disponibles_depuis_administration(self):
+        changelist = self.client.get(reverse('admin:eleves_ecole_changelist'))
+        self.assertEqual(changelist.status_code, 200)
+        self.assertContains(changelist, self.url)
+        self.assertContains(changelist, 'Configurer la version hors ligne')
+
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.ecole.nom)
+        self.assertContains(response, 'Créer et télécharger la configuration')
+
+    @override_settings(MYSCHOOL_SYNC_PUBLIC_URL='https://ecole.example.com')
+    def test_creation_telecharge_une_configuration_secrete_propre_ecole(self):
+        response = self.client.post(self.url, {
+            'action': 'creer',
+            'nom': 'Poste comptabilité',
+            'intervalle': '90',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response['Content-Disposition'],
+            'attachment; filename="sync_config.json"',
+        )
+        self.assertIn('no-store', response['Cache-Control'])
+        configuration = json.loads(response.content.decode('utf-8'))
+        self.assertEqual(
+            configuration['MYSCHOOL_SYNC_SERVER_URL'],
+            'https://ecole.example.com',
+        )
+        self.assertEqual(configuration['MYSCHOOL_SYNC_ECOLE_ID'], self.ecole.pk)
+        self.assertEqual(configuration['MYSCHOOL_SYNC_INTERVAL'], 90)
+
+        device = SyncDevice.objects.get(ecole=self.ecole)
+        self.assertEqual(device.nom, 'Poste comptabilité')
+        self.assertEqual(str(device.device_id), configuration['MYSCHOOL_SYNC_DEVICE_ID'])
+        self.assertNotEqual(device.token_hash, configuration['MYSCHOOL_SYNC_TOKEN'])
+        self.assertTrue(device.verifier_token(configuration['MYSCHOOL_SYNC_TOKEN']))
+
+    def test_revoquer_un_poste_le_bloque_sans_le_supprimer(self):
+        device = SyncDevice(ecole=self.ecole, nom='Poste direction')
+        device.definir_token('jeton-secret')
+        device.save()
+
+        response = self.client.post(self.url, {
+            'action': 'revoquer',
+            'device_id': str(device.pk),
+        })
+
+        self.assertRedirects(response, self.url)
+        device.refresh_from_db()
+        self.assertFalse(device.actif)
+        self.assertFalse(device.verifier_token('mauvais-jeton'))
+
+    def test_admin_ecole_ne_peut_pas_configurer_une_autre_ecole(self):
+        autre_ecole = Ecole.objects.create(
+            nom='Autre Ecole',
+            adresse='Conakry',
+            telephone='+224600000002',
+            directeur='Direction',
+            etat='VALIDE',
+        )
+        admin_ecole = User.objects.create_user(
+            username='adminoffline', password='secret123', is_staff=True,
+        )
+        profil, _ = Profil.objects.get_or_create(user=admin_ecole)
+        profil.role = 'ADMIN'
+        profil.ecole = self.ecole
+        profil.save(update_fields=['role', 'ecole'])
+        admin_ecole.user_permissions.add(Permission.objects.get(codename='change_ecole'))
+        self.client.force_login(admin_ecole)
+
+        response = self.client.get(reverse(
+            'admin:eleves_ecole_version_hors_ligne', args=[autre_ecole.pk],
+        ))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(SyncDevice.objects.filter(ecole=autre_ecole).exists())
 
 
 class SynchronisationApiTests(TestCase):
@@ -49,6 +151,7 @@ class SynchronisationApiTests(TestCase):
         response = self.client.get(reverse('synchronisation:health'))
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()['ok'])
+
 
     def test_register_device_and_push_change(self):
         self.client.force_login(self.user)
@@ -141,6 +244,79 @@ class SynchronisationApiTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()['changes']), 1)
+
+
+class SynchronisationConfigurationTests(TestCase):
+    def test_les_decimaux_json_sont_reconvertis_avant_sauvegarde(self):
+        from depenses.models import Depense
+
+        field = Depense._meta.get_field('montant_ht')
+        self.assertEqual(deserialize_field(field, '125000'), Decimal('125000'))
+
+    def test_un_utilisateur_obligatoire_utilise_admin_local(self):
+        from salaires.models import Enseignant
+
+        admin = User.objects.create_superuser('adminlocal', '', 'secret')
+        field = Enseignant._meta.get_field('cree_par')
+        self.assertEqual(deserialize_field(field, None), admin)
+
+    def test_tous_les_modeles_suivis_sont_dans_le_registre(self):
+        from django.apps import apps
+
+        manquants = sorted(
+            f'{model._meta.app_label}.{model.__name__}'
+            for model in apps.get_models()
+            if issubclass(model, SyncTrackedModel)
+            and not model._meta.abstract
+            and not model._meta.proxy
+            and f'{model._meta.app_label}.{model.__name__}' not in SYNC_MODEL_SET
+        )
+        self.assertEqual(manquants, [])
+
+    @override_settings(
+        MYSCHOOL_SYNC_SERVER_URL='https://ecole.example',
+        MYSCHOOL_SYNC_DEVICE_ID='11111111-1111-1111-1111-111111111111',
+        MYSCHOOL_SYNC_TOKEN='token-client',
+        MYSCHOOL_SYNC_ECOLE_ID='1',
+    )
+    def test_poste_neuf_amorce_ecole_depuis_snapshot_initial(self):
+        school_uuid = uuid.uuid4()
+        response = {
+            'ok': True,
+            'ecole_id': 1,
+            'initial': True,
+            'latest_change_id': None,
+            'changes': [{
+                'id': None,
+                'model': 'eleves.Ecole',
+                'model_label': 'eleves.Ecole',
+                'object_uuid': str(school_uuid),
+                'operation': 'UPDATE',
+                'payload': {
+                    'sync_uuid': str(school_uuid),
+                    'nom': 'Les Jardins Wosewa',
+                    'adresse': 'Conakry',
+                    'telephone': '+224600000099',
+                    'directeur': 'Direction',
+                    'etat': 'VALIDE',
+                },
+            }],
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state_path = os.path.join(temp_dir, '.sync_state.json')
+            with mock.patch.object(auto_sync, '_state_path', return_value=state_path), mock.patch.object(
+                auto_sync, '_request_json', return_value=response,
+            ) as request_json:
+                self.assertTrue(auto_sync._run_once())
+
+            self.assertIn('initial=1', request_json.call_args.args[0])
+            with open(state_path, encoding='utf-8') as state_file:
+                self.assertTrue(json.load(state_file)['initial_done'])
+
+        ecole = Ecole.objects.get(pk=1)
+        self.assertEqual(ecole.sync_uuid, school_uuid)
+        self.assertEqual(ecole.nom.upper(), 'LES JARDINS WOSEWA')
 
 
 class SynchronisationRenvoiPushTests(TestCase):
