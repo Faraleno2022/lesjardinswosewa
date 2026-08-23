@@ -836,6 +836,49 @@
       });
     })();
     </script>
+
+    <script>
+    // Mise a jour de l'application telechargee et prete.
+    //
+    // Elle s'installe d'elle-meme au prochain demarrage, ce qui suffit pour un
+    // poste qu'on eteint le soir. Un poste laisse allume des semaines resterait
+    // sinon sur une version ancienne sans que personne ne le sache : ce bandeau
+    // le dit, et laisse l'utilisateur choisir son moment.
+    (function(){
+      var URL_MAJ = "{% url 'mises_a_jour:mise_a_jour_prete' %}";
+
+      function annoncer(donnees){
+        if (document.getElementById('maj-bandeau')) return;
+        var bandeau = document.createElement('div');
+        bandeau.id = 'maj-bandeau';
+        bandeau.className = 'position-fixed bottom-0 start-0 m-3 p-3 bg-success text-white rounded shadow';
+        bandeau.style.zIndex = '1080';
+        bandeau.style.maxWidth = '22rem';
+        bandeau.innerHTML =
+          '<div class="d-flex align-items-start gap-2">'
+          + '<i class="fas fa-download mt-1"></i>'
+          + '<div>'
+          + '<div class="fw-bold">Version ' + (donnees.version || '') + ' prête</div>'
+          + '<div class="small">Elle s\'installera au prochain démarrage de MySchoolGN.</div>'
+          + '</div>'
+          + '<button type="button" class="btn-close btn-close-white ms-auto" aria-label="Fermer"></button>'
+          + '</div>';
+        bandeau.querySelector('button').addEventListener('click', function(){
+          bandeau.remove();
+        });
+        document.body.appendChild(bandeau);
+      }
+
+      document.addEventListener('DOMContentLoaded', function(){
+        fetch(URL_MAJ, { credentials: 'same-origin', cache: 'no-store' })
+          .then(function(reponse){ return reponse.ok ? reponse.json() : null; })
+          .then(function(donnees){
+            if (donnees && donnees.ok && donnees.prete) { annoncer(donnees); }
+          })
+          .catch(function(){});
+      });
+    })();
+    </script>
     {% endif %}
 </body>
 </html>

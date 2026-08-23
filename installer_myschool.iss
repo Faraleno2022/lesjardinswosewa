@@ -1,7 +1,8 @@
 ﻿; MySchoolGN - Inno Setup Installer Script
 ; ==========================================
 ; Auteur  : GS Hadja Kanfing Dian
-; Version : 1.2.1
+; Version : voir MyAppVersion ci-dessous (recopie depuis ecole_moderne/version.py
+; par build_exe.py : un seul numero a modifier, jamais deux a garder d'accord)
 ;
 ; Prérequis : Inno Setup 6+ (https://jrsoftware.org/isinfo.php)
 ;
@@ -15,12 +16,14 @@
 ;   - Installation fraîche
 ;   - Mise à jour (préserve base de données, médias et synchronisation)
 
+#define MyAppVersion "1.2.1"
+
 [Setup]
 ; ── Identification ─────────────────────────────────────────────────────────────
 AppId={{B7E4A2D1-F3C8-4B91-A5E6-GS2024HADJA01}
 AppName=MySchoolGN
-AppVersion=1.2.1
-AppVerName=MySchoolGN 1.2.1
+AppVersion={#MyAppVersion}
+AppVerName=MySchoolGN {#MyAppVersion}
 AppPublisher=GS Hadja Kanfing Dian
 AppPublisherURL=https://www.lesjardinswosewa.com
 AppSupportURL=https://www.lesjardinswosewa.com
@@ -40,7 +43,7 @@ RestartApplications=no
 
 ; ── Sortie ─────────────────────────────────────────────────────────────────────
 OutputDir=Output
-OutputBaseFilename=MySchoolGN_Setup_v1.2.1_Generic
+OutputBaseFilename=MySchoolGN_Setup_v{#MyAppVersion}_Generic
 
 ; ── Icône et splash ────────────────────────────────────────────────────────────
 SetupIconFile=myschool.ico
@@ -61,7 +64,7 @@ UninstallDisplayIcon={autopf}\MySchoolGN\MySchoolGN.exe
 CreateUninstallRegKey=yes
 
 ; ── Version info (visible dans Programmes et fonctionnalités) ──────────────────
-VersionInfoVersion=1.2.1.0
+VersionInfoVersion={#MyAppVersion}.0
 VersionInfoCompany=GS Hadja Kanfing Dian
 VersionInfoDescription=MySchoolGN - Système de Gestion Scolaire
 VersionInfoCopyright=Copyright © 2024 GS Hadja Kanfing Dian
@@ -113,12 +116,18 @@ Name: "{userstartup}\MySchoolGN"; Filename: "{app}\MySchoolGN.exe"; WorkingDir: 
 
 [Registry]
 ; Enregistrement pour le panneau "Programmes et fonctionnalités"
-Root: HKCU; Subkey: "Software\GS Hadja Kanfing Dian\MySchoolGN"; ValueType: string; ValueName: "Version";    ValueData: "1.2.1"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\GS Hadja Kanfing Dian\MySchoolGN"; ValueType: string; ValueName: "Version";    ValueData: "{#MyAppVersion}"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\GS Hadja Kanfing Dian\MySchoolGN"; ValueType: string; ValueName: "InstallDir"; ValueData: "{app}";  Flags: uninsdeletevalue
 
 [Run]
 ; Proposer de lancer l'application après installation
 Filename: "{app}\MySchoolGN.exe"; Description: "Démarrer MySchoolGN maintenant"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+
+; Mise a jour automatique : l'application s'est arretee elle-meme pour se
+; laisser remplacer, et l'installation est silencieuse. Sans cette ligne,
+; l'utilisateur qui vient de lancer MySchoolGN ne verrait jamais sa fenetre
+; s'ouvrir. L'entree ci-dessus, elle, est ignoree en mode silencieux.
+Filename: "{app}\MySchoolGN.exe"; WorkingDir: "{app}"; Flags: nowait; Check: RelanceDemandee
 
 [UninstallRun]
 ; Arrêter le serveur avant la désinstallation
@@ -353,6 +362,14 @@ begin
     Log('ERREUR : impossible d''installer la configuration de synchronisation personnalisée.');
 end;
 
+// ── Relance apres une mise a jour automatique ────────────────────────────────
+// Le poste lance l'installateur avec /RELANCE=1 lorsqu'il s'est arrete de
+// lui-meme pour installer une nouvelle version.
+function RelanceDemandee(): Boolean;
+begin
+  Result := ExpandConstant('{param:RELANCE|0}') = '1';
+end;
+
 // ── Adapter les messages selon le mode (installation / mise à jour) ──────────
 procedure CurPageChanged(CurPageID: Integer);
 var
@@ -365,7 +382,7 @@ begin
     if IsUpdate then
     begin
       WizardForm.WelcomeLabel1.Caption := 'Mise à jour de MySchoolGN';
-      WelcomeMsg := 'Ce programme va mettre à jour MySchoolGN vers la version 1.2.1 sur votre ordinateur.' + #13#10 + #13#10 +
+      WelcomeMsg := 'Ce programme va mettre à jour MySchoolGN vers la version {#MyAppVersion} sur votre ordinateur.' + #13#10 + #13#10 +
         'Vos données seront automatiquement préservées :' + #13#10 +
         '  • Base de données (élèves, notes, etc.)' + #13#10 +
         '  • Configuration de synchronisation' + #13#10 +
