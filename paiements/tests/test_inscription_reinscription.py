@@ -18,6 +18,10 @@ from paiements.models import (
     TypePaiement,
 )
 from paiements.views import _allocate_payment_to_echeancier
+from paiements.views_tranches import (
+    _donnees_tranches_eleve,
+    _pourcentages_pdf,
+)
 
 from .support import TEST_MIDDLEWARE
 
@@ -165,7 +169,7 @@ class InscriptionReinscriptionReportingTests(TestCase):
         self.assertEqual(values[6], 120000)
         self.assertEqual(values[7], 20000)
         self.assertEqual(values[8], 0)
-        self.assertEqual(values[9], 0)
+        self.assertIsNone(values[9])
         self.assertEqual(values[10], 20000)
         self.assertEqual(values[11], 100000)
         self.assertEqual(values[12], "Partiel")
@@ -192,9 +196,9 @@ class InscriptionReinscriptionReportingTests(TestCase):
             statut="VALIDE",
         )
         discount = RemiseReduction.objects.create(
-            nom="Remise fratrie 10 %",
+            nom="Remise fratrie 15 %",
             type_remise="POURCENTAGE",
-            valeur=Decimal("10"),
+            valeur=Decimal("15"),
             motif="FRATRIE",
             date_debut=date(2025, 9, 1),
             date_fin=date(2026, 6, 30),
@@ -214,14 +218,76 @@ class InscriptionReinscriptionReportingTests(TestCase):
         worksheet = next(ws for ws in workbook.worksheets if ws.title != "Index")
         values = [cell.value for cell in worksheet[3]]
         self.assertEqual(values[8], 10000)
-        self.assertEqual(values[9], 0.1)
+        # Le taux exporté est exactement celui choisi dans le système. Il ne
+        # doit pas être recalculé à 10 % depuis 10 000 / 100 000.
+        self.assertEqual(values[9], 0.15)
         self.assertEqual(values[10], 120000)
         self.assertEqual(values[11], 0)
         self.assertEqual(values[12], "Soldé - remise appliquée")
 
+        ligne = _donnees_tranches_eleve(student, "2025-2026")
+        self.assertEqual(ligne["pourcentages_remise"], (Decimal("15"),))
+        self.assertEqual(_pourcentages_pdf(ligne["pourcentages_remise"]), "15 %")
+
         pdf = self.client.get(reverse("paiements:export_tranches_par_classe_pdf"), params)
         self.assertEqual(pdf.status_code, 200)
         self.assertTrue(pdf.content.startswith(b"%PDF"))
+
+    def test_tranches_exporte_remise_fixe_sans_inventer_de_pourcentage(self):
+        student = self._student("VENT-011", "Aïssatou")
+        schedule = self._schedule(
+            student, "REINSCRIPTION", 20000, tranche_1=100000,
+            admission_paye=20000,
+        )
+        schedule.tranche_1_payee = Decimal("90000")
+        schedule.save(update_fields=["tranche_1_payee"])
+        payment_type = TypePaiement.objects.create(
+            nom="Tranche 1 avec remise fixe", categorie="SCOLARITE",
+        )
+        mode = ModePaiement.objects.create(nom="Virement")
+        payment = Paiement.objects.create(
+            eleve=student,
+            type_paiement=payment_type,
+            mode_paiement=mode,
+            numero_recu="VENT-REM-002",
+            montant=Decimal("110000"),
+            annee_scolaire="2025-2026",
+            date_paiement=date(2026, 1, 15),
+            statut="VALIDE",
+        )
+        discount = RemiseReduction.objects.create(
+            nom="Geste commercial 10 000 GNF",
+            type_remise="MONTANT_FIXE",
+            valeur=Decimal("10000"),
+            motif="SOCIALE",
+            date_debut=date(2025, 9, 1),
+            date_fin=date(2026, 6, 30),
+        )
+        PaiementRemise.objects.create(
+            paiement=payment,
+            remise=discount,
+            montant_remise=Decimal("10000"),
+            motif="GESTE_COMMERCIAL",
+            tranches_concernees="1",
+            base_calcul="TRANCHES_DUES",
+        )
+
+        params = {"annee_scolaire": "2025-2026", "classe": self.classe.pk}
+        excel = self.client.get(
+            reverse("paiements:export_tranches_par_classe_excel"), params
+        )
+        workbook = load_workbook(BytesIO(excel.content), data_only=True)
+        worksheet = next(ws for ws in workbook.worksheets if ws.title != "Index")
+        values = [cell.value for cell in worksheet[3]]
+
+        self.assertEqual(values[7], 110000)
+        self.assertEqual(values[8], 10000)
+        self.assertIsNone(values[9])
+        self.assertEqual(values[10], 120000)
+
+        ligne = _donnees_tranches_eleve(student, "2025-2026")
+        self.assertEqual(ligne["pourcentages_remise"], ())
+        self.assertEqual(_pourcentages_pdf(ligne["pourcentages_remise"]), "")
 
     @patch("paiements.views.timezone.localdate", return_value=date(2025, 10, 1))
     def test_reenrollment_plus_first_installment_sets_nature_and_allocates(self, _localdate):
