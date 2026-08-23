@@ -114,14 +114,6 @@ def activer_licence(request):
         )
 
     if result.get('valid'):
-        # Invalider le cache du middleware pour que le statut soit pris en compte immédiatement
-        try:
-            from ecole_moderne.licence_middleware import _license_cache
-            _license_cache['checked_at'] = 0
-            _license_cache['valid'] = None
-        except Exception:
-            pass
-
         success_html = (
             '<div class="alert alert-success">'
             '<strong>✓ Licence activée avec succès !</strong><br><br>'

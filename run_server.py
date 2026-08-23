@@ -483,56 +483,7 @@ def check_integrity():
 
 # ─── Vérification de la licence ────────────────────────────────────────────────
 def check_license():
-    """Vérifie la licence au démarrage. Affiche une fenêtre si activation requise."""
-    try:
-        import license_manager
-        status = license_manager.check_license_or_trial()
-    except Exception as e:
-        print(f"[Licence] Avertissement vérification : {e}")
-        return True  # Continuer si le module est absent (dev mode)
-
-    mid = ''
-    try:
-        import license_manager as _lm
-        mid = _lm.get_machine_id()
-    except Exception:
-        pass
-
-    if status.get('valid'):
-        # Licence valide OU essai encore actif
-        if status.get('trial'):
-            days_left = status.get('days_left', 0)
-            if status.get('trial_started'):
-                print("  [ESSAI GRATUIT] Premiere utilisation detectee.")
-                print("  [ESSAI GRATUIT] L'utilisateur peut activer une licence annuelle ou continuer l'essai.")
-                show_activation_window(mid, trial_days_left=days_left, first_trial_prompt=True)
-            elif days_left <= 7:
-                print(f"  [ESSAI] Il vous reste {days_left} jour(s) d'essai.")
-                print(f"  [ESSAI] Contactez GS Hadja Kanfing Dian pour acheter une licence.")
-                show_activation_window(mid, trial_days_left=days_left)
-            else:
-                from datetime import datetime, timedelta
-                exp = (datetime.utcnow() + timedelta(days=days_left)).strftime('%d/%m/%Y')
-                print(f"  [ESSAI GRATUIT] {days_left} jour(s) restant(s) — expire le {exp}")
-                print(f"  [ESSAI GRATUIT] Contactez GS Hadja Kanfing Dian pour obtenir une licence.")
-        else:
-            school = status.get('school', '')
-            edition = status.get('edition', 'Standard')
-            days_left = status.get('days_left', 0)
-            if days_left <= 30:
-                print(f"  [Licence] Expire dans {days_left} jour(s). "
-                      f"Renouvelez auprès de GS Hadja Kanfing Dian.")
-            else:
-                print(f"  [Licence] Valide — {school} ({edition}) — {days_left}j restant(s).")
-    else:
-        # Essai expiré ou aucune licence → fenêtre bloquante (pas de bouton "Continuer")
-        days_left = status.get('days_left', 0)
-        print("")
-        print("  [Licence] Activation requise — ouverture de la fenêtre d'activation...")
-        can_start = show_activation_window(mid, trial_days_left=days_left)
-        if not can_start:
-            os._exit(0)   # Fermeture totale sans laisser Django démarrer
-
+    """Point de compatibilité : une licence ne conditionne plus le démarrage."""
     return True
 
 
@@ -769,16 +720,9 @@ def open_browser(port):
 def show_banner(port, license_status=None):
     """Affiche la bannière de démarrage."""
     school = ''
-    edition = 'Standard'
-    mode_label = 'Mode Essai'
-    if license_status:
-        if not license_status.get('trial'):
-            school = license_status.get('school', '')
-            edition = license_status.get('edition', 'Standard')
-            mode_label = f'Édition {edition}'
-        else:
-            days_left = license_status.get('days_left', 0)
-            mode_label = f'Essai — {days_left}j restant(s)'
+    mode_label = 'Accès actif'
+    if license_status and not license_status.get('trial'):
+        school = license_status.get('school', '')
 
     print("")
     print("=" * 60)
@@ -916,13 +860,8 @@ def main():
     # Vérification d'intégrité (anti-modification)
     check_integrity()
 
-    # Vérification de la licence
+    # La licence reste facultative et ne conditionne jamais le démarrage.
     license_status = None
-    try:
-        import license_manager
-        license_status = license_manager.check_license_or_trial()
-    except Exception:
-        pass
     check_license()
 
     # Créer les dossiers nécessaires
