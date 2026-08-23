@@ -75,6 +75,19 @@ def _device_from_headers(request):
     return device, None
 
 
+def appareil_authentifie(request):
+    """
+    Authentifie un poste a partir de ses en-tetes de synchronisation.
+
+    Retourne `(appareil, None)`, ou `(None, reponse_d_erreur)`. Expose pour les
+    autres applications — la diffusion des mises a jour s'adresse aux memes
+    postes, avec les memes identifiants : leur faire une seconde facon de
+    s'authentifier multiplierait les endroits ou une revocation peut etre
+    oubliee.
+    """
+    return _device_from_headers(request)
+
+
 def _schools_for_user(user):
     if user.is_superuser:
         return Ecole.objects.all().order_by('nom')

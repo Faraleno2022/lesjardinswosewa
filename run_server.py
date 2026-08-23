@@ -155,6 +155,7 @@ def _load_sync_config():
         'MYSCHOOL_SYNC_SERVER_URL', 'MYSCHOOL_SYNC_ECOLE_ID',
         'MYSCHOOL_SYNC_DEVICE_ID', 'MYSCHOOL_SYNC_TOKEN',
         'MYSCHOOL_SYNC_INTERVAL', 'MYSCHOOL_SYNC_FAST_INTERVAL',
+        'MYSCHOOL_UPDATE_INTERVAL',
     )
     for path in candidates:
         try:
@@ -855,6 +856,19 @@ def main():
     print("*" * 60)
     print(f"   Répertoire : {BASE_DIR}")
 
+    # ── Mise à jour téléchargée lors d'une session précédente ────────────────
+    # Appliquée ici, avant que quoi que ce soit ne démarre : l'installateur
+    # remplace des fichiers que l'application verrouillerait, et c'est le seul
+    # moment où personne n'est en train de saisir. L'application s'arrête, et
+    # l'installateur la rouvre une fois la nouvelle version en place.
+    try:
+        from ecole_moderne import auto_mise_a_jour
+        if auto_mise_a_jour.appliquer_si_en_attente():
+            print("[MAJ] Une nouvelle version s'installe. L'application va redémarrer.")
+            return
+    except Exception as _maj_err:
+        print(f"[MAJ] Mise à jour en attente non appliquée : {_maj_err}")
+
     # Vérification anti-modification (garde)
     _guard_check()
 
@@ -904,6 +918,20 @@ def main():
                   f"{_sync_interval}s au repos).")
     except Exception as _sync_err:
         print(f"[Sync] Synchronisation automatique non démarrée : {_sync_err}")
+
+    # Surveiller les nouvelles versions de l'application. Le téléchargement se
+    # fait en tâche de fond ; l'installation attend le prochain démarrage, seul
+    # moment où interrompre l'application ne coûte aucune saisie.
+    try:
+        from ecole_moderne import auto_mise_a_jour
+        try:
+            _maj_interval = int(os.environ.get('MYSCHOOL_UPDATE_INTERVAL', str(6 * 3600)))
+        except (TypeError, ValueError):
+            _maj_interval = 6 * 3600
+        if auto_mise_a_jour.start(intervalle=_maj_interval, delai_initial=90):
+            print(f"[MAJ] Recherche de mises à jour active (toutes les {_maj_interval // 60} min).")
+    except Exception as _maj_err:
+        print(f"[MAJ] Recherche de mises à jour non démarrée : {_maj_err}")
 
     # Démarrer la sauvegarde automatique en arrière-plan. Complémentaire de la
     # tâche planifiée Windows : celle-ci couvre l'application fermée, celle-là

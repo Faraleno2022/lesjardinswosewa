@@ -6,7 +6,10 @@ Ce script automatise la compilation de l'application en .exe
 avec PyInstaller et prepare le dossier de distribution.
 """
 
+import hashlib
+import io
 import os
+import re
 import sys
 import shutil
 import subprocess
@@ -426,6 +429,80 @@ def generate_guard_file():
         sys.path[:] = _saved_path
 
 
+def synchroniser_version_installateur():
+    """
+    Recopie APP_VERSION dans installer_myschool.iss.
+
+    Le numero vit a un seul endroit, ecole_moderne/version.py : c'est celui
+    que l'application compare a la version publiee sur le serveur. Si
+    l'installateur en portait un autre, un poste installerait une mise a jour
+    puis continuerait a la reclamer indefiniment, chaque demarrage relancant
+    le meme installateur.
+    """
+    step('Numero de version')
+
+    sys.path.insert(0, BASE_DIR)
+    from ecole_moderne.version import APP_VERSION
+
+    chemin = os.path.join(BASE_DIR, 'installer_myschool.iss')
+    if not os.path.exists(chemin):
+        print('  [INFO] installer_myschool.iss absent, etape ignoree')
+        return APP_VERSION
+
+    with io.open(chemin, encoding='utf-8-sig', newline='') as fichier:
+        contenu = fichier.read()
+
+    motif = re.compile(r'^#define MyAppVersion "[^"]*"', re.MULTILINE)
+    if not motif.search(contenu):
+        raise SystemExit(
+            "  [ERREUR] '#define MyAppVersion' introuvable dans "
+            'installer_myschool.iss : le numero de version ne peut pas etre '
+            'synchronise.'
+        )
+
+    nouveau = motif.sub(f'#define MyAppVersion "{APP_VERSION}"', contenu, count=1)
+    if nouveau != contenu:
+        with io.open(chemin, 'w', encoding='utf-8-sig', newline='') as fichier:
+            fichier.write(nouveau)
+        print(f'  [OK] installer_myschool.iss aligne sur la version {APP_VERSION}')
+    else:
+        print(f'  [OK] Version {APP_VERSION}')
+    return APP_VERSION
+
+
+def empreinte_installateur(version):
+    """
+    Affiche l'empreinte SHA-256 de l'installateur, si Inno Setup l'a deja produit.
+
+    C'est la valeur a coller dans l'administration pour publier la version :
+    les postes refusent d'installer un fichier dont l'empreinte ne correspond
+    pas. La calculer ici evite d'aller la chercher a la main, etape ou une
+    erreur de copie bloquerait toute la diffusion.
+    """
+    chemin = os.path.join(
+        BASE_DIR, 'Output', f'MySchoolGN_Setup_v{version}_Generic.exe',
+    )
+    if not os.path.exists(chemin):
+        print('')
+        print("  Apres la compilation Inno Setup, obtenez l'empreinte a publier par :")
+        print("    python build_exe.py --empreinte")
+        return None
+
+    condensat = hashlib.sha256()
+    with open(chemin, 'rb') as fichier:
+        for bloc in iter(lambda: fichier.read(256 * 1024), b''):
+            condensat.update(bloc)
+    empreinte = condensat.hexdigest()
+    taille = os.path.getsize(chemin)
+
+    print('')
+    print("  A publier dans Administration > Versions de l'application :")
+    print(f'    Version        : {version}')
+    print(f'    SHA-256        : {empreinte}')
+    print(f'    Taille (octets): {taille}')
+    return empreinte
+
+
 def main():
     print("")
     print("*" * 60)
@@ -435,6 +512,7 @@ def main():
 
     os.chdir(BASE_DIR)
 
+    version = synchroniser_version_installateur()
     check_prereqs()
     collect_static()
     run_pyinstaller()
@@ -446,7 +524,16 @@ def main():
     generate_integrity_manifest()
     protect_source_files()
     show_summary()
+    empreinte_installateur(version)
 
 
 if __name__ == '__main__':
-    main()
+    # `--empreinte` seul : l'installateur Inno Setup se compile apres ce
+    # script, donc son empreinte n'existe pas encore a la fin de la
+    # compilation. Ce raccourci evite de tout relancer pour l'obtenir.
+    if '--empreinte' in sys.argv:
+        sys.path.insert(0, BASE_DIR)
+        from ecole_moderne.version import APP_VERSION
+        empreinte_installateur(APP_VERSION)
+    else:
+        main()
