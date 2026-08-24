@@ -17,6 +17,9 @@
 ;   - Mise à jour (préserve base de données, médias et synchronisation)
 
 #define MyAppVersion "1.3.1"
+#ifndef MyBuildDir
+  #define MyBuildDir "dist\MySchoolGN"
+#endif
 
 [Setup]
 ; ── Identification ─────────────────────────────────────────────────────────────
@@ -51,7 +54,9 @@ SetupIconFile=myschool.ico
 ; ── Compression ────────────────────────────────────────────────────────────────
 Compression=lzma2/ultra64
 SolidCompression=yes
-LZMAUseSeparateProcess=yes
+; La compression dans un processus enfant peut perdre l'acces aux fichiers
+; PyInstaller sur certains postes Windows et interrompre la creation du setup.
+LZMAUseSeparateProcess=no
 
 ; ── Interface ──────────────────────────────────────────────────────────────────
 WizardStyle=modern
@@ -78,8 +83,9 @@ Name: "startmenuicon"; Description: "Créer une entrée dans le menu Démarrer";
 Name: "autostart";     Description: "Lancer MySchoolGN au démarrage de Windows"; GroupDescription: "Options :";   Flags: unchecked
 
 [Files]
-; Application compilée (tout le dossier dist\MySchoolGN)
-Source: "dist\MySchoolGN\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Application compilée. MyBuildDir peut être redéfini par ISCC /DMyBuildDir=...
+; lorsqu'un poste nettoie automatiquement les dossiers PyInstaller build/dist.
+Source: "{#MyBuildDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; Script de désinstallation
 Source: "desinstaller.bat"; DestDir: "{app}"; Flags: ignoreversion
