@@ -913,9 +913,12 @@ def main():
         except (TypeError, ValueError):
             _sync_fast = 2
         if auto_sync.start(interval=_sync_interval, boot_delay=8, fast_interval=_sync_fast):
+            # Les cadences annoncées sont celles réellement appliquées, bornes
+            # comprises, et non les valeurs brutes du fichier de configuration.
+            _repos, _actif = auto_sync.cadence_effective(_sync_interval, _sync_fast)
             print(f"[Sync] Synchronisation automatique active "
-                  f"(envoi immediat, verification {_sync_fast}s en activite, "
-                  f"{_sync_interval}s au repos).")
+                  f"(envoi immediat, verification {_actif}s en activite, "
+                  f"{_repos}s au repos).")
     except Exception as _sync_err:
         print(f"[Sync] Synchronisation automatique non démarrée : {_sync_err}")
 
