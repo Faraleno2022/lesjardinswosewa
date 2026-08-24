@@ -269,6 +269,56 @@ def copy_gtk_dlls():
         print("  [OK] GdkPixbuf loaders copies")
 
 
+def compiler_installateur():
+    """
+    Produit l'installateur Windows avec Inno Setup.
+
+    Cette etape se faisait a la main. La laisser dehors coutait cher depuis
+    que les postes se mettent a jour tout seuls : l'empreinte publiee dans
+    l'administration doit etre celle d'un fichier reellement compile, et un
+    installateur oublie signifie une version annoncee que personne ne peut
+    telecharger.
+
+    Inno Setup n'est pas toujours dans le PATH ; on le cherche la ou son
+    programme d'installation le depose.
+    """
+    step('Installateur Windows')
+
+    candidats = [
+        shutil.which('ISCC'),
+        os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Programs', 'Inno Setup 6', 'ISCC.exe'),
+        r'C:\Program Files (x86)\Inno Setup 6\ISCC.exe',
+        r'C:\Program Files\Inno Setup 6\ISCC.exe',
+        r'C:\InnoSetup6\ISCC.exe',
+    ]
+    iscc = next((c for c in candidats if c and os.path.exists(c)), None)
+    if not iscc:
+        print('  [INFO] Inno Setup introuvable : installateur non compile.')
+        print('         https://jrsoftware.org/isinfo.php, puis relancez ce script.')
+        return False
+
+    script = os.path.join(BASE_DIR, 'installer_myschool.iss')
+    if not os.path.exists(script):
+        print('  [INFO] installer_myschool.iss absent : etape ignoree')
+        return False
+
+    print(f'  Compilateur : {iscc}')
+    resultat = subprocess.run(
+        [iscc, script], cwd=BASE_DIR,
+        capture_output=True, text=True, encoding='utf-8', errors='replace',
+    )
+    if resultat.returncode != 0:
+        print('  [ERREUR] Inno Setup a echoue :')
+        for ligne in (resultat.stdout or '').splitlines()[-15:]:
+            print(f'    {ligne}')
+        for ligne in (resultat.stderr or '').splitlines()[-10:]:
+            print(f'    {ligne}')
+        return False
+
+    print('  [OK] Installateur compile dans Output/')
+    return True
+
+
 def show_summary():
     """Affiche le resume de la compilation."""
     step("COMPILATION TERMINEE")
@@ -294,9 +344,7 @@ def show_summary():
     print(f"    2. Double-cliquez sur 'Demarrer_MySchoolGN.bat'")
     print(f"    3. Le navigateur s'ouvrira sur http://127.0.0.1:8000")
     print(f"")
-    print(f"  Pour creer l'installateur:")
-    print(f"    - Installez Inno Setup (https://jrsoftware.org/isinfo.php)")
-    print(f"    - Compilez le fichier 'installer_myschool.iss'")
+    print("  Installateur : dossier Output/")
     print(f"")
 
 
@@ -488,6 +536,21 @@ def empreinte_installateur(version):
         print("    python build_exe.py --empreinte")
         return None
 
+    # Un installateur portant le bon nom peut dater d'une compilation
+    # precedente. Publier son empreinte diffuserait l'ancien code sous le
+    # numero de la nouvelle version, et le probleme serait invisible : le
+    # fichier s'installe, son empreinte correspond, seul le contenu est
+    # perime. On refuse donc de proposer une empreinte plus ancienne que
+    # l'executable qui vient d'etre construit.
+    executable = os.path.join(OUTPUT_DIR, 'MySchoolGN.exe')
+    if os.path.exists(executable) and os.path.getmtime(chemin) < os.path.getmtime(executable):
+        print('')
+        print('  [ATTENTION] L\'installateur trouve est anterieur a cette compilation.')
+        print(f'              {chemin}')
+        print("              Recompilez-le avec Inno Setup, sinon l'empreinte publiee")
+        print('              correspondrait a une version perimee du code.')
+        return None
+
     condensat = hashlib.sha256()
     with open(chemin, 'rb') as fichier:
         for bloc in iter(lambda: fichier.read(256 * 1024), b''):
@@ -523,6 +586,7 @@ def main():
     generate_guard_file()
     generate_integrity_manifest()
     protect_source_files()
+    compiler_installateur()
     show_summary()
     empreinte_installateur(version)
 
