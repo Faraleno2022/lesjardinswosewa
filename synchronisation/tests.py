@@ -1055,6 +1055,22 @@ class CadenceSynchronisationTests(TestCase):
         interval_retenu = thread.call_args.kwargs['args'][0]
         self.assertEqual(interval_retenu, auto_sync.MAX_IDLE_INTERVAL)
 
+    def test_la_cadence_annoncee_est_celle_appliquee(self):
+        """
+        Le message de demarrage affichait la valeur du fichier de
+        configuration, pas celle retenue : sur un poste regle a 60 s il
+        annoncait une lenteur qui n'existait plus, de quoi envoyer chercher
+        un probleme ailleurs.
+        """
+        repos, actif = auto_sync.cadence_effective(60, 2)
+
+        self.assertEqual(repos, auto_sync.MAX_IDLE_INTERVAL)
+        self.assertEqual(actif, 2)
+
+    def test_une_cadence_deja_courte_est_laissee_telle_quelle(self):
+        self.assertEqual(auto_sync.cadence_effective(10, 2), (10, 2))
+
+
 
 class JetonAppareilTests(TestCase):
     """

@@ -520,6 +520,26 @@ def _worker(interval: int, boot_delay: int, fast_interval: int):
         _wake.wait(_next_delay(ok, fast_interval, interval))
 
 
+def cadence_effective(interval: int, fast_interval: int):
+    """
+    Cadences reellement appliquees, une fois les bornes posees.
+
+    Les postes deja installes portent un `sync_config.json` ecrit quand
+    l'intervalle valait 60 s, voire davantage. Le laisser tel quel les
+    priverait du temps reel sans que personne ne s'en apercoive : au repos
+    aussi, la verification se limite desormais a un repere minuscule, donc
+    rien ne justifie d'attendre plus que ce plafond.
+
+    Le calcul est expose pour que le message de demarrage annonce ce qui se
+    passe vraiment. Il affichait la valeur du fichier de configuration, pas
+    celle retenue : sur un poste regle a 60 s, il annoncait une lenteur qui
+    n'existait plus, de quoi envoyer chercher un probleme ailleurs.
+    """
+    fast_interval = max(1, min(fast_interval, interval))
+    interval = max(fast_interval, min(interval, MAX_IDLE_INTERVAL))
+    return interval, fast_interval
+
+
 def start(interval: int = 10, boot_delay: int = 8, fast_interval: int = 2) -> bool:
     """
     Demarre le worker de synchronisation automatique (idempotent).
@@ -535,13 +555,7 @@ def start(interval: int = 10, boot_delay: int = 8, fast_interval: int = 2) -> bo
         if _started:
             return False
         _started = True
-    fast_interval = max(1, min(fast_interval, interval))
-    # Les postes deja installes portent un `sync_config.json` ecrit quand
-    # l'intervalle valait 60 s, voire davantage. Le laisser tel quel les
-    # priverait du temps reel sans que personne ne s'en apercoive : au repos
-    # aussi, la verification se limite desormais a un repere minuscule, donc
-    # rien ne justifie d'attendre plus que ce plafond.
-    interval = max(fast_interval, min(interval, MAX_IDLE_INTERVAL))
+    interval, fast_interval = cadence_effective(interval, fast_interval)
     thread = threading.Thread(
         target=_worker, args=(interval, boot_delay, fast_interval),
         name='auto-sync', daemon=True,

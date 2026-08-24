@@ -333,36 +333,26 @@ class Paiement(SyncTrackedModel):
 
         if not self.numero_recu:
             from django.utils import timezone
-            from django.db import transaction, IntegrityError
-            
-            annee = timezone.now().year
-            prefix = f"REC{annee}"
-            
-            # Réessayer quelques fois en cas de collision concurrente
-            for _ in range(10):
-                dernier = (
-                    Paiement.objects
-                    .filter(numero_recu__startswith=prefix)
-                    .order_by('-numero_recu')
-                    .first()
-                )
-                if dernier and isinstance(dernier.numero_recu, str) and len(dernier.numero_recu) >= 4:
-                    try:
-                        seq = int(dernier.numero_recu[-4:]) + 1
-                    except ValueError:
-                        seq = 1
-                else:
-                    seq = 1
+            from django.db import IntegrityError
 
-                self.numero_recu = f"{prefix}{seq:04d}"
+            from .numerotation import prochain_numero
+
+            annee = timezone.now().year
+
+            # Le numéro porte un code propre à ce poste : sans lui, deux
+            # caisses qui encaissent en même temps produisent le même numéro,
+            # et le paiement qui arrive ensuite par synchronisation se heurte à
+            # la contrainte d'unicité — il finit abandonné, donc perdu, sur le
+            # poste destinataire. La boucle ne couvre plus que la concurrence
+            # entre deux enregistrements du même poste.
+            for tentative in range(10):
+                self.numero_recu = prochain_numero(Paiement, annee, decalage=tentative)
                 try:
                     super().save(*args, **kwargs)
                     break
                 except IntegrityError:
-                    # Une collision est survenue, on retente avec le numéro suivant
                     continue
             else:
-                # Si on n'arrive pas à générer un numéro unique après 10 tentatives
                 raise ValueError("Impossible de générer un numéro de reçu unique après 10 tentatives")
         else:
             super().save(*args, **kwargs)
