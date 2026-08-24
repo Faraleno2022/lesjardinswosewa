@@ -9,7 +9,7 @@ dans `installer_myschool.iss` au moment de la compilation, plutot que de
 laisser deux nombres vivre chacun de leur cote.
 """
 
-APP_VERSION = '1.3.0'
+APP_VERSION = '1.3.1'
 
 
 def numero_de_version(valeur):

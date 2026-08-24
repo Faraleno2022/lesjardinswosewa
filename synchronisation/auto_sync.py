@@ -3,9 +3,10 @@ Synchronisation automatique en arriere-plan (application Desktop).
 
 Un thread daemon envoie (push) periodiquement les changements locaux en attente
 puis recupere (pull) ceux des autres postes, via le serveur EN LIGNE configure.
-Hors-ligne, chaque tentative echoue silencieusement et est reessayee a cadence
-rapprochee : des que la connexion revient, la synchronisation se fait
-automatiquement, sans action de l'utilisateur.
+Hors-ligne, chaque tentative est reessayee a cadence rapprochee et tracee (sans
+noyer le journal) : des que la connexion revient, la synchronisation reprend
+automatiquement, sans action de l'utilisateur. `diagnostiquer_synchronisation()`
+declenche un cycle unique et immediat, avec le detail complet d'un echec.
 
 La logique push/pull est appelee DIRECTEMENT (et non via `call_command`) afin
 de rester fiable dans l'executable PyInstaller, ou la decouverte des commandes
@@ -45,6 +46,20 @@ HOT_WINDOW_SECONDS = 120
 # souvent plusieurs objets a la suite (un paiement, ses remises, l'echeancier),
 # qui partent ainsi dans un seul lot.
 DEBOUNCE_SECONDS = 1.0
+
+# Echecs consecutifs d'un cycle de synchronisation, et date du dernier message
+# trace a ce sujet. Sans ce compteur, un poste hors-ligne ou mal configure ne
+# laisse litteralement aucune preuve dans les journaux : le worker reessaie en
+# silence, cycle apres cycle, parfois pendant des jours, et le seul moyen de
+# savoir pourquoi est de reproduire l'echec a la main sur le poste concerne.
+_echecs_consecutifs = 0
+_dernier_log_echec = 0.0
+
+# Un poste hors-ligne reessaie toutes les quelques secondes : sans limite, ce
+# seul message noierait le reste du journal. Le tout premier echec d'une serie
+# est trace immediatement ; les suivants, au plus tous les 5 minutes tant que
+# ca persiste.
+INTERVALLE_LOG_ECHEC_SECONDES = 300
 
 # Plafond de la cadence au repos, quelle que soit la configuration du poste.
 MAX_IDLE_INTERVAL = 15
@@ -367,6 +382,10 @@ def _bootstrap_school(server, device_id, token, configured_ecole_id):
         payload=None, method='GET', timeout=120,
     )
     if not response.get('ok'):
+        logger.error(
+            "[Sync] Le serveur a refuse l'instantane initial : %s",
+            response.get('error') or response,
+        )
         return None
     if str(response.get('ecole_id') or '') != str(configured_ecole_id):
         logger.error(
@@ -446,40 +465,175 @@ def _local_school(configured_ecole_id):
     return Ecole.objects.filter(pk=configured_ecole_id).first()
 
 
-def _run_once() -> bool:
-    """Une passe push + pull. Retourne True si le serveur a repondu."""
+def _signaler_echec(cause: str) -> None:
+    """Trace un cycle de synchronisation en echec, sans noyer le journal."""
+    global _echecs_consecutifs, _dernier_log_echec
+    _echecs_consecutifs += 1
+    maintenant = time.monotonic()
+    premier_de_la_serie = _echecs_consecutifs == 1
+    if premier_de_la_serie or (maintenant - _dernier_log_echec) >= INTERVALLE_LOG_ECHEC_SECONDES:
+        logger.warning(
+            "[Sync] Synchronisation en echec depuis %d tentative(s) "
+            "(reseau, serveur injoignable, ou identifiants invalides) : %s",
+            _echecs_consecutifs, cause,
+        )
+        _dernier_log_echec = maintenant
+
+
+def _signaler_succes() -> None:
+    """Trace le retour a la normale apres une serie d'echecs."""
+    global _echecs_consecutifs
+    if _echecs_consecutifs:
+        logger.info(
+            "[Sync] Synchronisation retablie apres %d tentative(s) en echec.",
+            _echecs_consecutifs,
+        )
+        _echecs_consecutifs = 0
+
+
+def _tenter_cycle() -> bool:
+    """
+    Une passe push + pull, sans filet : toute exception remonte a l'appelant.
+
+    Separee de `_run_once` pour que `diagnostiquer_synchronisation()` puisse
+    afficher l'exception brute a un humain, plutot que la version resumee et
+    limitee en frequence que `_run_once` trace dans le journal.
+    """
     cfg = _config()
     if not cfg:
         return False
     server, device_id, token, ecole_id = cfg
-    try:
-        state = _load_state()
-        ecole = _local_school(ecole_id)
-        # L'absence du marqueur est volontairement prioritaire sur la presence
-        # d'une fiche Ecole : une base restauree peut contenir cette fiche sans
-        # avoir jamais recu les classes, eleves et paiements du serveur.
-        if not state.get('initial_done'):
-            ecole = _bootstrap_school(server, device_id, token, ecole_id)
-            if not ecole:
-                return False
-            # Le snapshot vient d'etre applique. Le prochain cycle enverra les
-            # eventuels changements locaux et passera en pull incremental.
-            _retry_failed(ecole)
-            _mark_transfer()
-            return True
-        echanges = _push(server, device_id, token, ecole)
-        echanges += _pull_if_needed(server, device_id, token, ecole)
-        # Le lot qui vient d'arriver apporte peut-etre la dependance qui
-        # manquait aux echecs precedents : on les rejoue tout de suite.
-        echanges += _retry_failed(ecole)
-        if echanges:
-            _mark_transfer()
+
+    state = _load_state()
+    ecole = _local_school(ecole_id)
+    # L'absence du marqueur est volontairement prioritaire sur la presence
+    # d'une fiche Ecole : une base restauree peut contenir cette fiche sans
+    # avoir jamais recu les classes, eleves et paiements du serveur.
+    if not state.get('initial_done'):
+        ecole = _bootstrap_school(server, device_id, token, ecole_id)
+        if not ecole:
+            # `_bootstrap_school` a deja trace la cause explicite (ecole
+            # inconnue, snapshot vide...) quand elle en a une ; sinon l'appel
+            # a echoue plus bas et remonte par l'exception a l'appelant.
+            return False
+        # Le snapshot vient d'etre applique. Le prochain cycle enverra les
+        # eventuels changements locaux et passera en pull incremental.
+        _retry_failed(ecole)
+        _mark_transfer()
         return True
-    except (HTTPError, URLError, OSError):
-        # Hors-ligne ou serveur injoignable -> reessai au prochain cycle.
+
+    echanges = _push(server, device_id, token, ecole)
+    echanges += _pull_if_needed(server, device_id, token, ecole)
+    # Le lot qui vient d'arriver apporte peut-etre la dependance qui manquait
+    # aux echecs precedents : on les rejoue tout de suite.
+    echanges += _retry_failed(ecole)
+    if echanges:
+        _mark_transfer()
+    return True
+
+
+def _run_once() -> bool:
+    """Une passe push + pull, protegee. Retourne True si le serveur a repondu."""
+    try:
+        resultat = _tenter_cycle()
+    except (HTTPError, URLError, OSError) as exc:
+        # Hors-ligne ou serveur injoignable -> reessai au prochain cycle. Trace
+        # tout de meme : voir _signaler_echec.
+        _signaler_echec(str(exc) or type(exc).__name__)
         return False
-    except Exception:
+    except Exception as exc:
+        _signaler_echec(f'{type(exc).__name__}: {exc}')
         return False
+    if resultat:
+        _signaler_succes()
+    return resultat
+
+
+def diagnostiquer_synchronisation() -> int:
+    """
+    Un cycle de synchronisation immediat, avec le detail complet d'un echec.
+
+    A la difference du worker en arriere-plan, qui reessaie en silence et ne
+    trace qu'un resume limite en frequence, cette fonction est faite pour etre
+    declenchee a la main quand un poste semble ne pas synchroniser : elle
+    donne tout de suite la meme information qu'exigerait, autrement, plusieurs
+    minutes d'attente et une lecture du journal.
+
+    Retourne un code de sortie (0 = succes, 1 = echec), pour un usage en ligne
+    de commande.
+    """
+    cfg = _config()
+    if not cfg:
+        print("[Diagnostic] Configuration de synchronisation incomplete ou absente.")
+        print("             Verifiez, dans sync_config.json : MYSCHOOL_SYNC_SERVER_URL,")
+        print("             MYSCHOOL_SYNC_DEVICE_ID, MYSCHOOL_SYNC_TOKEN, "
+              "MYSCHOOL_SYNC_ECOLE_ID.")
+        return 1
+
+    server, device_id, token, ecole_id = cfg
+    etat = _load_state()
+    print(f"[Diagnostic] Serveur    : {server}")
+    print(f"[Diagnostic] Appareil   : {device_id}")
+    print(f"[Diagnostic] Ecole      : {ecole_id}")
+    print(
+        "[Diagnostic] Etat local : "
+        + ("deja initialise" if etat.get('initial_done')
+           else "jamais initialise (le premier cycle va tenter l'instantane complet)")
+    )
+    print("[Diagnostic] Tentative de connexion au serveur...")
+
+    debut = time.monotonic()
+    try:
+        reussi = _tenter_cycle()
+    except Exception as exc:
+        duree = time.monotonic() - debut
+        print(f"[Diagnostic] ECHEC apres {duree:.1f} s : {type(exc).__name__}: {exc}")
+        _suggerer_cause(exc)
+        return 1
+    duree = time.monotonic() - debut
+
+    if reussi:
+        print(f"[Diagnostic] SUCCES en {duree:.1f} s.")
+        repere = _load_state().get('since_id') or '(aucun pour le moment)'
+        print(f"[Diagnostic] Dernier changement connu localement : {repere}")
+        return 0
+
+    print(f"[Diagnostic] Echec en {duree:.1f} s, sans exception : l'ecole locale est "
+          "introuvable, ou le serveur ne l'a pas reconnue. Voir les lignes ci-dessus.")
+    return 1
+
+
+def _suggerer_cause(exc: Exception) -> None:
+    """
+    Traduit une exception technique en cause probable, pour un lecteur non
+    technicien face a un poste qui refuse de se synchroniser.
+    """
+    import ssl
+
+    texte = str(exc)
+    if isinstance(exc, ssl.SSLCertVerificationError) or 'CERTIFICATE_VERIFY_FAILED' in texte:
+        print("[Diagnostic] Cause probable : le certificat HTTPS du serveur n'est pas")
+        print("             reconnu par cette installation de MySchoolGN, alors que")
+        print("             Windows lui fait confiance (un navigateur, lui, fonctionne).")
+        print("             Frequent derriere un pare-feu ou un antivirus qui inspecte")
+        print("             le trafic HTTPS avec son propre certificat.")
+    elif isinstance(exc, HTTPError):
+        if exc.code == 403:
+            print("[Diagnostic] Cause probable : cet appareil ou son jeton ne sont plus")
+            print("             valides cote serveur. Revoquez ce poste dans")
+            print("             Administration > Version hors ligne, puis generez une")
+            print("             nouvelle configuration.")
+        else:
+            print(f"[Diagnostic] Le serveur a repondu avec le code HTTP {exc.code}.")
+    elif isinstance(exc, URLError):
+        print("[Diagnostic] Cause probable : reseau, proxy ou pare-feu qui bloque les")
+        print("             connexions sortantes de cette application specifiquement")
+        print("             (un navigateur peut fonctionner sans que ce soit le cas ici).")
+    elif 'no such table' in texte.lower():
+        print("[Diagnostic] Cause probable : la base de donnees locale n'est pas encore")
+        print("             initialisee. Lancez MySchoolGN.exe normalement une premiere")
+        print("             fois (sans --diagnostiquer-sync), laissez-le migrer la base,")
+        print("             puis relancez ce diagnostic.")
 
 
 # ─── Worker ─────────────────────────────────────────────────────────────────

@@ -123,6 +123,43 @@ n'importe quel poste. Dans l'administration, la colonne **Derniere connexion**
 de la page *Configurer la version hors ligne* indique si le poste dialogue
 toujours avec le serveur.
 
+Si cette colonne affiche **Jamais** alors que le poste est installe et lance
+depuis un moment, la synchronisation n'a encore jamais reussi une seule fois :
+voir la section suivante.
+
+## 7. Diagnostiquer un poste qui ne synchronise pas
+
+Le worker en arriere-plan reessaie en silence quand il echoue, ce qui rend un
+poste bloque difficile a diagnostiquer a distance. Deux outils y remedient.
+
+**Diagnostic immediat**, a executer directement sur le poste concerne
+(ferme l'application au besoin, puis depuis une invite dans le dossier
+d'installation) :
+
+```bash
+MySchoolGN.exe --diagnostiquer-sync
+```
+
+Cette commande declenche un seul cycle de synchronisation et affiche
+immediatement, en clair, ce que le worker mettrait sinon plusieurs minutes a
+tracer dans le journal : serveur contacte, resultat, et en cas d'echec le
+type d'exception avec une cause probable (jeton revoque, certificat HTTPS non
+reconnu, reseau bloque...).
+
+**Journal du poste** (`myschool.log`, a cote de l'exe) : depuis la version
+1.3.1, chaque echec de synchronisation y laisse une trace — le tout premier
+immediatement, les suivants au plus toutes les 5 minutes tant que ca persiste
+— ainsi qu'un message quand la connexion revient.
+
+**Cause frequente sur un poste d'ecole ou de bureau** : un pare-feu ou un
+antivirus qui inspecte le trafic HTTPS avec son propre certificat. Windows
+(et donc un navigateur) lui fait confiance, mais l'application, qui embarque
+son propre lot de certificats, non — toute connexion au serveur echoue alors
+des le depart, silencieusement avant la version 1.3.1. Depuis cette version,
+l'application verifie les certificats HTTPS via le magasin de Windows
+(bibliotheque `truststore`), ce qui aligne son comportement sur celui d'un
+navigateur.
+
 ## Notes importantes
 
 - Chaque poste offline doit avoir son propre `MYSCHOOL_SYNC_DEVICE_ID` et `MYSCHOOL_SYNC_TOKEN`.

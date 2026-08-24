@@ -73,6 +73,25 @@ if sys.stdin is None:
             return ''
     sys.stdin = _NullReader()
 
+
+# ─── Certificats HTTPS : faire confiance au magasin de Windows ────────────────
+# Python embarque son propre lot de certificats racine (via son OpenSSL). Sur
+# un poste derriere un pare-feu ou un antivirus qui inspecte le trafic HTTPS
+# avec son propre certificat, Windows (et donc un navigateur) lui fait
+# confiance, mais Python non : toute connexion au serveur en ligne — licence,
+# synchronisation, mise a jour — echoue alors silencieusement des le depart.
+# `truststore` remplace la verification par celle du systeme d'exploitation,
+# ce qui aligne Python sur ce que voit deja Windows. Doit avoir lieu avant le
+# premier appel HTTPS de l'application, donc ici, au tout debut du module.
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except Exception:
+    # Environnement sans le module (ex. certains outils de build) : on
+    # retombe sur le comportement standard de Python plutot que d'empecher
+    # le demarrage pour un gain de robustesse qui n'est pas critique partout.
+    pass
+
 # ─── DLLs GTK pour WeasyPrint (Windows) ───────────────────────────────────────
 # Doit être fait AVANT tout import de Django / WeasyPrint
 if os.name == 'nt':
@@ -780,10 +799,20 @@ def _traiter_sous_commande():
     if not arguments:
         return False
 
-    connues = {'--sauvegarder', '--restaurer', '--lister-sauvegardes'}
+    connues = {'--sauvegarder', '--restaurer', '--lister-sauvegardes', '--diagnostiquer-sync'}
     demandee = next((a for a in arguments if a in connues), None)
     if not demandee:
         return False
+
+    if demandee == '--diagnostiquer-sync':
+        # A la difference des autres sous-commandes, celle-ci a besoin de
+        # Django (modeles, parametres) pour rejouer un cycle de
+        # synchronisation reel. `django.setup()` n'a normalement lieu que
+        # plus loin, dans `setup_database()` : on l'avance ici.
+        import django
+        django.setup()
+        from synchronisation import auto_sync
+        sys.exit(auto_sync.diagnostiquer_synchronisation())
 
     from ecole_moderne import sauvegarde
 

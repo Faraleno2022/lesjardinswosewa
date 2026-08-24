@@ -5,6 +5,7 @@ import shutil
 import tempfile
 import uuid
 from unittest import mock
+from urllib.error import HTTPError, URLError
 
 from django.contrib.auth.models import Permission, User
 from decimal import Decimal
@@ -1195,3 +1196,214 @@ class ContratClientServeurTests(TestCase):
             .filter(payload__server_change_id=change_attendu.id)
             .exists()
         )
+
+
+class TraceDesEchecsTests(TestCase):
+    """
+    Le worker ne doit plus jamais echouer en silence.
+
+    Un poste hors-ligne ou mal configure ne laissait litteralement aucune
+    preuve dans les journaux avant ce correctif : trouve en verifiant, sur un
+    poste reel, un appareil enregistre depuis la veille dont la colonne
+    "Derniere connexion" affichait "Jamais", sans le moindre indice sur la
+    cause.
+    """
+
+    def setUp(self):
+        auto_sync._echecs_consecutifs = 0
+        auto_sync._dernier_log_echec = 0.0
+
+    def tearDown(self):
+        auto_sync._echecs_consecutifs = 0
+        auto_sync._dernier_log_echec = 0.0
+
+    def test_le_premier_echec_est_trace_immediatement(self):
+        with self.assertLogs('synchronisation.auto_sync', level='WARNING') as capture:
+            auto_sync._signaler_echec('Serveur injoignable')
+        self.assertIn('1 tentative', capture.output[0])
+        self.assertIn('Serveur injoignable', capture.output[0])
+
+    def test_les_echecs_suivants_rapproches_ne_reecrivent_pas_le_journal(self):
+        """
+        Un poste hors-ligne reessaie toutes les quelques secondes : sans cette
+        limite, ce seul message noierait le reste du journal.
+        """
+        with mock.patch.object(auto_sync.time, 'monotonic', return_value=1000.0):
+            auto_sync._signaler_echec('injoignable')  # 1er, trace immediatement
+
+        # `assertNoLogs` n'existe qu'a partir de Django 4.1 ; on verifie
+        # l'absence de nouveau log en constatant que le journal reste vide
+        # apres l'appel, plutot que de compter sur `assertLogs` qui leverait
+        # s'il ne voit rien.
+        journal = mock.Mock()
+        with mock.patch.object(auto_sync.logger, 'warning', journal), \
+                mock.patch.object(auto_sync.time, 'monotonic', return_value=1005.0):
+            auto_sync._signaler_echec('toujours injoignable')  # 5 s plus tard
+        journal.assert_not_called()
+
+    def test_un_echec_bien_plus_tard_est_retrace(self):
+        auto_sync._signaler_echec('injoignable')
+        auto_sync._dernier_log_echec -= auto_sync.INTERVALLE_LOG_ECHEC_SECONDES + 1
+
+        with self.assertLogs('synchronisation.auto_sync', level='WARNING') as capture:
+            auto_sync._signaler_echec('toujours injoignable')
+
+        self.assertIn('2 tentative', capture.output[0])
+
+    def test_le_retour_a_la_normale_est_trace_et_remet_le_compteur_a_zero(self):
+        auto_sync._signaler_echec('injoignable')
+        auto_sync._signaler_echec('injoignable')
+
+        with self.assertLogs('synchronisation.auto_sync', level='INFO') as capture:
+            auto_sync._signaler_succes()
+
+        self.assertIn('2 tentative', capture.output[0])
+        self.assertEqual(auto_sync._echecs_consecutifs, 0)
+
+    def test_un_succes_sans_echec_prealable_ne_journalise_rien(self):
+        auto_sync._signaler_succes()  # ne doit lever aucune exception
+        self.assertEqual(auto_sync._echecs_consecutifs, 0)
+
+    def test_un_cycle_en_erreur_reseau_declenche_la_trace(self):
+        with override_settings(
+            MYSCHOOL_SYNC_SERVER_URL='https://serveur', MYSCHOOL_SYNC_ECOLE_ID='1',
+            MYSCHOOL_SYNC_DEVICE_ID='11111111-1111-1111-1111-111111111111',
+            MYSCHOOL_SYNC_TOKEN='jeton',
+        ):
+            with mock.patch.object(auto_sync, '_load_state', return_value={'initial_done': True}), \
+                    mock.patch.object(auto_sync, '_local_school', return_value=mock.Mock(pk=1)), \
+                    mock.patch.object(auto_sync, '_push', side_effect=URLError('injoignable')):
+                with self.assertLogs('synchronisation.auto_sync', level='WARNING') as capture:
+                    self.assertFalse(auto_sync._run_once())
+
+        self.assertIn('injoignable', capture.output[0])
+
+    def test_un_echec_sans_message_utilise_le_type_d_exception(self):
+        """URLError() sans argument a un str() vide : le journal doit rester lisible."""
+        with self.assertLogs('synchronisation.auto_sync', level='WARNING') as capture:
+            auto_sync._signaler_echec(str(URLError('')) or 'URLError')
+        self.assertTrue(capture.output)
+
+
+class DiagnosticSynchronisationTests(TestCase):
+    """
+    `diagnostiquer_synchronisation()` doit donner, en un seul appel, ce que le
+    worker en arriere-plan ne montrerait qu'apres plusieurs minutes de
+    silence — et c'est precisement ce qui a manque pour diagnostiquer un poste
+    reel dont le worker echouait sans laisser aucune trace.
+    """
+
+    @override_settings(MYSCHOOL_SYNC_SERVER_URL='', MYSCHOOL_SYNC_DEVICE_ID='',
+                       MYSCHOOL_SYNC_TOKEN='', MYSCHOOL_SYNC_ECOLE_ID='')
+    def test_sans_configuration_le_code_de_sortie_est_un_echec_explicite(self):
+        with mock.patch('builtins.print') as sortie:
+            code = auto_sync.diagnostiquer_synchronisation()
+        self.assertEqual(code, 1)
+        self.assertTrue(any('incomplete' in str(appel) for appel in sortie.call_args_list))
+
+    @override_settings(
+        MYSCHOOL_SYNC_SERVER_URL='https://serveur', MYSCHOOL_SYNC_DEVICE_ID='d',
+        MYSCHOOL_SYNC_TOKEN='t', MYSCHOOL_SYNC_ECOLE_ID='1',
+    )
+    def test_un_succes_donne_le_code_zero_et_le_repere_local(self):
+        with mock.patch.object(auto_sync, '_tenter_cycle', return_value=True), \
+                mock.patch.object(auto_sync, '_load_state', return_value={'since_id': 42}), \
+                mock.patch('builtins.print') as sortie:
+            code = auto_sync.diagnostiquer_synchronisation()
+        self.assertEqual(code, 0)
+        self.assertTrue(any('SUCCES' in str(appel) for appel in sortie.call_args_list))
+        self.assertTrue(any('42' in str(appel) for appel in sortie.call_args_list))
+
+    @override_settings(
+        MYSCHOOL_SYNC_SERVER_URL='https://serveur', MYSCHOOL_SYNC_DEVICE_ID='d',
+        MYSCHOOL_SYNC_TOKEN='t', MYSCHOOL_SYNC_ECOLE_ID='1',
+    )
+    def test_une_exception_est_affichee_en_clair_pas_avalee(self):
+        """
+        Le defaut trouve sur un poste reel : le worker en arriere-plan
+        n'affichait jamais la cause d'un echec. Ce chemin-ci ne doit RIEN
+        avaler.
+        """
+        with mock.patch.object(auto_sync, '_tenter_cycle',
+                               side_effect=URLError('injoignable pour de vrai')), \
+                mock.patch('builtins.print') as sortie:
+            code = auto_sync.diagnostiquer_synchronisation()
+        self.assertEqual(code, 1)
+        texte = ' '.join(str(appel) for appel in sortie.call_args_list)
+        self.assertIn('injoignable pour de vrai', texte)
+        self.assertIn('URLError', texte)
+
+    @override_settings(
+        MYSCHOOL_SYNC_SERVER_URL='https://serveur', MYSCHOOL_SYNC_DEVICE_ID='d',
+        MYSCHOOL_SYNC_TOKEN='t', MYSCHOOL_SYNC_ECOLE_ID='1',
+    )
+    def test_une_erreur_de_certificat_est_reconnue_et_expliquee(self):
+        """
+        L'hypothese principale pour un poste d'ecole derriere un pare-feu qui
+        inspecte le HTTPS : Windows (et un navigateur) fait confiance au
+        certificat, le Python embarque non. Ce cas doit etre nomme
+        explicitement, pas noye dans un message technique generique.
+        """
+        import ssl
+        erreur = ssl.SSLCertVerificationError(
+            'certificate verify failed: unable to get local issuer certificate',
+        )
+        with mock.patch.object(auto_sync, '_tenter_cycle', side_effect=erreur), \
+                mock.patch('builtins.print') as sortie:
+            code = auto_sync.diagnostiquer_synchronisation()
+        self.assertEqual(code, 1)
+        texte = ' '.join(str(appel) for appel in sortie.call_args_list)
+        self.assertIn('certificat', texte.lower())
+        self.assertIn('pare-feu', texte.lower())
+
+    @override_settings(
+        MYSCHOOL_SYNC_SERVER_URL='https://serveur', MYSCHOOL_SYNC_DEVICE_ID='d',
+        MYSCHOOL_SYNC_TOKEN='t', MYSCHOOL_SYNC_ECOLE_ID='1',
+    )
+    def test_un_403_suggere_de_revoquer_et_regenerer_le_poste(self):
+        erreur = HTTPError('https://serveur', 403, 'Forbidden', {}, None)
+        with mock.patch.object(auto_sync, '_tenter_cycle', side_effect=erreur), \
+                mock.patch('builtins.print') as sortie:
+            code = auto_sync.diagnostiquer_synchronisation()
+        self.assertEqual(code, 1)
+        texte = ' '.join(str(appel) for appel in sortie.call_args_list)
+        self.assertIn('Revoquez', texte)
+
+    @override_settings(
+        MYSCHOOL_SYNC_SERVER_URL='https://serveur', MYSCHOOL_SYNC_DEVICE_ID='d',
+        MYSCHOOL_SYNC_TOKEN='t', MYSCHOOL_SYNC_ECOLE_ID='1',
+    )
+    def test_une_base_non_migree_est_expliquee_pas_affichee_en_brut(self):
+        """
+        Trouve en testant l'executable compile sur un dossier fraichement
+        deploye, jamais lance normalement : la table n'existe pas encore, et
+        sans ce cas le diagnostic affichait une erreur SQL brute plutot
+        qu'une instruction actionnable.
+        """
+        erreur = Exception('no such table: eleves_ecole')
+        with mock.patch.object(auto_sync, '_tenter_cycle', side_effect=erreur), \
+                mock.patch('builtins.print') as sortie:
+            code = auto_sync.diagnostiquer_synchronisation()
+        self.assertEqual(code, 1)
+        texte = ' '.join(str(appel) for appel in sortie.call_args_list)
+        self.assertIn('initialisee', texte)
+
+    @override_settings(
+        MYSCHOOL_SYNC_SERVER_URL='https://serveur', MYSCHOOL_SYNC_DEVICE_ID='d',
+        MYSCHOOL_SYNC_TOKEN='t', MYSCHOOL_SYNC_ECOLE_ID='1',
+    )
+    def test_un_echec_sans_exception_reste_explicite(self):
+        """Ecole locale introuvable ou serveur qui ne la reconnait pas : pas de crash, un message."""
+        with mock.patch.object(auto_sync, '_tenter_cycle', return_value=False), \
+                mock.patch('builtins.print') as sortie:
+            code = auto_sync.diagnostiquer_synchronisation()
+        self.assertEqual(code, 1)
+        texte = ' '.join(str(appel) for appel in sortie.call_args_list)
+        self.assertIn('Echec', texte)
+
+    def test_le_cycle_normal_delegue_toujours_a_tenter_cycle(self):
+        """Le refactor ne doit rien changer au comportement externe de _run_once."""
+        with mock.patch.object(auto_sync, '_tenter_cycle', return_value=True):
+            self.assertTrue(auto_sync._run_once())
+        with mock.patch.object(auto_sync, '_tenter_cycle', return_value=False):
+            self.assertFalse(auto_sync._run_once())

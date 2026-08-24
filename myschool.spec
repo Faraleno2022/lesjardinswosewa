@@ -48,7 +48,7 @@ for package in PROJECT_PACKAGES:
     hiddenimports += collect_submodules(package)
     datas += collect_data_files(package, includes=['templates/**/*'])
 
-for package in ['axes', 'whitenoise', 'reportlab', 'openpyxl', 'weasyprint', 'PIL']:
+for package in ['axes', 'whitenoise', 'reportlab', 'openpyxl', 'weasyprint', 'PIL', 'truststore']:
     hiddenimports += collect_submodules(package)
 
 for distribution in ['Django', 'django-axes', 'whitenoise', 'weasyprint']:
