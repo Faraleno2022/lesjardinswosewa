@@ -62,6 +62,7 @@ from .notifications import (
     send_relance_notification,
     send_retard_notification,
 )
+from .dashboard import calculer_indicateurs_categories
 
 
 def _normalize_payment_type_name(type_name: str) -> str:
@@ -1148,6 +1149,18 @@ def tableau_bord_paiements(request):
         if retard > 0:
             echeancier.retard_db = retard
             eleves_en_retard.append(echeancier)
+    retard_scolarite = {
+        'montant': sum(
+            (echeancier.retard_db for echeancier in eleves_en_retard),
+            Decimal('0'),
+        ),
+        'nombre': len(eleves_en_retard),
+    }
+    indicateurs_categories = calculer_indicateurs_categories(
+        request.user,
+        today,
+        retard_scolarite,
+    )
     eleves_en_retard.sort(key=lambda item: item.retard_db, reverse=True)
     eleves_en_retard = eleves_en_retard[:10]
 
@@ -1296,6 +1309,7 @@ def tableau_bord_paiements(request):
     context = {
         'titre_page': 'Tableau de bord des paiements',
         'stats': stats,
+        'indicateurs_categories': indicateurs_categories,
         'paiements_recents': paiements_recents,
         'eleves_en_retard': eleves_en_retard,
         'finance_direction': finance_direction,

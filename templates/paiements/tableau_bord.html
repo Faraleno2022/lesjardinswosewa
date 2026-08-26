@@ -115,6 +115,62 @@
     .risk-table th {
         vertical-align: middle;
     }
+
+    .category-payment-card {
+        background: #fff;
+        border: 1px solid #e8edf3;
+        border-radius: 12px;
+        box-shadow: 0 3px 14px rgba(25, 42, 70, 0.07);
+        height: 100%;
+        overflow: hidden;
+    }
+    .category-card-header {
+        align-items: center;
+        background: #0d6efd;
+        color: #fff;
+        display: flex;
+        gap: 12px;
+        padding: 16px 18px;
+    }
+    .category-card-header .category-icon {
+        align-items: center;
+        background: rgba(255, 255, 255, 0.18);
+        border-radius: 50%;
+        display: inline-flex;
+        height: 38px;
+        justify-content: center;
+        width: 38px;
+    }
+    .category-card--info .category-card-header { background: #0b8fa8; }
+    .category-card--warning .category-card-header { background: #c78600; }
+    .category-card--success .category-card-header { background: #218838; }
+    .category-card--secondary .category-card-header { background: #5b6470; }
+    .category-period {
+        background: #f8fafc;
+        border: 1px solid #edf1f5;
+        border-radius: 9px;
+        height: 100%;
+        padding: 12px;
+    }
+    .category-period-label {
+        color: #6c757d;
+        font-size: .76rem;
+        letter-spacing: .035rem;
+        text-transform: uppercase;
+    }
+    .category-period-value {
+        color: #172033;
+        font-size: 1.05rem;
+        font-weight: 700;
+        line-height: 1.25;
+        margin-top: 4px;
+    }
+    .category-overdue {
+        background: #fff6f6;
+        border-top: 1px solid #f5d7d7;
+        color: #a92222;
+        padding: 13px 18px;
+    }
 </style>
 {% endblock %}
 
@@ -150,6 +206,72 @@
             </div>
         </div>
     </div>
+
+    <!-- Encaissements validés par catégorie et par période -->
+    {% if indicateurs_categories %}
+    <section class="mb-4" aria-labelledby="encaissements-categories-title">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end mb-3">
+            <div>
+                <h4 id="encaissements-categories-title" class="mb-1">
+                    <i class="fas fa-wallet text-primary me-2"></i>Encaissements par catégorie
+                </h4>
+                <p class="text-muted mb-0">
+                    Montants des paiements validés. La semaine commence le lundi.
+                </p>
+            </div>
+            <span class="badge bg-success mt-2 mt-md-0">Données validées uniquement</span>
+        </div>
+
+        <div class="row g-3">
+            {% for categorie in indicateurs_categories %}
+            <div class="col-12 col-lg-6 col-xxl-4">
+                <article class="category-payment-card category-card--{{ categorie.theme }}">
+                    <header class="category-card-header">
+                        <span class="category-icon" aria-hidden="true">
+                            <i class="fas {{ categorie.icon }}"></i>
+                        </span>
+                        <div>
+                            <h5 class="mb-0">{{ categorie.label }}</h5>
+                            <small class="opacity-75">Paiements encaissés</small>
+                        </div>
+                    </header>
+
+                    <div class="p-3">
+                        <div class="row g-2">
+                            {% for periode in categorie.periodes %}
+                            <div class="col-6">
+                                <div class="category-period">
+                                    <div class="category-period-label">{{ periode.label }}</div>
+                                    <div class="category-period-value">
+                                        {{ periode.montant|floatformat:0|intcomma }} GNF
+                                    </div>
+                                    <small class="text-muted">
+                                        {{ periode.nombre|intcomma }} paiement{{ periode.nombre|pluralize }}
+                                    </small>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    {% if categorie.retard %}
+                    <footer class="category-overdue">
+                        <div class="d-flex justify-content-between align-items-start gap-3">
+                            <div>
+                                <strong><i class="fas fa-exclamation-circle me-1"></i>Retard de paiement</strong>
+                                <div class="small">{{ categorie.retard.nombre|intcomma }} {{ categorie.retard.libelle }}</div>
+                            </div>
+                            <strong class="text-nowrap">{{ categorie.retard.montant|floatformat:0|intcomma }} GNF</strong>
+                        </div>
+                        <small class="d-block mt-1 opacity-75">{{ categorie.retard.aide }}</small>
+                    </footer>
+                    {% endif %}
+                </article>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
 
     <!-- Vue directeur : recouvrement et prévisions -->
     <div class="card mb-4 border-0 shadow-sm">
