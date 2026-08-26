@@ -227,9 +227,28 @@
             display: block;
         }
 
-        /* La navigation complète tient sur une ligne à partir de 1400 px.
-           En dessous, elle devient un panneau repliable et défilable. */
-        @media (max-width: 1399.98px) {
+        /* Entre tablette paysage et grand écran, conserver la disposition
+           horizontale d'origine sans autoriser les retours à la ligne. */
+        @media (min-width: 992px) and (max-width: 1399.98px) {
+            .site-navbar .navbar-collapse {
+                min-width: 0;
+            }
+            .site-navbar .navbar-nav.me-auto {
+                min-width: 0;
+                overflow-x: auto;
+                overflow-y: hidden;
+                scrollbar-width: thin;
+            }
+            .site-navbar .navbar-nav.me-auto .nav-link {
+                font-size: 0.82rem;
+                padding-left: 0.45rem;
+                padding-right: 0.45rem;
+            }
+        }
+
+        /* Le panneau repliable reste limité aux mêmes largeurs que dans la
+           disposition Bootstrap initiale. */
+        @media (max-width: 991.98px) {
             .site-navbar .navbar-collapse {
                 max-height: calc(100vh - 70px);
                 max-height: calc(100dvh - 70px);
@@ -308,7 +327,7 @@
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-xxl navbar-dark bg-primary fixed-top site-navbar">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary fixed-top site-navbar">
         <div class="container-fluid">
             <a class="navbar-brand d-flex align-items-center" href="{% url 'home' %}">
                 <img src="{% static_versioned 'logos/logo.png' %}" alt="Logo {{ site.nom }}" width="36" height="36" loading="eager" decoding="async" fetchpriority="high">
