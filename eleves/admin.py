@@ -3,6 +3,7 @@ import secrets
 
 from django.conf import settings
 from django.contrib import admin, messages
+from django.contrib.admin.actions import delete_selected
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import HttpResponse
@@ -283,7 +284,7 @@ class EleveCorbeilleAdmin(admin.ModelAdmin):
         'matricule', 'nom', 'prenom', 'classe', 'statut',
         'supprime_le', 'supprime_par', 'statut_avant_suppression',
     )
-    actions = ('restaurer_eleves',)
+    actions = ('restaurer_eleves', 'supprimer_definitivement')
 
     def get_queryset(self, request):
         return super().get_queryset(request).filter(est_dans_corbeille=True)
@@ -291,8 +292,43 @@ class EleveCorbeilleAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return False
 
+    @staticmethod
+    def _peut_supprimer_definitivement(request):
+        user = request.user
+        profil = getattr(user, 'profil', None)
+        return bool(
+            user.is_active
+            and user.is_staff
+            and (
+                user.is_superuser
+                or getattr(profil, 'peut_supprimer_eleves_definitivement', False)
+            )
+        )
+
     def has_delete_permission(self, request, obj=None):
-        return False
+        if not self._peut_supprimer_definitivement(request):
+            return False
+        return obj is None or obj.est_dans_corbeille
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        # Remplacer l'action Django ambigue par une action au libelle explicite.
+        actions.pop('delete_selected', None)
+        if not self._peut_supprimer_definitivement(request):
+            actions.pop('supprimer_definitivement', None)
+        return actions
+
+    def delete_model(self, request, obj):
+        if not self.has_delete_permission(request, obj):
+            raise PermissionDenied
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        if not self._peut_supprimer_definitivement(request):
+            raise PermissionDenied
+        if queryset.exclude(est_dans_corbeille=True).exists():
+            raise PermissionDenied
+        super().delete_queryset(request, queryset)
 
     @admin.action(description="Restaurer les élèves sélectionnés")
     def restaurer_eleves(self, request, queryset):
@@ -300,3 +336,14 @@ class EleveCorbeilleAdmin(admin.ModelAdmin):
         for eleve in queryset:
             count += int(eleve.restaurer_depuis_corbeille())
         self.message_user(request, f"{count} élève(s) restauré(s).")
+
+    @admin.action(
+        description=(
+            "Supprimer définitivement les élèves sélectionnés "
+            "(action irréversible)"
+        )
+    )
+    def supprimer_definitivement(self, request, queryset):
+        if not self._peut_supprimer_definitivement(request):
+            raise PermissionDenied
+        return delete_selected(self, request, queryset)

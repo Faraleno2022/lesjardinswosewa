@@ -16,7 +16,7 @@
 ;   - Installation fraîche
 ;   - Mise à jour (préserve base de données, médias et synchronisation)
 
-#define MyAppVersion "1.3.2"
+#define MyAppVersion "1.3.3"
 #ifndef MyBuildDir
   #define MyBuildDir "dist\MySchoolGN"
 #endif

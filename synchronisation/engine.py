@@ -37,6 +37,9 @@ MAX_SYNC_FILE_BYTES = 2 * 1024 * 1024
 
 def model_label_for(instance_or_model):
     model = instance_or_model if isinstance(instance_or_model, type) else instance_or_model.__class__
+    # Une action depuis un modele proxy Django Admin (par exemple la corbeille
+    # des eleves) doit etre synchronisee sous le nom du modele concret.
+    model = model._meta.concrete_model
     return f'{model._meta.app_label}.{model.__name__}'
 
 

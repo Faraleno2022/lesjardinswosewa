@@ -297,6 +297,15 @@ CACHES = {
     }
 }
 
+# Protection des pages dynamiques. Les fichiers statiques, medias et API
+# techniques authentifiees sont exclus dans SecurityMiddleware.
+SECURITY_RATE_LIMIT_REQUESTS = int(
+    os.environ.get('SECURITY_RATE_LIMIT_REQUESTS', '300')
+)
+SECURITY_RATE_LIMIT_WINDOW_SECONDS = int(
+    os.environ.get('SECURITY_RATE_LIMIT_WINDOW_SECONDS', '60')
+)
+
 # Sessions stockées en DB + cache (1 requête DB au lieu de 2 par session)
 SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
 SESSION_CACHE_ALIAS = "default"
