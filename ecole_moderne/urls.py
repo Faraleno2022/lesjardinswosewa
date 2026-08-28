@@ -22,9 +22,7 @@ from django.http import HttpResponse
 from django.views.generic import TemplateView, RedirectView
 from .static_views import serve_static_no_cache
 from .identite_site import identite_pour_hote
-from .activation_views import activer_licence
 from .desktop_views import arreter_application
-from utilisateurs.license_api import activate_license, verify_license
 from notes.rapport_scolaire import rapport_scolaire_recherche, rapport_scolaire_detail, rapport_scolaire_pdf, rapport_scolaire_recu_pdf, rapport_scolaire_classes_ajax
 
 
@@ -91,12 +89,7 @@ def sitemap_xml(request):
 
 urlpatterns = [
     path(settings.ADMIN_URL, admin.site.urls),
-    path('activer/', activer_licence, name='activer_licence'),
     path('desktop/arreter/', arreter_application, name='arreter_application'),
-    path('api/v1/license/activate', activate_license, name='license_api_activate'),
-    path('api/v1/license/activate/', activate_license, name='license_api_activate_slash'),
-    path('api/v1/license/verify', verify_license, name='license_api_verify'),
-    path('api/v1/license/verify/', verify_license, name='license_api_verify_slash'),
     path('', TemplateView.as_view(template_name='home.html'), name='home'),
     path('index/', TemplateView.as_view(template_name='home.html'), name='index'),
     path('robots.txt', robots_txt, name='robots_txt'),

@@ -179,8 +179,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    # Contrôle d'intégrité uniquement : la licence ne bloque jamais l'accès
-    'ecole_moderne.licence_middleware.LicenceMiddleware',
+    # Contrôle d'intégrité uniquement ; aucune licence n'est requise.
+    'ecole_moderne.integrity_middleware.IntegrityMiddleware',
     # Protection anti brute-force
     'axes.middleware.AxesMiddleware',
     # Mode lecture seule : bloque toute action pour les comptes en consultation

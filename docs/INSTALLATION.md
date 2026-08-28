@@ -222,16 +222,10 @@ dist/
       ...
 ```
 
-### Generer une licence offline
+### Acces a l'application desktop
 
-```bash
-python generate_license_gui.py
-```
-
-Ou en ligne de commande :
-```bash
-python license_manager.py --generate --school "Nom Ecole" --duration 365
-```
+Aucune cle de licence n'est necessaire. Apres l'installation, l'application
+reste accessible sans abonnement annuel ni date d'expiration.
 
 ---
 
@@ -297,15 +291,6 @@ OSError: cannot load library 'gobject-2.0-0'
 
 - Installer GTK3 Runtime for Windows
 - Verifier que les DLLs sont dans le PATH
-
-### Erreur de licence
-
-```
-Acces bloque - Licence invalide ou expiree
-```
-
-- Lancer `generate_license_gui.py` pour generer une nouvelle licence
-- Copier le fichier de licence dans le repertoire de l'application
 
 ### Port 8000 deja utilise
 

@@ -2,7 +2,7 @@ from django.urls import path
 from django.contrib.auth import views as auth_views
 from .views import comptable_create_view, comptable_list_view, comptes_en_attente_view, valider_compte_view, rejeter_compte_view
 from .activation_views import (
-    activation_page, activer_licence, creer_compte,
+    activation_page, creer_compte,
     changer_mdp_admin, supprimer_compte, toggle_lecture_seule,
 )
 from .security_views import (
@@ -36,9 +36,8 @@ urlpatterns = [
     path('valider-compte/<int:user_id>/', valider_compte_view, name='valider_compte'),
     path('rejeter-compte/<int:user_id>/', rejeter_compte_view, name='rejeter_compte'),
 
-    # ── Activation licence & gestion comptes ─────────────────────────────────
+    # ── Gestion des comptes ──────────────────────────────────────────────────
     path('activation/', activation_page, name='activation'),
-    path('activation/activer-licence/', activer_licence, name='activer_licence'),
     path('activation/creer-compte/', creer_compte, name='creer_compte'),
     path('activation/changer-mdp/', changer_mdp_admin, name='changer_mdp_admin'),
     path('activation/supprimer-compte/<int:user_id>/', supprimer_compte, name='supprimer_compte'),

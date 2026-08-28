@@ -13,7 +13,8 @@ tout seuls. Personne n'a besoin de passer avec une cle USB.
    fichier est supprime et rien ne s'installe.
 4. Un bandeau discret annonce a l'ecran que la version est prete.
 5. **Au demarrage suivant** de MySchoolGN, l'installateur se lance en mode
-   silencieux, remplace les fichiers, puis rouvre l'application.
+   totalement silencieux, sauvegarde la base et la configuration, remplace les
+   fichiers, restaure les donnees, puis rouvre l'application.
 
 L'installation attend le redemarrage volontairement : l'installateur doit
 fermer l'application pour remplacer son executable, et couper une saisie en
@@ -94,7 +95,8 @@ ne fait pas redescendre les postes, c'est voulu.
   corresponde a celle declaree dans l'administration. La verification a lieu
   deux fois : apres le telechargement, puis **juste avant le lancement** —
   c'est la que le fichier devient du code execute.
-- Le telechargement n'accepte que des adresses `https`.
+- Le serveur et le telechargement n'acceptent que des adresses `https`. Une
+  redirection du fichier vers `http` est egalement refusee.
 - Le flux des mises a jour utilise les memes identifiants que la
   synchronisation. Un poste revoque perd les deux en meme temps : on ne peut
   pas installer de logiciel sur une machine qui n'est plus autorisee.
@@ -116,3 +118,17 @@ Intervalle entre deux verifications, en secondes (6 heures par defaut, 10
 minutes au minimum). La recherche s'appuie sur `MYSCHOOL_SYNC_SERVER_URL`,
 `MYSCHOOL_SYNC_DEVICE_ID` et `MYSCHOOL_SYNC_TOKEN` : un poste non relie au
 serveur ne cherche pas de mise a jour.
+
+## Diagnostic sur un poste
+
+- `myschool.log` indique maintenant les refus HTTP (`401`/`403`) et les erreurs
+  reseau rencontres pendant la recherche de version.
+- `mises_a_jour/en_attente.json` existe quand un installateur verifie attend le
+  prochain demarrage.
+- `mises_a_jour/installation.log` contient le journal Inno Setup de la derniere
+  installation automatique.
+
+Un retour `403 Appareil non autorise` signifie que le poste a ete revoque ou
+que son fichier `sync_config.json` ne correspond plus au jeton enregistre sur
+le serveur. Il faut alors generer une nouvelle configuration depuis la fiche de
+l'ecole ; contourner cette autorisation rendrait les mises a jour dangereuses.

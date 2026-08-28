@@ -16,7 +16,7 @@
 ;   - Installation fraîche
 ;   - Mise à jour (préserve base de données, médias et synchronisation)
 
-#define MyAppVersion "1.3.1"
+#define MyAppVersion "1.3.2"
 #ifndef MyBuildDir
   #define MyBuildDir "dist\MySchoolGN"
 #endif
@@ -106,6 +106,7 @@ Name: "{app}\media";                Permissions: users-modify
 Name: "{app}\media\photos_eleves";  Permissions: users-modify
 Name: "{app}\media\logos_ecoles";   Permissions: users-modify
 Name: "{app}\backups";              Permissions: users-modify
+Name: "{app}\sync";                 Permissions: users-modify
 Name: "{app}\staticfiles";          Permissions: users-modify
 
 [Icons]
@@ -168,6 +169,15 @@ var
 begin
   ExePath := WizardDirValue + '\MySchoolGN.exe';
   Result := FileExists(ExePath);
+end;
+
+// Determine le mode avant toute navigation dans l'assistant. En installation
+// silencieuse, aucune logique critique ne doit dependre de l'affichage d'une
+// page : la sauvegarde des donnees doit fonctionner meme sans interface.
+procedure InitializeWizard();
+begin
+  IsUpdate := IsUpgradeInstall();
+  BackupTempDir := ExpandConstant('{tmp}\MySchoolGN_UpdateBackup');
 end;
 
 // ── Arrêter l'application si elle est en cours d'exécution ───────────────────
@@ -274,9 +284,6 @@ end;
 
 // ── Sauvegarde des données utilisateur avant l'installation ──────────────────
 procedure BackupUserData();
-var
-  FindRec: TFindRec;
-  AppDir: String;
 begin
   BackupTempDir := ExpandConstant('{tmp}\MySchoolGN_UpdateBackup');
   ForceDirectories(BackupTempDir);
@@ -284,22 +291,9 @@ begin
   // Fichiers de données critiques
   BackupFile('db.sqlite3');
   BackupFile('.secret_key');
-  BackupFile('.trial_start');
   BackupFile('.env');
-  BackupFile('license.dat');
   BackupFile('sync_config.json');
   BackupFile('.sync_state.json');
-
-  // Tous les fichiers de licence (license_*.lic)
-  AppDir := ExpandConstant('{app}\');
-  if FindFirst(AppDir + 'license_*.lic', FindRec) then
-  try
-    repeat
-      BackupFile(FindRec.Name);
-    until not FindNext(FindRec);
-  finally
-    FindClose(FindRec);
-  end;
 
   // Dossier media (photos élèves, logos écoles, etc.)
   BackupDirectory('media');
@@ -309,31 +303,20 @@ begin
 
   // Dossier logs
   BackupDirectory('logs');
+
+  // Ancien emplacement de configuration utilise sur certains postes
+  BackupDirectory('sync');
 end;
 
 // ── Restauration des données utilisateur après l'installation ────────────────
 procedure RestoreUserData();
-var
-  FindRec: TFindRec;
 begin
   // Fichiers de données critiques
   RestoreFile('db.sqlite3');
   RestoreFile('.secret_key');
-  RestoreFile('.trial_start');
   RestoreFile('.env');
-  RestoreFile('license.dat');
   RestoreFile('sync_config.json');
   RestoreFile('.sync_state.json');
-
-  // Restaurer tous les fichiers de licence
-  if FindFirst(BackupTempDir + '\license_*.lic', FindRec) then
-  try
-    repeat
-      RestoreFile(FindRec.Name);
-    until not FindNext(FindRec);
-  finally
-    FindClose(FindRec);
-  end;
 
   // Restaurer le dossier media
   RestoreDirectory('media');
@@ -343,6 +326,9 @@ begin
 
   // Restaurer le dossier logs
   RestoreDirectory('logs');
+
+  // Restaurer l'ancien emplacement de configuration, s'il existe
+  RestoreDirectory('sync');
 
   // Nettoyage du dossier temporaire
   CleanupBackupDir();
@@ -384,7 +370,6 @@ var
 begin
   if CurPageID = wpWelcome then
   begin
-    IsUpdate := IsUpgradeInstall();
     if IsUpdate then
     begin
       WizardForm.WelcomeLabel1.Caption := 'Mise à jour de MySchoolGN';

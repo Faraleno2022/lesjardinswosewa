@@ -78,8 +78,8 @@ if sys.stdin is None:
 # Python embarque son propre lot de certificats racine (via son OpenSSL). Sur
 # un poste derriere un pare-feu ou un antivirus qui inspecte le trafic HTTPS
 # avec son propre certificat, Windows (et donc un navigateur) lui fait
-# confiance, mais Python non : toute connexion au serveur en ligne — licence,
-# synchronisation, mise a jour — echoue alors silencieusement des le depart.
+# confiance, mais Python non : toute connexion au serveur en ligne —
+# synchronisation ou mise a jour — echoue alors silencieusement des le depart.
 # `truststore` remplace la verification par celle du systeme d'exploitation,
 # ce qui aligne Python sur ce que voit deja Windows. Doit avoir lieu avant le
 # premier appel HTTPS de l'application, donc ici, au tout debut du module.
@@ -168,6 +168,10 @@ def _load_sync_config():
     import json
     candidates = [
         os.path.join(BASE_DIR, 'sync_config.json'),
+        # Compatibilite avec les installations qui ont recu leur configuration
+        # dans le sous-dossier `sync` sous le nom `_config.json`.
+        os.path.join(BASE_DIR, 'sync', '_config.json'),
+        os.path.join(BASE_DIR, 'sync', 'config.json'),
         os.path.join(os.environ.get('APPDATA', ''), 'MySchoolGN', 'sync_config.json'),
     ]
     keys = (
@@ -190,199 +194,6 @@ def _load_sync_config():
             pass
 
 _load_sync_config()
-
-
-# ─── Fenêtre d'activation de licence (tkinter) ────────────────────────────────
-def show_activation_window(mid: str, trial_days_left: int = 0, first_trial_prompt: bool = False) -> bool:
-    """
-    Affiche une fenêtre graphique d'activation de licence.
-    - Si trial_days_left > 0 : le bouton "Continuer l'essai" est affiché.
-    - Si first_trial_prompt=True : demande si l'utilisateur a deja une licence.
-    - Si trial_days_left <= 0 : l'utilisateur DOIT activer pour continuer.
-    Retourne True si l'application peut démarrer, False si l'utilisateur quitte.
-    """
-    try:
-        import tkinter as tk
-        from tkinter import filedialog, messagebox
-    except ImportError:
-        # tkinter non disponible (mode dev sans GUI) — accepter si essai actif
-        return trial_days_left > 0
-
-    result = [False]
-
-    root = tk.Tk()
-    root.title("MySchoolGN — Activation de la Licence")
-    root.resizable(False, False)
-    root.configure(bg='#ecf0f1')
-
-    # ── Dimensions et centrage ──
-    W, H = 540, 490 if first_trial_prompt else 460
-    root.geometry(f"{W}x{H}")
-    root.update_idletasks()
-    sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
-    root.geometry(f"{W}x{H}+{(sw - W) // 2}+{(sh - H) // 2}")
-    root.lift()
-    root.attributes('-topmost', True)
-    root.after(200, lambda: root.attributes('-topmost', False))
-
-    # ── En-tête ──
-    hdr = tk.Frame(root, bg='#1a3a5c', height=72)
-    hdr.pack(fill='x')
-    hdr.pack_propagate(False)
-    tk.Label(hdr, text="MySchoolGN",
-             font=('Arial', 22, 'bold'), bg='#1a3a5c', fg='white').place(
-        relx=0.5, rely=0.35, anchor='center')
-    tk.Label(hdr, text="Système de Gestion Scolaire — GS Hadja Kanfing Dian",
-             font=('Arial', 8), bg='#1a3a5c', fg='#aed6f1').place(
-        relx=0.5, rely=0.75, anchor='center')
-
-    # ── Corps ──
-    body = tk.Frame(root, bg='#ecf0f1', padx=24, pady=16)
-    body.pack(fill='both', expand=True)
-
-    # Message de statut
-    if first_trial_prompt and trial_days_left > 0:
-        status_txt = ("Avez-vous deja une licence annuelle MySchoolGN ?\n"
-                      "Si oui, cliquez sur Parcourir puis Activer la Licence.\n"
-                      "Sinon, continuez avec la version d'essai gratuite de 30 jours.")
-        status_col = '#1a5276'
-    elif trial_days_left <= 0:
-        status_txt = ("⚠  Votre période d'essai de 30 jours est expirée.\n"
-                      "Veuillez activer votre licence pour continuer.")
-        status_col = '#c0392b'
-    else:
-        status_txt = (f"Mode essai : {trial_days_left} jour(s) restant(s).\n"
-                      "Activez votre licence pour un accès illimité.")
-        status_col = '#d35400'
-
-    tk.Label(body, text=status_txt, font=('Arial', 10), bg='#ecf0f1',
-             fg=status_col, justify='left', wraplength=490).pack(
-        anchor='w', pady=(0, 12))
-
-    # ── ID Machine ──
-    mid_frm = tk.LabelFrame(body, text="  Identifiant Machine  ",
-                             bg='#ecf0f1', font=('Arial', 9, 'bold'),
-                             fg='#1a3a5c', padx=10, pady=8, relief='groove')
-    mid_frm.pack(fill='x', pady=(0, 10))
-    tk.Label(mid_frm,
-             text="Communiquez cet identifiant à GS Hadja Kanfing Dian pour obtenir votre licence :",
-             font=('Arial', 8), bg='#ecf0f1', fg='#555').pack(anchor='w')
-    mid_var = tk.StringVar(value=mid)
-    tk.Entry(mid_frm, textvariable=mid_var, font=('Courier', 10, 'bold'),
-             state='readonly', readonlybackground='#d5e8f7',
-             relief='flat', bd=1, fg='#1a3a5c').pack(
-        fill='x', pady=(4, 2), ipady=5)
-
-    cb_btn = tk.Button(mid_frm, text="  Copier l'identifiant  ",
-                       font=('Arial', 8), bg='#2980b9', fg='white',
-                       relief='flat', padx=8, pady=3, cursor='hand2')
-    cb_btn.pack(anchor='e', pady=(3, 0))
-
-    def _copy_mid():
-        root.clipboard_clear()
-        root.clipboard_append(mid)
-        cb_btn.config(text="  Copié !  ")
-        root.after(2000, lambda: cb_btn.config(text="  Copier l'identifiant  "))
-    cb_btn.config(command=_copy_mid)
-
-    # ── Activation fichier .lic ──
-    lic_frm = tk.LabelFrame(body,
-                             text="  Activer avec un fichier de licence (.lic)  ",
-                             bg='#ecf0f1', font=('Arial', 9, 'bold'),
-                             fg='#1a3a5c', padx=10, pady=8, relief='groove')
-    lic_frm.pack(fill='x', pady=(0, 8))
-
-    lic_var = tk.StringVar(value="")
-    lic_row = tk.Frame(lic_frm, bg='#ecf0f1')
-    lic_row.pack(fill='x')
-    tk.Entry(lic_row, textvariable=lic_var, font=('Arial', 9),
-             state='readonly', readonlybackground='#f9f9f9',
-             relief='flat', bd=1).pack(
-        side='left', fill='x', expand=True, ipady=5)
-
-    def _browse():
-        p = filedialog.askopenfilename(
-            title="Sélectionner votre fichier de licence",
-            filetypes=[("Licence MySchoolGN", "*.lic"),
-                       ("Tous les fichiers", "*.*")])
-        if p:
-            lic_var.set(p)
-            status_lbl.config(text="", fg='#27ae60')
-
-    tk.Button(lic_row, text="  Parcourir…  ", command=_browse,
-              font=('Arial', 9), bg='#7f8c8d', fg='white',
-              relief='flat', padx=6, pady=5, cursor='hand2').pack(
-        side='left', padx=(6, 0))
-
-    status_lbl = tk.Label(lic_frm, text="", font=('Arial', 9),
-                          bg='#ecf0f1', fg='#27ae60')
-    status_lbl.pack(anchor='w', pady=(4, 0))
-
-    def _do_activate():
-        p = lic_var.get().strip()
-        if not p:
-            messagebox.showwarning(
-                "Fichier manquant",
-                "Veuillez sélectionner un fichier .lic avant d'activer.")
-            return
-        try:
-            import license_manager
-            res = license_manager.activate_from_file(p)
-        except Exception as ex:
-            messagebox.showerror("Erreur", f"Erreur lors de l'activation :\n{ex}")
-            return
-        if res.get('valid'):
-            school = res.get('school', '')
-            days = res.get('days_left', 0)
-            edition = res.get('edition', 'Standard')
-            messagebox.showinfo(
-                "Activation réussie",
-                f"Licence activée avec succès !\n\n"
-                f"École    : {school}\n"
-                f"Édition  : {edition}\n"
-                f"Validité : {days} jour(s)")
-            result[0] = True
-            root.destroy()
-        else:
-            reason = res.get('reason', 'Erreur inconnue.')
-            status_lbl.config(text=f"Erreur : {reason}", fg='#c0392b')
-            messagebox.showerror("Activation échouée", reason)
-
-    # ── Boutons d'action ──
-    btn_frm = tk.Frame(body, bg='#ecf0f1')
-    btn_frm.pack(fill='x', pady=(4, 0))
-
-    tk.Button(btn_frm, text="   Activer la Licence   ",
-              command=_do_activate,
-              font=('Arial', 11, 'bold'), bg='#27ae60', fg='white',
-              relief='flat', padx=10, pady=8, cursor='hand2').pack(side='left')
-
-    if trial_days_left > 0:
-        def _continue_trial():
-            result[0] = True
-            root.destroy()
-        tk.Button(btn_frm,
-                  text=f"   Continuer avec l'essai ({trial_days_left}j)   ",
-                  command=_continue_trial,
-                  font=('Arial', 10), bg='#e67e22', fg='white',
-                  relief='flat', padx=10, pady=8, cursor='hand2').pack(
-            side='left', padx=(10, 0))
-
-    def _on_close():
-        if not result[0]:
-            if messagebox.askyesno("Quitter", "Quitter MySchoolGN ?"):
-                root.destroy()
-                os._exit(0)   # Fermeture complète : tue tous les threads/processus
-        else:
-            root.destroy()
-
-    tk.Button(btn_frm, text="  Quitter  ", command=_on_close,
-              font=('Arial', 10), bg='#95a5a6', fg='white',
-              relief='flat', padx=10, pady=8, cursor='hand2').pack(side='right')
-
-    root.protocol("WM_DELETE_WINDOW", _on_close)
-    root.mainloop()
-    return result[0]
 
 
 # ─── Protection anti-modification (garde) ──────────────────────────────────────
@@ -429,28 +240,15 @@ def _guard_check():
         if not _hmac_mod.compare_digest(stored_sig, expected_sig):
             _tamper_exit()
 
-        # Vérifier les empreintes des modules critiques
-        import license_manager
+        # Vérifier l'empreinte du module d'intégrité. Le moteur de licence ne
+        # fait plus partie de l'application ni de cette chaîne de confiance.
         import integrity_check
 
-        lm_fp = _hmac_mod.new(
-            _GUARD_KEY, license_manager._DEV_SECRET, hashlib.sha256
-        ).hexdigest()
-        ic_fp = _hmac_mod.new(
+        module_fp = _hmac_mod.new(
             _GUARD_KEY, integrity_check._INTEGRITY_KEY, hashlib.sha256
         ).hexdigest()
-        combined = _hmac_mod.new(
-            _GUARD_KEY, (lm_fp + ic_fp).encode(), hashlib.sha256
-        ).hexdigest()
 
-        if not _hmac_mod.compare_digest(combined, stored_hash):
-            _tamper_exit()
-
-        # Canary : vérifier que la validation rejette les données invalides
-        test = license_manager._validate_license_data({
-            'license_data': 'GUARD_TEST', 'signature': 'INVALID'
-        })
-        if test.get('valid', False):
+        if not _hmac_mod.compare_digest(module_fp, stored_hash):
             _tamper_exit()
 
     except (ImportError, FileNotFoundError):
@@ -500,12 +298,6 @@ def check_integrity():
         pass  # Mode développement, integrity_check non disponible
     except Exception as e:
         print(f"  [Intégrité] Avertissement : {e}")
-
-
-# ─── Vérification de la licence ────────────────────────────────────────────────
-def check_license():
-    """Point de compatibilité : une licence ne conditionne plus le démarrage."""
-    return True
 
 
 # ─── Utilitaires ──────────────────────────────────────────────────────────────
@@ -738,19 +530,12 @@ def open_browser(port):
     webbrowser.open(url)
 
 
-def show_banner(port, license_status=None):
+def show_banner(port):
     """Affiche la bannière de démarrage."""
-    school = ''
-    mode_label = 'Accès actif'
-    if license_status and not license_status.get('trial'):
-        school = license_status.get('school', '')
-
     print("")
     print("=" * 60)
     print("   MySchoolGN - Système de Gestion Scolaire")
-    print(f"   {mode_label}")
-    if school:
-        print(f"   {school}")
+    print("   Accès actif — aucune licence requise")
     print("=" * 60)
     print("")
     print(f"   Adresse : http://127.0.0.1:{port}")
@@ -783,11 +568,8 @@ def _show_fatal_error(message):
 def _traiter_sous_commande():
     """Exécute une sous-commande de sauvegarde passée en argument, si présente.
 
-    Traitée avant tout le reste — garde d'intégrité, licence, base, serveur —
-    pour deux raisons : une tâche planifiée doit pouvoir sauvegarder sans
-    ouvrir l'application, et une licence expirée ne doit jamais empêcher de
-    sauvegarder ni de restaurer (c'est précisément le moment où les données
-    comptent le plus).
+    Traitée avant tout le reste — garde d'intégrité, base et serveur — afin
+    qu'une tâche planifiée puisse sauvegarder sans ouvrir l'application.
 
     Le moteur de sauvegarde n'utilise ni Django ni la découverte des commandes
     de management : il fonctionne donc dans l'exécutable PyInstaller.
@@ -904,10 +686,6 @@ def main():
     # Vérification d'intégrité (anti-modification)
     check_integrity()
 
-    # La licence reste facultative et ne conditionne jamais le démarrage.
-    license_status = None
-    check_license()
-
     # Créer les dossiers nécessaires
     for folder in ['logs', 'media', 'staticfiles',
                    'media/photos_eleves', 'media/logos_ecoles']:
@@ -926,7 +704,7 @@ def main():
         print("[MySchoolGN] Tentative de démarrage sans migration...")
 
     # Afficher la bannière
-    show_banner(port, license_status)
+    show_banner(port)
 
     # Démarrer la synchronisation automatique en arrière-plan (si configurée).
     # Le worker tente push+pull périodiquement ; hors-ligne il réessaie et se

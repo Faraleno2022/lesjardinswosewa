@@ -39,7 +39,6 @@ hiddenimports = [
     'django.core.management.commands.migrate',
     'django.contrib.staticfiles.management.commands.collectstatic',
     'django.db.backends.sqlite3',
-    'license_manager',
     'integrity_check',
     'load_env',
 ]
@@ -47,6 +46,18 @@ hiddenimports = [
 for package in PROJECT_PACKAGES:
     hiddenimports += collect_submodules(package)
     datas += collect_data_files(package, includes=['templates/**/*'])
+
+# Les anciennes routes de licence ne sont plus joignables et ne doivent pas
+# etre livrees aux clients.
+hiddenimports = [
+    module for module in hiddenimports
+    if module not in {
+        'ecole_moderne.activation_views',
+        'ecole_moderne.licence_middleware',
+        'license_manager',
+        'utilisateurs.license_api',
+    }
+]
 
 for package in ['axes', 'whitenoise', 'reportlab', 'openpyxl', 'weasyprint', 'PIL', 'truststore']:
     hiddenimports += collect_submodules(package)
@@ -69,7 +80,13 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['MySQLdb', 'mysqlclient', 'PyMySQL'],
+    excludes=[
+        'MySQLdb', 'mysqlclient', 'PyMySQL',
+        'license_manager',
+        'ecole_moderne.activation_views',
+        'ecole_moderne.licence_middleware',
+        'utilisateurs.license_api',
+    ],
     noarchive=False,
     optimize=0,
 )

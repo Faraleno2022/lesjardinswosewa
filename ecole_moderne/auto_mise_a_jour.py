@@ -87,6 +87,8 @@ def empreinte_fichier(chemin):
 
 # ─── Interrogation du serveur ─────────────────────────────────────────────────
 def _demander_derniere_version(serveur, device_id, token):
+    if urlparse(serveur).scheme != 'https':
+        raise ValueError("L'adresse du serveur de mises a jour doit etre en https.")
     url = f'{serveur}/api/v1/updates/latest/?version={APP_VERSION}'
     requete = urlrequest.Request(
         url,
@@ -117,6 +119,12 @@ def _telecharger(url, destination, taille_attendue=None):
     os.makedirs(os.path.dirname(destination), exist_ok=True)
     recu = 0
     with urlrequest.urlopen(url, timeout=DELAI_TELECHARGEMENT) as reponse:
+        # urllib suit les redirections automatiquement. Une URL HTTPS qui
+        # redirigerait vers HTTP ne doit pas contourner l'exigence de transport
+        # chiffre verifiee ci-dessus.
+        url_finale = reponse.geturl() if hasattr(reponse, 'geturl') else url
+        if urlparse(url_finale).scheme != 'https':
+            raise ValueError("La redirection de telechargement doit rester en https.")
         with open(partiel, 'wb') as sortie:
             while True:
                 bloc = reponse.read(TAILLE_BLOC)
@@ -164,9 +172,18 @@ def preparer_mise_a_jour():
 
     try:
         reponse = _demander_derniere_version(serveur, device_id, token)
-    except (HTTPError, URLError, OSError, ValueError):
+    except HTTPError as erreur:
+        logger.warning(
+            '[MAJ] Verification refusee par le serveur (HTTP %s). '
+            'Verifiez que ce poste est toujours autorise.',
+            erreur.code,
+        )
         return None
-    except Exception:
+    except (URLError, OSError, ValueError) as erreur:
+        logger.warning('[MAJ] Verification impossible : %s', erreur)
+        return None
+    except Exception as erreur:
+        logger.warning('[MAJ] Verification impossible : %s', erreur)
         return None
 
     if not reponse.get('ok') or not reponse.get('mise_a_jour_disponible'):
@@ -309,8 +326,20 @@ def installer_mise_a_jour(descripteur):
         return False
 
     try:
+        journal = os.path.join(_dossier_mises_a_jour(), 'installation.log')
         subprocess.Popen(
-            [chemin, '/SILENT', '/NORESTART', '/RELANCE=1'],
+            [
+                chemin,
+                '/VERYSILENT',
+                '/SUPPRESSMSGBOXES',
+                '/SP-',
+                '/NOCANCEL',
+                '/NORESTART',
+                '/CLOSEAPPLICATIONS',
+                '/FORCECLOSEAPPLICATIONS',
+                f'/LOG={journal}',
+                '/RELANCE=1',
+            ],
             close_fds=True,
             creationflags=getattr(subprocess, 'DETACHED_PROCESS', 0)
             | getattr(subprocess, 'CREATE_NEW_PROCESS_GROUP', 0),

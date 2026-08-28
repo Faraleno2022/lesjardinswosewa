@@ -25,7 +25,7 @@ MySchoolGN est deploye en deux modes :
 | Mode | Description |
 |------|-------------|
 | **Application web** | Accessible via navigateur sur `myschoolgn.space` ou `gshadjakanfingdiane.pythonanywhere.com` |
-| **Application desktop** | Executable `.exe` standalone pour usage hors-ligne (Windows), avec systeme de licence |
+| **Application desktop** | Executable `.exe` autonome pour Windows, sans licence annuelle bloquante |
 
 Le systeme supporte plusieurs etablissements (multi-ecoles), gere les cycles maternelle, primaire et secondaire, et produit tous les documents officiels (bulletins, cartes scolaires, recus de paiement).
 
@@ -156,7 +156,6 @@ GS_hadja_kanfing_dian--main/
 |-- requirements.txt        # Dependances Python
 |-- .env                    # Variables d'environnement (ne pas commiter)
 |-- build_exe.py            # Script de compilation .exe
-|-- license_manager.py      # Gestionnaire de licences offline
 ```
 
 ---
@@ -237,8 +236,8 @@ TWILIO_ENABLED=false
 
 ---
 
-## Licence
+## Acces a l'application
 
-Ce logiciel est protege par un systeme de licence. Chaque installation necessite une cle de licence valide generee via `license_manager.py` ou l'outil `generate_license_gui.py`.
+L'application desktop ne demande aucune cle de licence et ne bloque pas l'acces en fonction d'une date d'expiration.
 
 Pour toute information, contacter l'equipe de developpement.

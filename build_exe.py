@@ -151,7 +151,7 @@ def copy_extra_files():
             os.remove(db_dst)
             print("  [INFO] db.sqlite3 du dev supprimee du build (sera creee au 1er demarrage)")
 
-    # Supprimer les fichiers de licence/essai du dev s'ils ont été copiés
+    # Ne jamais livrer d'anciens fichiers locaux du poste de compilation.
     for dev_file in ['license.dat', '.trial_start', '.secret_key', '.env']:
         dev_dst = os.path.join(OUTPUT_DIR, dev_file)
         if os.path.exists(dev_dst):
@@ -179,6 +179,48 @@ def copy_extra_files():
         os.makedirs(folder_path, exist_ok=True)
 
     print("  [OK] Fichiers supplementaires copies")
+
+
+def verify_static_images():
+    """Verifie que chaque image source est livree sans alteration."""
+    step("Verification des images integrees")
+
+    source_root = os.path.join(BASE_DIR, 'static', 'images')
+    destination_root = os.path.join(OUTPUT_DIR, 'static', 'images')
+    if not os.path.isdir(source_root):
+        raise RuntimeError(f"Dossier d'images source introuvable: {source_root}")
+    if not os.path.isdir(destination_root):
+        raise RuntimeError(
+            f"Dossier d'images absent de la distribution: {destination_root}"
+        )
+
+    source_files = sorted(
+        os.path.relpath(os.path.join(root, filename), source_root)
+        for root, _, filenames in os.walk(source_root)
+        for filename in filenames
+    )
+    if not source_files:
+        raise RuntimeError("Aucune image trouvee dans static/images")
+
+    total_bytes = 0
+    for relative_path in source_files:
+        source_path = os.path.join(source_root, relative_path)
+        destination_path = os.path.join(destination_root, relative_path)
+        if not os.path.isfile(destination_path):
+            raise RuntimeError(f"Image absente du build: {relative_path}")
+
+        with open(source_path, 'rb') as source_file:
+            source_digest = hashlib.sha256(source_file.read()).digest()
+        with open(destination_path, 'rb') as destination_file:
+            destination_digest = hashlib.sha256(destination_file.read()).digest()
+        if source_digest != destination_digest:
+            raise RuntimeError(f"Image alteree dans le build: {relative_path}")
+        total_bytes += os.path.getsize(source_path)
+
+    print(
+        f"  [OK] {len(source_files)} images verifiees octet par octet "
+        f"({total_bytes} octets)"
+    )
 
 
 def create_launcher_bat():
@@ -396,7 +438,6 @@ def protect_source_files():
 
     critical_files = [
         'integrity_check.py',
-        'license_manager.py',
         'load_env.py',
     ]
 
@@ -420,9 +461,9 @@ def protect_source_files():
 def generate_guard_file():
     """Genere le fichier de garde .guard.dat pour la verification anti-modification.
 
-    Ce fichier contient les empreintes HMAC des cles secretes des modules critiques.
+    Ce fichier contient l'empreinte HMAC du module d'integrite critique.
     Il est verifie par run_server.py (compile dans l'EXE) au demarrage.
-    Cle de garde differente des cles d'integrite et de licence.
+    La cle de garde reste differente de la cle d'integrite.
     """
     step("Generation du fichier de garde anti-modification")
 
@@ -446,30 +487,29 @@ def generate_guard_file():
     _saved_path = sys.path[:]
     sys.path.insert(0, BASE_DIR)
 
-    for mod_name in ['license_manager', 'integrity_check']:
+    for mod_name in ['integrity_check']:
         if mod_name in sys.modules:
             del sys.modules[mod_name]
 
     try:
-        import license_manager
         import integrity_check
 
-        # Calculer les empreintes des cles secretes
-        lm_fp = _hmac.new(guard_key, license_manager._DEV_SECRET, _hl.sha256).hexdigest()
-        ic_fp = _hmac.new(guard_key, integrity_check._INTEGRITY_KEY, _hl.sha256).hexdigest()
-        combined = _hmac.new(guard_key, (lm_fp + ic_fp).encode(), _hl.sha256).hexdigest()
+        # Calculer l'empreinte de la cle du module d'integrite.
+        module_fp = _hmac.new(
+            guard_key, integrity_check._INTEGRITY_KEY, _hl.sha256,
+        ).hexdigest()
 
         # Signer
-        sig = _hmac.new(guard_key, combined.encode(), _hl.sha256).hexdigest()
+        sig = _hmac.new(guard_key, module_fp.encode(), _hl.sha256).hexdigest()
 
-        guard_data = {'h': combined, 's': sig}
+        guard_data = {'h': module_fp, 's': sig}
 
         guard_path = os.path.join(OUTPUT_DIR, '.guard.dat')
         with open(guard_path, 'w', encoding='utf-8') as f:
             json.dump(guard_data, f)
 
         print(f"  [OK] Fichier de garde genere : .guard.dat")
-        print(f"  [OK] Empreintes des modules critiques enregistrees")
+        print(f"  [OK] Empreinte du module d'integrite enregistree")
 
     except Exception as e:
         print(f"  [ERREUR] Impossible de generer le fichier de garde : {e}")
@@ -580,6 +620,7 @@ def main():
     collect_static()
     run_pyinstaller()
     copy_extra_files()
+    verify_static_images()
     copy_gtk_dlls()
     create_launcher_bat()
     create_stop_bat()

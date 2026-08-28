@@ -11,6 +11,7 @@ import os
 import secrets
 import tempfile
 from unittest import mock
+from urllib.error import HTTPError
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -238,6 +239,37 @@ class TelechargementMiseAJourTests(TestCase):
                 os.path.join(self.dossier.name, 'setup.exe'),
             )
 
+    def test_une_redirection_vers_http_est_refusee(self):
+        class ReponseRedirigee:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def geturl(self):
+                return 'http://exemple.test/setup.exe'
+
+        destination = os.path.join(self.dossier.name, 'setup.exe')
+        with mock.patch.object(
+            auto_mise_a_jour.urlrequest, 'urlopen', return_value=ReponseRedirigee(),
+        ), self.assertRaises(ValueError):
+            auto_mise_a_jour._telecharger(
+                'https://exemple.test/setup.exe', destination,
+            )
+
+        self.assertFalse(os.path.exists(destination))
+
+    def test_le_serveur_de_versions_doit_etre_en_https(self):
+        with self.assertRaises(ValueError), mock.patch.object(
+            auto_mise_a_jour.urlrequest, 'urlopen',
+        ) as ouvrir:
+            auto_mise_a_jour._demander_derniere_version(
+                'http://serveur.test', 'appareil', 'jeton',
+            )
+
+        ouvrir.assert_not_called()
+
     def test_rien_n_est_tente_sans_configuration(self):
         with mock.patch.object(auto_mise_a_jour, '_config', return_value=None):
             self.assertIsNone(auto_mise_a_jour.preparer_mise_a_jour())
@@ -256,9 +288,27 @@ class TelechargementMiseAJourTests(TestCase):
             self.assertTrue(auto_mise_a_jour.appliquer_si_en_attente())
 
         arguments = lancement.call_args.args[0]
-        self.assertIn('/SILENT', arguments)
+        self.assertIn('/VERYSILENT', arguments)
+        self.assertIn('/SUPPRESSMSGBOXES', arguments)
+        self.assertIn('/CLOSEAPPLICATIONS', arguments)
+        self.assertIn('/FORCECLOSEAPPLICATIONS', arguments)
+        self.assertTrue(any(argument.startswith('/LOG=') for argument in arguments))
         self.assertIn('/RELANCE=1', arguments)
         self.assertIsNone(auto_mise_a_jour.mise_a_jour_en_attente())
+
+    def test_un_refus_du_serveur_est_journalise(self):
+        erreur = HTTPError(
+            'https://serveur/api/v1/updates/latest/', 403, 'Forbidden', {}, None,
+        )
+        with mock.patch.object(
+            auto_mise_a_jour, '_config',
+            return_value=('https://serveur', 'appareil', 'jeton'),
+        ), mock.patch.object(
+            auto_mise_a_jour, '_demander_derniere_version', side_effect=erreur,
+        ), self.assertLogs(auto_mise_a_jour.logger, level='WARNING') as journaux:
+            self.assertIsNone(auto_mise_a_jour.preparer_mise_a_jour())
+
+        self.assertTrue(any('HTTP 403' in ligne for ligne in journaux.output))
 
     def test_sans_mise_a_jour_le_demarrage_continue_normalement(self):
         self.assertFalse(auto_mise_a_jour.appliquer_si_en_attente())

@@ -24,10 +24,10 @@ from .models import (
 from .services import calculer_etat_salaire as calculer_etat_salaire_reel
 
 
-LICENCE_MIDDLEWARE = 'ecole_moderne.licence_middleware.LicenceMiddleware'
+INTEGRITY_MIDDLEWARE = 'ecole_moderne.integrity_middleware.IntegrityMiddleware'
 TEST_MIDDLEWARE = tuple(
     middleware for middleware in settings.MIDDLEWARE
-    if middleware != LICENCE_MIDDLEWARE
+    if middleware != INTEGRITY_MIDDLEWARE
 )
 
 
