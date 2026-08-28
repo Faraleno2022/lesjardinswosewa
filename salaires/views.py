@@ -60,7 +60,7 @@ def tableau_bord(request):
     restreindre = not user_is_admin(request.user) and ecole_user is not None
 
     # Statistiques générales
-    base_qs = Enseignant.objects.all()
+    base_qs = Enseignant.objects.exclude(statut='DEMISSIONNAIRE')
     if restreindre:
         base_qs = base_qs.filter(ecole=ecole_user)
     stats = {
@@ -171,6 +171,7 @@ def liste_enseignants(request):
     enseignants = Enseignant.objects.select_related('ecole').prefetch_related('affectations__classe')
     if restreindre:
         enseignants = enseignants.filter(ecole=ecole_user)
+    corbeille_count = enseignants.filter(statut='DEMISSIONNAIRE').count()
     
     if search:
         enseignants = enseignants.filter(
@@ -187,6 +188,8 @@ def liste_enseignants(request):
     
     if statut:
         enseignants = enseignants.filter(statut=statut)
+    else:
+        enseignants = enseignants.exclude(statut='DEMISSIONNAIRE')
     
     # Pagination
     paginator = Paginator(enseignants, 15)
@@ -200,7 +203,11 @@ def liste_enseignants(request):
     types_enseignant = TypeEnseignant.choices
     
     # Vérifier s'il y a des enseignants
-    if not enseignants.exists() and not any([search, ecole_id, type_enseignant, statut]):
+    if (
+        not enseignants.exists()
+        and corbeille_count == 0
+        and not any([search, ecole_id, type_enseignant, statut])
+    ):
         # Aucun enseignant et aucun filtre appliqué = base de données vide
         return render(request, 'salaires/empty_teachers_help.html')
     
@@ -218,6 +225,7 @@ def liste_enseignants(request):
         'ecoles': ecoles,
         'types_enseignant': types_enseignant,
         'stats': stats,
+        'corbeille_count': corbeille_count,
         'is_paginated': page_obj.has_other_pages(),
     }
     
@@ -249,6 +257,8 @@ def export_enseignants_csv(request):
         enseignants = enseignants.filter(type_enseignant=type_enseignant)
     if statut:
         enseignants = enseignants.filter(statut=statut)
+    else:
+        enseignants = enseignants.exclude(statut='DEMISSIONNAIRE')
 
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = 'attachment; filename="enseignants.csv"'
@@ -301,6 +311,8 @@ def export_enseignants_pdf(request):
         enseignants = enseignants.filter(type_enseignant=type_enseignant)
     if statut:
         enseignants = enseignants.filter(statut=statut)
+    else:
+        enseignants = enseignants.exclude(statut='DEMISSIONNAIRE')
 
     # Préparer la réponse HTTP
     response = HttpResponse(content_type='application/pdf')
@@ -1916,25 +1928,22 @@ def modifier_enseignant(request, enseignant_id):
 
 @login_required
 def supprimer_enseignant(request, enseignant_id):
-    """Vue pour supprimer un enseignant avec ses états de salaire (avec code de vérification)"""
+    """Place un enseignant dans la corbeille sans supprimer ses données."""
     # Filtrer selon les permissions
-    qs = Enseignant.objects.all()
+    qs = Enseignant.objects.exclude(statut='DEMISSIONNAIRE')
     if not user_is_admin(request.user):
         qs = qs.filter(ecole=user_school(request.user))
     
     try:
         enseignant = qs.get(id=enseignant_id)
     except Enseignant.DoesNotExist:
-        messages.error(request, f"L'enseignant avec l'ID {enseignant_id} n'existe pas ou a déjà été supprimé.")
+        messages.error(
+            request,
+            f"L'enseignant avec l'ID {enseignant_id} n'existe pas ou se trouve déjà dans la corbeille.",
+        )
         return redirect('salaires:liste_enseignants')
     
     nom_complet = enseignant.nom_complet
-    
-    # Vérifier la permission de suppression définitive
-    peut_supprimer_definitivement = user_is_admin(request.user) or (
-        hasattr(request.user, 'profil') and 
-        request.user.profil.peut_supprimer_enseignants_definitivement
-    )
     
     # Compter les éléments associés
     etats_salaire_count = enseignant.etats_salaire.count()
@@ -1942,106 +1951,33 @@ def supprimer_enseignant(request, enseignant_id):
     presences_count = enseignant.presences.count()
     
     if request.method == 'POST':
-        # Vérifier le code de sécurité
-        code_verification = request.POST.get('code_verification', '').strip()
-        suppression_definitive = request.POST.get('suppression_definitive') == 'on'
-        
-        # Pour les admins, toujours activer la suppression définitive par défaut
-        if user_is_admin(request.user):
-            suppression_definitive = request.POST.get('suppression_definitive') != 'off'
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.info(f"Admin {request.user.username} - Suppression définitive enseignant: {suppression_definitive}")
-        
-        from django.conf import settings as django_settings
-        expected_code = django_settings.SECURITY_VERIFICATION_CODE
-        if not expected_code or code_verification != expected_code:
-            messages.error(request, "Code de vérification incorrect. Suppression annulée.")
-            return render(request, 'salaires/confirmer_suppression_enseignant.html', {
-                'enseignant': enseignant,
-                'etats_salaire_count': etats_salaire_count,
-                'affectations_count': affectations_count,
-                'presences_count': presences_count,
-                'peut_supprimer_definitivement': peut_supprimer_definitivement,
-                'titre_page': f'Supprimer {nom_complet}'
-            })
-        
-        # Vérifier la permission pour suppression définitive
-        if suppression_definitive and not peut_supprimer_definitivement:
-            messages.error(request, "Vous n'avez pas la permission de supprimer définitivement un enseignant.")
-            return redirect('salaires:detail_enseignant', enseignant_id=enseignant.id)
-        
-        # Procéder à la suppression avec le code correct
-        from django.db import transaction
         try:
             with transaction.atomic():
-                if suppression_definitive and peut_supprimer_definitivement:
-                    # Suppression définitive pour les utilisateurs autorisés
-                    # Collecter les informations avant suppression
-                    etats_supprimes = []
-                    for etat in enseignant.etats_salaire.all():
-                        etats_supprimes.append(f"{etat.periode.nom_periode} - {etat.salaire_net} GNF")
-                    
-                    affectations_supprimees = []
-                    for affectation in enseignant.affectations.all():
-                        affectations_supprimees.append(f"{affectation.classe.nom} - {affectation.matiere or 'Toutes matières'}")
-                    
-                    # Créer l'entrée dans la corbeille avant suppression
-                    from administration.models import SystemLog
-                    SystemLog.objects.create(
-                        action='SUPPRESSION_DEFINITIVE_ENSEIGNANT',
-                        description=f"Suppression définitive de l'enseignant {nom_complet} avec {etats_salaire_count} état(s) de salaire, {affectations_count} affectation(s) et {presences_count} présence(s)",
-                        user=request.user,
-                        ip_address=request.META.get('REMOTE_ADDR', ''),
-                        details={
-                            'enseignant_id': enseignant.id,
-                            'nom_complet': nom_complet,
-                            'ecole': enseignant.ecole.nom,
-                            'type_enseignant': enseignant.type_enseignant,
-                            'salaire_fixe': str(enseignant.salaire_fixe) if enseignant.salaire_fixe else None,
-                            'taux_horaire': str(enseignant.taux_horaire) if enseignant.taux_horaire else None,
-                            'etats_supprimes': etats_supprimes,
-                            'affectations_supprimees': affectations_supprimees,
-                            'verification_code_used': True,
-                            'user_agent': request.META.get('HTTP_USER_AGENT', '')
-                        }
-                    )
-                    
-                    # Supprimer les états de salaire
-                    enseignant.etats_salaire.all().delete()
-                    
-                    # Supprimer les affectations
-                    enseignant.affectations.all().delete()
-                    
-                    # Supprimer les présences
-                    enseignant.presences.all().delete()
-                    
-                    # Supprimer l'enseignant définitivement
-                    enseignant.delete()
-                    
-                    total_elements = etats_salaire_count + affectations_count + presences_count
-                    messages.success(request, f"L'enseignant {nom_complet} et tous ses éléments associés ({total_elements} au total) ont été supprimés définitivement et sauvegardés dans la corbeille.")
-                else:
-                    # Soft delete - changer le statut au lieu de supprimer
-                    enseignant.statut = 'DEMISSIONNAIRE'
-                    enseignant.save()
-                    
-                    # Log de l'activité
-                    from utilisateurs.models import JournalActivite
-                    JournalActivite.objects.create(
-                        user=request.user,
-                        action='DESACTIVATION',
-                        type_objet='ENSEIGNANT',
-                        objet_id=enseignant.id,
-                        description=f"Désactivation de l'enseignant {nom_complet} (statut → Démissionnaire)",
-                        adresse_ip=request.META.get('REMOTE_ADDR', ''),
-                        user_agent=request.META.get('HTTP_USER_AGENT', '')
-                    )
-                    
-                    messages.success(request, f"L'enseignant {nom_complet} a été marqué comme démissionnaire (soft delete).")
+                enseignant.statut = 'DEMISSIONNAIRE'
+                enseignant.save(update_fields=['statut', 'date_modification'])
+
+                from utilisateurs.models import JournalActivite
+                JournalActivite.objects.create(
+                    user=request.user,
+                    action='MISE_CORBEILLE',
+                    type_objet='ENSEIGNANT',
+                    objet_id=enseignant.id,
+                    description=(
+                        f"Mise en corbeille de l'enseignant {nom_complet}; "
+                        "affectations, présences et états de salaire conservés"
+                    ),
+                    adresse_ip=request.META.get('REMOTE_ADDR', ''),
+                    user_agent=request.META.get('HTTP_USER_AGENT', '')
+                )
+
+                messages.success(
+                    request,
+                    f"L'enseignant {nom_complet} a été placé dans la corbeille. "
+                    "Toutes ses données ont été conservées.",
+                )
                     
         except Exception as e:
-            messages.error(request, f"Erreur lors de la suppression: {e}")
+            messages.error(request, f"Erreur lors de la mise en corbeille : {e}")
             return redirect('salaires:detail_enseignant', enseignant_id=enseignant.id)
         
         return redirect('salaires:liste_enseignants')
@@ -2052,6 +1988,5 @@ def supprimer_enseignant(request, enseignant_id):
         'etats_salaire_count': etats_salaire_count,
         'affectations_count': affectations_count,
         'presences_count': presences_count,
-        'peut_supprimer_definitivement': peut_supprimer_definitivement,
-        'titre_page': f'Supprimer {nom_complet}'
+        'titre_page': f'Placer {nom_complet} dans la corbeille'
     })
