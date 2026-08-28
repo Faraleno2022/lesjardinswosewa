@@ -433,7 +433,15 @@ class SessionSecurityMiddleware(MiddlewareMixin):
                         request.session['phone_verified_at'] = None
                         verified = False
 
-                if not exempt and not verified:
+                # La verification ne peut etre imposee que si un numero a
+                # effectivement ete configure. Les anciens profils sans
+                # telephone doivent rester utilisables et ne pas etre envoyes
+                # dans une boucle verification -> deconnexion.
+                profil = getattr(request.user, 'profil', None)
+                telephone_configure = bool(
+                    (getattr(profil, 'telephone', '') or '').strip()
+                )
+                if not exempt and not verified and telephone_configure:
                     # Préserver la destination initiale
                     from django.urls import reverse
                     verify_url = reverse('utilisateurs:verify_phone')

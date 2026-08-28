@@ -80,6 +80,29 @@ class SessionInactivityTests(TestCase):
         self.assertContains(response, 'var DELAI_MS = Number("60") * 1000;')
         self.assertContains(response, "'X-Session-Background': '1'", count=2)
 
+    def test_profil_sans_telephone_ne_bloque_pas_application(self):
+        self.user.profil.telephone = ''
+        self.user.profil.save(update_fields=['telephone'])
+
+        response = self.client.get(reverse('home'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(SESSION_KEY, self.client.session)
+
+    def test_verification_sans_telephone_n_affiche_pas_fausse_reussite(self):
+        self.user.profil.telephone = ''
+        self.user.profil.save(update_fields=['telephone'])
+
+        response = self.client.get(
+            reverse('utilisateurs:verify_phone'),
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse('utilisateurs:login'))
+        self.assertContains(response, 'Aucun numéro de téléphone', count=1)
+        self.assertNotContains(response, 'Vous avez été déconnecté avec succès.')
+        self.assertNotIn(SESSION_KEY, self.client.session)
+
     def test_middleware_est_place_apres_session_auth_et_messages(self):
         middlewares = list(settings.MIDDLEWARE)
         securite = middlewares.index(
