@@ -63,6 +63,17 @@ class MetadonneesPartageesTests(SimpleTestCase):
         self.assertNotIn('Les Jardins Wosewa', html)
 
 
+@override_settings(ALLOWED_HOSTS=[HOTE_ECOLE])
+class CouvertureAccueilTests(SimpleTestCase):
+    def test_la_couverture_utilise_directement_ecole_png(self):
+        reponse = self.client.get('/', HTTP_HOST=HOTE_ECOLE)
+
+        self.assertEqual(reponse.status_code, 200)
+        html = reponse.content.decode('utf-8')
+        self.assertIn('/static/images/Ecole.png?v=', html)
+        self.assertNotIn('/static/images/optimized/ecole', html)
+
+
 @override_settings(ALLOWED_HOSTS=[HOTE_ECOLE, HOTE_LOGICIEL])
 class SitemapParDomaineTests(SimpleTestCase):
     def test_le_sitemap_de_lecole_ignore_les_pages_commerciales(self):

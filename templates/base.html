@@ -23,14 +23,14 @@
     <meta property="og:title" content="{% block og_title %}{{ site.titre }}{% endblock %}">
     <meta property="og:description" content="{% block og_description %}{{ site.description_partage }}{% endblock %}">
     <meta property="og:url" content="{% block og_url %}{{ request.build_absolute_uri }}{% endblock %}">
-    <meta property="og:image" content="{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/optimized/ecole.webp' %}{% endblock %}">
+    <meta property="og:image" content="{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{% static_versioned 'images/Ecole.png' %}{% endblock %}">
     <meta property="og:locale" content="fr_FR">
 
     {# Twitter Card #}
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{% block twitter_title %}{{ site.titre }}{% endblock %}">
     <meta name="twitter:description" content="{% block twitter_description %}{{ site.description_partage }}{% endblock %}">
-    <meta name="twitter:image" content="{% block twitter_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/optimized/ecole.webp' %}{% endblock %}">
+    <meta name="twitter:image" content="{% block twitter_image %}{{ request.scheme }}://{{ request.get_host }}{% static_versioned 'images/Ecole.png' %}{% endblock %}">
 
     {% block structured_data %}
     {% comment %}Sur le domaine de l'école, annoncer un SoftwareApplication hébergé

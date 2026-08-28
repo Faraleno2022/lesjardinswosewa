@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static static_versioned %}
 
 {% block title %}Les Jardins Wosewa — Groupe Scolaire Privé à Conakry et Siguiri (Maternelle, Primaire, Collège, Lycée){% endblock %}
 {% block meta_description %}Les Jardins Wosewa est une institution privée d'enseignement général présente à Kipé T2 (Conakry) et à Siguiri. Programme franco-guinéen de la maternelle au lycée, dans un cadre d'apprentissage, de créativité et d'excellence.{% endblock %}
@@ -37,7 +37,7 @@
     "telephone": ["+224627074644", "+224622751518"],
     "email": "lesjardinswosewa.gui23@gmail.com"
   },
-  "image": "{{ request.scheme }}://{{ request.get_host }}{% static 'images/optimized/ecole.webp' %}",
+  "image": "{{ request.scheme }}://{{ request.get_host }}{% static_versioned 'images/Ecole.png' %}",
   "url": "{{ request.scheme }}://{{ request.get_host }}/"
 }
 </script>
@@ -473,7 +473,7 @@
     #wGalleryModal .w-viewer-next { right: 4px; }
   }
 </style>
-<link rel="preload" as="image" href="{% static 'images/optimized/ecole.webp' %}" type="image/webp" imagesizes="100vw">
+<link rel="preload" as="image" href="{% static_versioned 'images/Ecole.png' %}" type="image/png" imagesizes="100vw">
 {% endblock %}
 
 {% block breadcrumb %}{% endblock %}
@@ -483,13 +483,10 @@
 
   <!-- ===================== BANNIÈRE ===================== -->
   <section class="w-hero w-bleed">
-    <picture>
-      <source type="image/webp" srcset="{% static 'images/optimized/ecole.webp' %}">
-      <img src="{% static 'images/optimized/ecole_optimized.jpg' %}"
-           alt="Groupe Scolaire Privé Les Jardins Wosewa — Maternelle, Primaire, Collège, Lycée. Un cadre d'apprentissage, de créativité et d'excellence."
-           width="1916" height="821"
-           loading="eager" decoding="sync" fetchpriority="high">
-    </picture>
+    <img src="{% static_versioned 'images/Ecole.png' %}"
+         alt="Groupe Scolaire Privé Les Jardins Wosewa — Maternelle, Primaire, Collège, Lycée. Un cadre d'apprentissage, de créativité et d'excellence."
+         width="1916" height="821"
+         loading="eager" decoding="sync" fetchpriority="high">
   </section>
 
   <div class="w-hero-actions w-bleed">

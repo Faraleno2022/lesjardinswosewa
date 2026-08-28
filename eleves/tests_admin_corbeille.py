@@ -58,10 +58,13 @@ class EleveCorbeilleAdminTests(TestCase):
             self.admin_corbeille.has_delete_permission(request, eleve_corbeille)
         )
         self.assertIn(
-            'supprimer_definitivement',
+            'delete_selected',
             self.admin_corbeille.get_actions(request),
         )
-        self.assertNotIn('delete_selected', self.admin_corbeille.get_actions(request))
+        self.assertIn(
+            'Supprimer définitivement',
+            self.admin_corbeille.get_actions(request)['delete_selected'][2],
+        )
 
     def test_administrateur_avec_permission_peut_supprimer(self):
         self.staff.profil.peut_supprimer_eleves_definitivement = True
@@ -72,7 +75,7 @@ class EleveCorbeilleAdminTests(TestCase):
 
         self.assertTrue(self.admin_corbeille.has_delete_permission(request))
         self.assertIn(
-            'supprimer_definitivement',
+            'delete_selected',
             self.admin_corbeille.get_actions(request),
         )
 
@@ -81,7 +84,7 @@ class EleveCorbeilleAdminTests(TestCase):
 
         self.assertFalse(self.admin_corbeille.has_delete_permission(request))
         self.assertNotIn(
-            'supprimer_definitivement',
+            'delete_selected',
             self.admin_corbeille.get_actions(request),
         )
         with self.assertRaises(PermissionDenied):
@@ -104,6 +107,37 @@ class EleveCorbeilleAdminTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
+        self.assertFalse(Eleve.objects.filter(pk=self.eleve.pk).exists())
+        self.assertTrue(
+            SyncChange.objects.filter(
+                model_label='eleves.Eleve',
+                object_uuid=sync_uuid,
+                operation=SyncChange.OPERATION_DELETE,
+            ).exists()
+        )
+
+    def test_action_groupee_confirme_et_supprime_definitivement(self):
+        sync_uuid = self.eleve.sync_uuid
+        SyncChange.objects.all().delete()
+        self.client.force_login(self.superuser)
+        url = reverse('admin:eleves_elevecorbeille_changelist')
+        selection = {
+            'action': 'delete_selected',
+            '_selected_action': [str(self.eleve.pk)],
+        }
+
+        confirmation = self.client.post(url, selection)
+
+        self.assertEqual(confirmation.status_code, 200)
+        self.assertTemplateUsed(
+            confirmation,
+            'admin/delete_selected_confirmation.html',
+        )
+        self.assertTrue(Eleve.objects.filter(pk=self.eleve.pk).exists())
+
+        resultat = self.client.post(url, {**selection, 'post': 'yes'})
+
+        self.assertEqual(resultat.status_code, 302)
         self.assertFalse(Eleve.objects.filter(pk=self.eleve.pk).exists())
         self.assertTrue(
             SyncChange.objects.filter(

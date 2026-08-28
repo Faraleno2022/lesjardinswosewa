@@ -3,7 +3,6 @@ import secrets
 
 from django.conf import settings
 from django.contrib import admin, messages
-from django.contrib.admin.actions import delete_selected
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.http import HttpResponse
@@ -284,7 +283,7 @@ class EleveCorbeilleAdmin(admin.ModelAdmin):
         'matricule', 'nom', 'prenom', 'classe', 'statut',
         'supprime_le', 'supprime_par', 'statut_avant_suppression',
     )
-    actions = ('restaurer_eleves', 'supprimer_definitivement')
+    actions = ('restaurer_eleves',)
 
     def get_queryset(self, request):
         return super().get_queryset(request).filter(est_dans_corbeille=True)
@@ -312,10 +311,16 @@ class EleveCorbeilleAdmin(admin.ModelAdmin):
 
     def get_actions(self, request):
         actions = super().get_actions(request)
-        # Remplacer l'action Django ambigue par une action au libelle explicite.
-        actions.pop('delete_selected', None)
         if not self._peut_supprimer_definitivement(request):
-            actions.pop('supprimer_definitivement', None)
+            actions.pop('delete_selected', None)
+        elif 'delete_selected' in actions:
+            fonction, nom, _ = actions['delete_selected']
+            actions['delete_selected'] = (
+                fonction,
+                nom,
+                "Supprimer définitivement les élèves sélectionnés "
+                "(action irréversible)",
+            )
         return actions
 
     def delete_model(self, request, obj):
@@ -336,14 +341,3 @@ class EleveCorbeilleAdmin(admin.ModelAdmin):
         for eleve in queryset:
             count += int(eleve.restaurer_depuis_corbeille())
         self.message_user(request, f"{count} élève(s) restauré(s).")
-
-    @admin.action(
-        description=(
-            "Supprimer définitivement les élèves sélectionnés "
-            "(action irréversible)"
-        )
-    )
-    def supprimer_definitivement(self, request, queryset):
-        if not self._peut_supprimer_definitivement(request):
-            raise PermissionDenied
-        return delete_selected(self, request, queryset)
