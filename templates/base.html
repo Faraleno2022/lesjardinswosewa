@@ -548,8 +548,9 @@
                                 {% endif %}
                                 <li><hr class="dropdown-divider"></li>
                                 <li>
-                                    <form method="post" action="{% url 'utilisateurs:logout' %}" class="px-3 py-1">
+                                    <form method="post" action="{% url 'utilisateurs:logout' %}" class="px-3 py-1" id="session-logout-form">
                                         {% csrf_token %}
+                                        <input type="hidden" name="reason" id="session-logout-reason" value="">
                                         <button type="submit" class="dropdown-item px-0">
                                             <i class="fas fa-sign-out-alt me-1"></i>Déconnexion
                                         </button>
@@ -872,6 +873,54 @@
     </script>
     {% if user.is_authenticated %}
     <script>
+    // Deconnexion automatique apres une periode sans activite humaine.
+    // Les requetes de synchronisation en arriere-plan ne reinitialisent jamais
+    // ce compteur : un poste abandonne ne reste donc pas connecte.
+    (function(){
+      var DELAI_MS = Number("{{ session_idle_timeout_seconds|default:1800 }}") * 1000;
+      var derniereActivite = Date.now();
+      var minuteur = null;
+      var dernierSignal = 0;
+
+      function fermerSession(){
+        var formulaire = document.getElementById('session-logout-form');
+        var raison = document.getElementById('session-logout-reason');
+        if (!formulaire) {
+          window.location.replace("{% url 'utilisateurs:login' %}");
+          return;
+        }
+        if (raison) raison.value = 'inactivity';
+        HTMLFormElement.prototype.submit.call(formulaire);
+      }
+
+      function verifierInactivite(){
+        var restant = DELAI_MS - (Date.now() - derniereActivite);
+        if (restant <= 0) {
+          fermerSession();
+          return;
+        }
+        clearTimeout(minuteur);
+        minuteur = setTimeout(verifierInactivite, Math.min(restant, 60000));
+      }
+
+      function signalerActivite(){
+        var maintenant = Date.now();
+        // Eviter des centaines de reprogrammations pendant un mouvement souris.
+        if (maintenant - dernierSignal < 1000) return;
+        dernierSignal = maintenant;
+        derniereActivite = maintenant;
+        verifierInactivite();
+      }
+
+      ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach(function(evenement){
+        document.addEventListener(evenement, signalerActivite, {passive: true, capture: true});
+      });
+      document.addEventListener('visibilitychange', verifierInactivite);
+      verifierInactivite();
+    })();
+    </script>
+
+    <script>
     // Rafraichissement automatique des pages ouvertes.
     //
     // La synchronisation met a jour la base du poste en arriere-plan ; sans ce
@@ -923,7 +972,11 @@
       function verifier(){
         if (requeteEnCours || document.hidden) return;
         requeteEnCours = true;
-        fetch(URL_ETAT, { credentials: 'same-origin', cache: 'no-store' })
+        fetch(URL_ETAT, {
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: {'X-Session-Background': '1'}
+        })
           .then(function(reponse){ return reponse.ok ? reponse.json() : null; })
           .then(function(donnees){
             if (!donnees || !donnees.ok) return;
@@ -979,7 +1032,11 @@
       }
 
       document.addEventListener('DOMContentLoaded', function(){
-        fetch(URL_MAJ, { credentials: 'same-origin', cache: 'no-store' })
+        fetch(URL_MAJ, {
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: {'X-Session-Background': '1'}
+        })
           .then(function(reponse){ return reponse.ok ? reponse.json() : null; })
           .then(function(donnees){
             if (donnees && donnees.ok && donnees.prete) { annoncer(donnees); }

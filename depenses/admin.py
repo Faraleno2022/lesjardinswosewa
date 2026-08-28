@@ -11,6 +11,7 @@ from .models_bibliotheque import (
     CategorieLivre, Livre, Emprunt, Reservation,
     HistoriqueLivre, ParametreBibliotheque
 )
+from .models_recouvrement import AbonnementInformatique
 
 
 # ===== DÉPENSES =====
@@ -57,6 +58,24 @@ class ContributionPapierRamAdmin(admin.ModelAdmin):
     list_filter = ['ecole', 'annee_scolaire', 'mode_contribution']
     search_fields = ['eleve__matricule', 'eleve__nom', 'eleve__prenom']
     date_hierarchy = 'date_contribution'
+
+
+# ===== RECOUVREMENT INFORMATIQUE =====
+@admin.register(AbonnementInformatique)
+class AbonnementInformatiqueAdmin(admin.ModelAdmin):
+    """Gestion et suppression des abonnements informatique depuis Django admin."""
+
+    list_display = [
+        'eleve', 'ecole', 'date_debut', 'date_fin', 'montant', 'statut',
+    ]
+    list_filter = ['ecole', 'date_debut', 'date_fin']
+    search_fields = [
+        'eleve__matricule', 'eleve__nom', 'eleve__prenom',
+    ]
+    date_hierarchy = 'date_debut'
+    list_select_related = ['eleve', 'eleve__classe', 'ecole']
+    raw_id_fields = ['eleve']
+    readonly_fields = ['date', 'date_creation', 'date_modification']
 
 
 @admin.register(ProduitFourniture)

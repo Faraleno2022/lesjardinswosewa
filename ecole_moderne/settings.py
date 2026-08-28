@@ -178,6 +178,9 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    # Doit rester apres SessionMiddleware, AuthenticationMiddleware et
+    # MessageMiddleware pour pouvoir identifier puis deconnecter l'utilisateur.
+    'ecole_moderne.security_middleware.SessionSecurityMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     # Contrôle d'intégrité uniquement ; aucune licence n'est requise.
     'ecole_moderne.integrity_middleware.IntegrityMiddleware',
@@ -196,7 +199,6 @@ if DEBUG:
 else:
     MIDDLEWARE.append('ecole_moderne.image_optimization_middleware.ImageOptimizationMiddleware')
     MIDDLEWARE.insert(1, 'ecole_moderne.security_middleware.SecurityMiddleware')
-    MIDDLEWARE.insert(3, 'ecole_moderne.security_middleware.SessionSecurityMiddleware')
     MIDDLEWARE.insert(5, 'ecole_moderne.security_middleware.CSRFSecurityMiddleware')
     MIDDLEWARE.append('ecole_moderne.security_middleware.CSPMiddleware')
 
@@ -309,7 +311,14 @@ SECURITY_RATE_LIMIT_WINDOW_SECONDS = int(
 # Sessions stockées en DB + cache (1 requête DB au lieu de 2 par session)
 SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
 SESSION_CACHE_ALIAS = "default"
-SESSION_COOKIE_AGE = 86400 * 7   # 7 jours (évite reconnexions fréquentes)
+SESSION_IDLE_TIMEOUT_SECONDS = max(
+    60,
+    int(os.environ.get('SESSION_IDLE_TIMEOUT_SECONDS', '1800')),
+)
+# Le cookie et l'enregistrement serveur ne doivent jamais survivre au delai
+# d'inactivite. Le middleware renouvelle cette echeance lors d'une vraie action.
+SESSION_COOKIE_AGE = SESSION_IDLE_TIMEOUT_SECONDS
+SESSION_SAVE_EVERY_REQUEST = False
 
 # =================== Auth & mots de passe ===================
 AUTH_PASSWORD_VALIDATORS = [

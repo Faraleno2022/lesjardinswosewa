@@ -8,6 +8,7 @@ from django.template import loader
 from django.core.cache import cache
 from django.conf import settings
 from django.utils.deprecation import MiddlewareMixin
+from django.contrib import messages
 from django.contrib.auth import logout
 from django.shortcuts import redirect
 from django.core.exceptions import TooManyFieldsSent
@@ -360,8 +361,17 @@ class SecurityMiddleware(MiddlewareMixin):
 
 class SessionSecurityMiddleware(MiddlewareMixin):
     """
-    Middleware pour sécuriser les sessions
+    Ferme les sessions apres une periode sans activite humaine.
+
+    Les appels automatiques (synchronisation et recherche de mise a jour) ne
+    doivent pas maintenir un compte connecte pendant des heures alors que le
+    poste est abandonne.
     """
+
+    BACKGROUND_PATHS = (
+        '/api/v1/sync/state/',
+        '/api/v1/updates/prete/',
+    )
     
     def __init__(self, get_response):
         self.get_response = get_response
@@ -373,6 +383,25 @@ class SessionSecurityMiddleware(MiddlewareMixin):
         """
         # Vérifier que l'utilisateur est disponible (après AuthenticationMiddleware)
         if hasattr(request, 'user') and request.user.is_authenticated:
+            # L'expiration doit passer avant les autres redirections de securite.
+            if self.is_session_expired(request):
+                username = request.user.get_username()
+                logout(request)
+                messages.info(
+                    request,
+                    "Votre session a été fermée après une période d'inactivité.",
+                )
+                logger.info("Session expirée pour utilisateur: %s", username)
+                if self._attend_du_json(request):
+                    return JsonResponse(
+                        {
+                            'success': False,
+                            'error': 'Session expirée pour inactivité.',
+                        },
+                        status=401,
+                    )
+                return redirect('utilisateurs:login')
+
             # Enforcer la vérification du téléphone pour la session
             try:
                 path = request.path or ''
@@ -412,21 +441,18 @@ class SessionSecurityMiddleware(MiddlewareMixin):
             except Exception:
                 # En cas d'erreur, ne pas bloquer l'utilisateur, continuer les autres contrôles
                 pass
-            # Vérifier l'inactivité de session
-            if self.is_session_expired(request):
-                logout(request)
-                logger.info(f"Session expirée pour utilisateur: {request.user.username}")
-                return redirect('utilisateurs:login')
-            
             # Vérifier le changement d'IP (optionnel, peut causer des problèmes avec les proxies)
             if self.detect_session_hijacking(request):
                 logout(request)
                 logger.warning(f"Tentative de détournement de session détectée pour: {request.user.username}")
                 return redirect('utilisateurs:login')
             
-            # Mettre à jour le timestamp de dernière activité
-            request.session['last_activity'] = time.time()
-            request.session['user_ip'] = self.get_client_ip(request)
+            # Seules les actions humaines renouvellent le delai. Le polling de
+            # synchronisation reste autorise mais ne garde pas la session en vie.
+            if self.is_user_activity(request):
+                request.session['last_activity'] = time.time()
+                request.session['user_ip'] = self.get_client_ip(request)
+                request.session.set_expiry(self.idle_timeout_seconds())
         
         return None
     
@@ -440,11 +466,37 @@ class SessionSecurityMiddleware(MiddlewareMixin):
         return ip
     
     def is_session_expired(self, request):
-        """Vérifie si la session a expiré (30 minutes d'inactivité)"""
+        """Vérifie si la dernière activité dépasse le délai configuré."""
         last_activity = request.session.get('last_activity')
         if last_activity:
-            return time.time() - last_activity > 1800  # 30 minutes
+            try:
+                return time.time() - float(last_activity) > self.idle_timeout_seconds()
+            except (TypeError, ValueError):
+                return True
         return False
+
+    @staticmethod
+    def idle_timeout_seconds():
+        return max(
+            60,
+            int(getattr(settings, 'SESSION_IDLE_TIMEOUT_SECONDS', 1800)),
+        )
+
+    def is_user_activity(self, request):
+        """Distingue une navigation humaine d'un appel automatique de fond."""
+        if request.headers.get('X-Session-Background') == '1':
+            return False
+        path = request.path or '/'
+        return not any(path.startswith(prefix) for prefix in self.BACKGROUND_PATHS)
+
+    @staticmethod
+    def _attend_du_json(request):
+        accept = request.headers.get('Accept', '')
+        return (
+            request.path.startswith('/api/')
+            or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            or 'application/json' in accept
+        )
     
     def detect_session_hijacking(self, request):
         """Détecte les tentatives de détournement de session"""

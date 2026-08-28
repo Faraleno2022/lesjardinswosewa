@@ -260,7 +260,13 @@ def secure_logout(request):
     logout(request)
     request.session.flush()
     
-    messages.success(request, 'Vous avez été déconnecté avec succès.')
+    if request.POST.get('reason') == 'inactivity':
+        messages.info(
+            request,
+            "Votre session a été fermée après une période d'inactivité.",
+        )
+    else:
+        messages.success(request, 'Vous avez été déconnecté avec succès.')
     return redirect('utilisateurs:login')
 
 @ensure_csrf_cookie
