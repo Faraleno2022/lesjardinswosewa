@@ -48,32 +48,53 @@ L'equivalent Windows manuel :
 certutil -hashfile Output\MySchoolGN_Setup_v1.3.0_Generic.exe SHA256
 ```
 
-### 3. Heberger le fichier
+### 3. Publier la release GitHub
 
 L'installateur ne doit **pas** etre depose sur PythonAnywhere : ni la place ni
-la bande passante n'y suffisent. Publiez-le la ou le telechargement est
-gratuit et illimite — une *release* GitHub sur
-`github.com/Faraleno2022/lesjardinswosewa` convient. Notez l'adresse directe
-du fichier, qui doit etre en **https**.
+la bande passante n'y suffisent. Publiez-le la ou le telechargement est gratuit
+et illimite, en *release* GitHub sur le depot
+`Faraleno2022/GS_hadja_kanfing_dian-` :
 
-### 4. Declarer la version
+- **tag** : `desktop-v1.3.0` (seuls les nombres comptent, le prefixe est libre) ;
+- **fichier joint** : `MySchoolGN_Setup_v1.3.0.exe` ;
+- **description** : ce que la version apporte, en clair. Elle est reprise telle
+  quelle comme notes de version.
 
-Dans **Administration Django > Versions de l'application > Ajouter** :
+Ni brouillon (*draft*) ni pre-publication (*prerelease*) : ces deux etats
+signifient exactement « pas encore pour les postes », et sont ignores.
 
-| Champ | Valeur |
-|---|---|
-| Version | `1.3.0` |
-| Url telechargement | l'adresse https du `.exe` |
-| Sha256 | l'empreinte relevee a l'etape 2 |
-| Taille octets | la taille exacte (facultatif, mais recommande) |
-| Notes | ce que la version apporte, en clair |
-| Obligatoire | a cocher si la version corrige un probleme serieux |
-| **Publiee** | **a cocher seulement quand tout est verifie** |
+**Il n'y a pas d'etape 4.** Le serveur lit les publications GitHub et recopie
+de lui-meme le numero, l'adresse et l'empreinte SHA-256 dans sa table des
+versions — GitHub calcule cette empreinte a la mise en ligne et l'expose dans
+son API. Auparavant, il fallait ressaisir ces trois informations a la main, et
+une release oubliee restait invisible des postes sans que rien ne le signale.
 
-Tant que *Publiee* reste decoche, **aucun poste ne voit la version**. C'est le
-filet : on peut tout preparer, tester sur une machine, et ne diffuser qu'apres.
+L'import se declenche quand un poste vient demander s'il existe une mise a
+jour, au plus une fois par quart d'heure, et **hors de la requete** : celle-ci
+ne doit pas etre retenue le temps d'un aller-retour vers GitHub, qui
+immobiliserait l'un des rares processus servant aussi le site public. La
+version rapatriee est donc servie a la question suivante du poste.
 
-### 5. Verifier
+Pour ne rien laisser dependre du passage des postes, ajoutez une tache
+planifiee quotidienne sur PythonAnywhere (onglet **Tasks**) :
+
+```bash
+cd ~/lesjardinswosewa && python manage.py importer_versions_github
+```
+
+C'est aussi la commande a lancer a la main pour verifier tout de suite qu'une
+release fraichement publiee est bien vue :
+
+```bash
+python manage.py importer_versions_github
+```
+
+Elle affiche ce qu'elle a importe et quelle version sera proposee aux postes.
+
+Une release **sans empreinte publiee** est ignoree, jamais installee a
+l'aveugle : le poste telecharge un executable et va le lancer.
+
+### 4. Verifier
 
 ```bash
 curl -H "X-Sync-Device: VOTRE_DEVICE_ID" -H "X-Sync-Token: VOTRE_TOKEN" \
@@ -84,10 +105,43 @@ La reponse doit contenir `"mise_a_jour_disponible": true` et le bon numero.
 
 ## Revenir en arriere
 
-Decochez *Publiee* sur la version fautive. Les postes qui ne l'ont pas encore
-telechargee ne la verront plus. Ceux qui l'ont deja installee doivent recevoir
-une version **superieure** corrigeant le probleme : republier un ancien numero
-ne fait pas redescendre les postes, c'est voulu.
+Decochez *Publiee* sur la version fautive dans **Administration Django >
+Versions de l'application**. Les postes qui ne l'ont pas encore telechargee ne
+la verront plus, et **l'import GitHub ne la recochera jamais** : c'est le seul
+indicateur que l'import ne touche pas, precisement pour que ce geste ne soit
+pas annule au quart d'heure suivant. Supprimer la release sur GitHub produit le
+meme effet pour les serveurs qui ne l'ont pas encore importee.
+
+Ceux qui l'ont deja installee doivent recevoir une version **superieure**
+corrigeant le probleme : republier un ancien numero ne fait pas redescendre les
+postes, c'est voulu.
+
+## Quand le serveur est injoignable
+
+Le poste interroge **toujours son serveur en premier** : c'est lui qui porte la
+decision, et un « rien de neuf » de sa part est definitif — sinon, depublier
+une version defectueuse n'aurait plus aucun effet.
+
+GitHub n'est consulte directement que dans deux cas :
+
+- le serveur n'a pas repondu du tout (panne, reseau coupe cote serveur) ;
+- le poste n'a jamais ete relie a un serveur (installation autonome).
+
+Un refus explicite du serveur (`403`, poste revoque) **n'ouvre pas** ce
+recours : le serveur a repondu, et sa reponse est que cette machine n'est plus
+autorisee. Une version trouvee sur GitHub n'est par ailleurs jamais marquee
+*obligatoire* : imposer une installation est une decision du serveur, et un
+poste coupe du sien est justement celui a qui on ne veut rien imposer.
+
+## Reglages du serveur
+
+Variables d'environnement, toutes facultatives :
+
+| Variable | Defaut | Role |
+|---|---|---|
+| `MYSCHOOL_GITHUB_REPO` | `Faraleno2022/GS_hadja_kanfing_dian-` | Depot dont les publications font foi |
+| `MYSCHOOL_GITHUB_TOKEN` | vide | Releve le quota de 60 appels/heure/IP, partage sur un hebergement mutualise. Le depot etant public, un jeton n'est pas necessaire |
+| `MYSCHOOL_GITHUB_AUTO_IMPORT` | `1` | Mettre a `0` pour n'importer que par la commande |
 
 ## Ce qui protege les postes
 

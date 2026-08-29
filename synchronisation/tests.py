@@ -734,8 +734,8 @@ class SynchronisationLotPousseTests(TestCase):
             }
 
         with mock.patch.object(auto_sync, '_request_json', _faux_request):
-            premier = auto_sync._push('https://serveur', 'device', 'token', self.ecole)
-            second = auto_sync._push('https://serveur', 'device', 'token', self.ecole)
+            premier, _ = auto_sync._push('https://serveur', 'device', 'token', self.ecole)
+            second, _ = auto_sync._push('https://serveur', 'device', 'token', self.ecole)
 
         self.assertLess(len(envoyes[0]), 8)  # lot tronque, pas les 8 d'un coup
         self.assertEqual(premier, len(envoyes[0]))
@@ -771,7 +771,8 @@ class SynchronisationLotPousseTests(TestCase):
         self._changement_local()
 
         with mock.patch.object(auto_sync, '_request_json', self._refus_systematique()):
-            self.assertEqual(auto_sync._push('https://serveur', 'device', 'token', self.ecole), 0)
+            envoyes, _ = auto_sync._push('https://serveur', 'device', 'token', self.ecole)
+            self.assertEqual(envoyes, 0)
 
         change = SyncChange.objects.filter(ecole=self.ecole).first()
         self.assertEqual(change.statut, SyncChange.STATUT_PENDING)  # sera renvoye
@@ -1015,7 +1016,7 @@ class CadenceSynchronisationTests(TestCase):
     def test_un_repere_qui_avance_declenche_le_telechargement(self):
         with mock.patch.object(auto_sync, '_load_since_id', return_value=57), \
                 mock.patch.object(auto_sync, '_server_watermark', return_value=58), \
-                mock.patch.object(auto_sync, '_pull', return_value=3) as pull:
+                mock.patch.object(auto_sync, '_pull', return_value=(3, 3)) as pull:
             self.assertEqual(
                 auto_sync._pull_if_needed('https://serveur', 'device', 'token', self.ecole), 3,
             )
@@ -1026,7 +1027,7 @@ class CadenceSynchronisationTests(TestCase):
         """Compatibilite : un serveur non mis a jour ignore `/state/`."""
         with mock.patch.object(auto_sync, '_load_since_id', return_value=57), \
                 mock.patch.object(auto_sync, '_server_watermark', return_value=None), \
-                mock.patch.object(auto_sync, '_pull', return_value=1) as pull:
+                mock.patch.object(auto_sync, '_pull', return_value=(1, 1)) as pull:
             auto_sync._pull_if_needed('https://serveur', 'device', 'token', self.ecole)
 
         pull.assert_called_once()
@@ -1069,7 +1070,18 @@ class CadenceSynchronisationTests(TestCase):
         self.assertEqual(actif, 2)
 
     def test_une_cadence_deja_courte_est_laissee_telle_quelle(self):
-        self.assertEqual(auto_sync.cadence_effective(10, 2), (10, 2))
+        self.assertEqual(
+            auto_sync.cadence_effective(auto_sync.MAX_IDLE_INTERVAL, 2),
+            (auto_sync.MAX_IDLE_INTERVAL, 2),
+        )
+
+    def test_le_repos_ne_depasse_jamais_quelques_secondes(self):
+        """
+        Ce plafond est ce qui borne le delai d'apparition d'une donnee saisie
+        ailleurs : au repos, un cycle ne coute qu'une lecture de filigrane.
+        """
+        self.assertLessEqual(auto_sync.MAX_IDLE_INTERVAL, 3)
+        self.assertEqual(auto_sync.cadence_effective(10, 2)[0], auto_sync.MAX_IDLE_INTERVAL)
 
 
 
