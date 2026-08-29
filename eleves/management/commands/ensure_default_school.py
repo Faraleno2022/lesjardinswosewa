@@ -14,7 +14,9 @@ class Command(BaseCommand):
             return
 
         ecole = Ecole.objects.create(
-            nom=os.environ.get('MYSCHOOL_DEFAULT_SCHOOL_NAME', 'GS Hadja Kanfing Dian'),
+            nom=os.environ.get(
+                'MYSCHOOL_DEFAULT_SCHOOL_NAME', 'GS LES JARDINS WOSEWA',
+            ),
             adresse=os.environ.get('MYSCHOOL_DEFAULT_SCHOOL_ADDRESS', 'Conakry'),
             telephone=os.environ.get('MYSCHOOL_DEFAULT_SCHOOL_PHONE', '+224600000000'),
             directeur=os.environ.get('MYSCHOOL_DEFAULT_SCHOOL_DIRECTOR', 'Direction'),

@@ -57,6 +57,12 @@ class LectureDesPublicationsTests(TestCase):
             return contenu_voisin
         return mock.patch.object(github_releases, '_lire', side_effect=_faux)
 
+    @override_settings(MYSCHOOL_GITHUB_REPO='')
+    def test_le_depot_par_defaut_est_celui_des_jardins_wosewa(self):
+        self.assertEqual(
+            github_releases._depot(), 'Faraleno2022/lesjardinswosewa',
+        )
+
     def test_une_publication_devient_un_descripteur_complet(self):
         with self._lire([_release('1.4.0')]):
             descripteurs = github_releases.versions_disponibles()

@@ -2,7 +2,7 @@
 """
 MySchoolGN - Lanceur autonome offline
 =======================================
-Auteur  : GS Hadja Kanfing Dian
+Édition : GS Les Jardins Wosewa
 Version : 1.0.0
 
 Ce script lance le serveur Django en mode autonome (offline).
@@ -209,7 +209,7 @@ def _tamper_exit():
             "L'application a été modifiée de manière non autorisée.\n\n"
             "L'application ne peut pas démarrer.\n\n"
             "Veuillez réinstaller MySchoolGN depuis le programme\n"
-            "officiel ou contactez GS Hadja Kanfing Dian."
+            "officiel du GS Les Jardins Wosewa."
         )
         root.destroy()
     except Exception:
@@ -272,7 +272,7 @@ def check_integrity():
             print("")
             print("   L'application a été corrompue ou modifiée.")
             print("   Veuillez réinstaller depuis le programme officiel.")
-            print("   Contact : GS Hadja Kanfing Dian")
+            print("   Contact : GS Les Jardins Wosewa")
             print("!" * 60)
             print("")
             try:
@@ -285,7 +285,7 @@ def check_integrity():
                     "Des fichiers de l'application ont été modifiés.\n\n"
                     "L'application ne peut pas démarrer.\n\n"
                     "Veuillez réinstaller MySchoolGN depuis le programme\n"
-                    "officiel ou contactez GS Hadja Kanfing Dian."
+                    "officiel du GS Les Jardins Wosewa."
                 )
                 root.destroy()
             except Exception:
@@ -662,7 +662,7 @@ def main():
 
     print("")
     print("*" * 60)
-    print("   MySchoolGN — GS Hadja Kanfing Dian")
+    print("   MySchoolGN — GS Les Jardins Wosewa")
     print("   Démarrage en mode offline...")
     print("*" * 60)
     print(f"   Répertoire : {BASE_DIR}")
