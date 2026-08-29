@@ -97,19 +97,46 @@ mecanismes.
 |---|---|---|
 | Envoi d'une saisie locale | immediat (≈1 s de regroupement) | aucun |
 | Detection de ce qui vient des autres postes, en periode d'activite | `MYSCHOOL_SYNC_FAST_INTERVAL` (2 s par defaut) | par poste |
-| Detection au repos (plus rien n'a circule depuis 2 minutes) | `MYSCHOOL_SYNC_INTERVAL` (10 s par defaut, plafonne a 15 s) | par poste |
+| Detection au repos (plus rien n'a circule depuis 2 minutes) | `MYSCHOOL_SYNC_INTERVAL` (10 s par defaut, **plafonne a 3 s**) | par poste |
 | Rafraichissement de la page ouverte a l'ecran | 3 s | interne |
 
 Une saisie faite sur un poste apparait donc sur les autres en **quelques
-secondes**, ecran compris.
+secondes**, ecran compris — au repos comme en pleine activite.
 
 Ces verifications ne coutent presque rien : tant que rien n'a change, le poste
-ne demande qu'un repere (`/api/v1/sync/state/`), pas les donnees. Le
-telechargement complet n'a lieu que lorsque ce repere a bouge.
+ne demande qu'un repere (`/api/v1/sync/state/`), pas les donnees. C'est une
+requete sans corps, dont la reponse tient en trois nombres, et cote serveur un
+`MAX(id)` sur une colonne indexee. Rien la-dedans ne justifiait de faire
+attendre quinze secondes une donnee saisie ailleurs : le plafond au repos est
+donc de **3 secondes**. Le telechargement complet n'a lieu que lorsque le
+repere a bouge.
 
-Le plafond de 15 secondes s'applique meme si un ancien `sync_config.json`
-indique une valeur plus grande : les postes deja installes redeviennent
-reactifs sans avoir a reinstaller leur configuration.
+Ce plafond s'applique meme si un ancien `sync_config.json` indique une valeur
+plus grande : les postes deja installes redeviennent reactifs sans avoir a
+reinstaller leur configuration.
+
+### Rattrapage apres une coupure
+
+Le serveur ne sert que 200 changements par requete. Un poste rentre apres
+plusieurs jours hors ligne **enchaine les lots dans le meme cycle** (jusqu'a
+25, soit 5 000 changements), au lieu d'en descendre 200 toutes les deux
+secondes. Le reste suit au cycle suivant. Sans cela, un retard de quelques
+milliers de changements se rattrapait en plusieurs minutes, pendant lesquelles
+les ecrans affichaient des donnees incompletes.
+
+Le meme enchainement s'applique a l'envoi. Un changement refuse par le serveur
+n'est represente qu'au cycle **suivant**, jamais dans le meme : son budget de
+tentatives est prevu pour laisser le temps a une dependance manquante
+d'arriver, et le consommer d'un coup ferait abandonner une donnee qui serait
+passee.
+
+### Compression
+
+Les lots transportent le contenu des fichiers (photos d'eleves encodees en
+base64) : une reponse se compte en megaoctets. Les echanges sont compresses
+(`Accept-Encoding: gzip`), ce qui divise le temps de descente par plusieurs sur
+les liaisons dont dispose une ecole. Un serveur ancien qui ne compresse pas
+reste compris : la reponse est lue telle quelle.
 
 ## 6. Verifier qu'un poste est bien synchronise
 

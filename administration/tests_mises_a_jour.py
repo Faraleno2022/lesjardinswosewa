@@ -14,7 +14,7 @@ from unittest import mock
 from urllib.error import HTTPError
 
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from ecole_moderne import auto_mise_a_jour
@@ -83,6 +83,11 @@ class VersionApplicationTests(TestCase):
         self.assertIsNone(VersionApplication.derniere_publiee())
 
 
+# L'import des publications GitHub est coupe ici : ces tests portent sur la
+# decision du serveur a partir de ce qu'il a en base. Le laisser actif ferait
+# dependre leur resultat du contenu reel du depot, et d'une connexion.
+# L'import lui-meme est couvert par `tests_github_releases.py`.
+@override_settings(MYSCHOOL_GITHUB_AUTO_IMPORT=False)
 class EndpointMisesAJourTests(TestCase):
     def setUp(self):
         self.ecole = Ecole.objects.create(

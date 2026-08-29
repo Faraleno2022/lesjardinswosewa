@@ -16,6 +16,7 @@ Configuration par machine (aucune recompilation) : fichier `sync_config.json`
 charge par run_server.py -> reglages MYSCHOOL_SYNC_SERVER_URL / _ECOLE_ID /
 _DEVICE_ID / _TOKEN. Voir `sync_config.example.json`.
 """
+import gzip
 import json
 import logging
 import os
@@ -62,7 +63,14 @@ _dernier_log_echec = 0.0
 INTERVALLE_LOG_ECHEC_SECONDES = 300
 
 # Plafond de la cadence au repos, quelle que soit la configuration du poste.
-MAX_IDLE_INTERVAL = 15
+#
+# Au repos, un cycle ne coute qu'une lecture du filigrane : une requete sans
+# corps, dont la reponse tient en trois nombres, et cote serveur un `MAX(id)`
+# sur une colonne indexee. Rien la-dedans ne justifie de faire attendre
+# quinze secondes une donnee saisie sur un autre poste. Ce plafond est donc
+# ce qui borne reellement le delai d'apparition : au-dela du filigrane, le
+# poste ne telecharge que s'il y a effectivement du nouveau.
+MAX_IDLE_INTERVAL = 3
 
 # Les payloads embarquent le contenu des fichiers : on borne le lot pousse par
 # sa taille pour rester sous DATA_UPLOAD_MAX_MEMORY_SIZE (5 Mo) cote serveur.
@@ -73,6 +81,17 @@ MAX_PUSH_BYTES = 3 * 1024 * 1024
 # est rejoue (ou repousse) a chaque cycle, indefiniment.
 MAX_APPLY_ATTEMPTS = 5
 MAX_PUSH_ATTEMPTS = 5
+
+# Nombre de lots enchaines dans un meme cycle, a l'envoi comme a la reception.
+#
+# Le serveur ne sert que 200 changements par requete, et le poste n'en poussait
+# qu'un lot par cycle. Un poste rentre apres plusieurs jours hors ligne
+# rattrapait donc 200 changements toutes les quelques secondes : des minutes
+# d'attente pendant lesquelles ses ecrans montrent des donnees incompletes,
+# alors que le reseau est disponible et la file connue. On enchaine desormais
+# les lots dans le meme cycle, en bornant la boucle pour qu'un rattrapage
+# gigantesque ne monopolise pas indefiniment le fil d'arriere-plan.
+MAX_LOTS_PAR_CYCLE = 25
 
 
 # ─── Etat local (pull incremental) ────────────────────────────────────────────
@@ -123,13 +142,24 @@ def _request_json(url, device_id, token, payload=None, method='POST', timeout=45
         data=body,
         headers={
             'Content-Type': 'application/json',
+            # Un lot de reception transporte jusqu'a 200 changements, contenu
+            # des fichiers compris (photos d'eleves encodees en base64) : la
+            # reponse se compte en megaoctets. Le serveur sait deja compresser
+            # (GZipMiddleware), mais ne le fait que si le client le demande, et
+            # `urllib` ne le demande pas de lui-meme. Sur les liaisons dont
+            # dispose une ecole, c'est la difference entre quelques secondes et
+            # une minute.
+            'Accept-Encoding': 'gzip',
             'X-Sync-Device': device_id,
             'X-Sync-Token': token,
         },
         method=method,
     )
     with urlrequest.urlopen(req, timeout=timeout) as response:
-        return json.loads(response.read().decode('utf-8'))
+        brut = response.read()
+        if (response.headers.get('Content-Encoding') or '').lower() == 'gzip':
+            brut = gzip.decompress(brut)
+        return json.loads(brut.decode('utf-8'))
 
 
 # ─── Configuration ────────────────────────────────────────────────────────────
@@ -180,7 +210,18 @@ def _log_abandon(change, phase: str) -> None:
     )
 
 
-def _push(server, device_id, token, ecole):
+def _push(server, device_id, token, ecole, apres_id=0):
+    """
+    Envoie un lot de changements locaux. Retourne (nombre_accepte, curseur).
+
+    `apres_id` / le curseur retourne permettent a l'appelant d'enchainer
+    plusieurs lots dans un meme cycle sans jamais representer un changement
+    deja soumis. C'est indispensable : un refus laisse la ligne en attente
+    avec un id bas, et une simple boucle la reprendrait a chaque tour,
+    epuisant en quelques millisecondes le budget de tentatives prevu pour
+    s'etaler sur plusieurs cycles — le temps que la dependance manquante
+    arrive.
+    """
     from django.utils import timezone
     from .models import SyncChange
     pending = list(
@@ -189,11 +230,12 @@ def _push(server, device_id, token, ecole):
             ecole=ecole,
             statut=SyncChange.STATUT_PENDING,
             tentatives__lt=MAX_PUSH_ATTEMPTS,
+            id__gt=apres_id,
         )
         .order_by('id')[:200]
     )
     if not pending:
-        return 0
+        return 0, apres_id
 
     batch, items, total = [], [], 0
     for change in pending:
@@ -212,11 +254,12 @@ def _push(server, device_id, token, ecole):
         batch.append(change)
         total += size
 
+    curseur = batch[-1].id
     response = _request_json(
         f'{server}/api/v1/sync/push/', device_id, token, {'changes': items},
     )
     if not response.get('ok'):
-        return 0
+        return 0, apres_id
     accepted = {item['index'] for item in response.get('accepted', [])}
     rejected = {
         item['index']: item.get('error', '')
@@ -240,7 +283,21 @@ def _push(server, device_id, token, ecole):
                 change.statut = SyncChange.STATUT_ABANDONED
                 _log_abandon(change, 'envoi')
             change.save(update_fields=['statut', 'erreur', 'tentatives'])
-    return updated
+    return updated, curseur
+
+
+def _push_tout(server, device_id, token, ecole):
+    """Vide la file d'envoi locale, lot apres lot, dans le meme cycle."""
+    total, curseur = 0, 0
+    for _ in range(MAX_LOTS_PAR_CYCLE):
+        envoyes, prochain = _push(server, device_id, token, ecole, curseur)
+        if prochain == curseur:
+            # Plus rien a envoyer, ou le serveur a refuse le lot entier : dans
+            # les deux cas insister maintenant ne changerait rien.
+            break
+        total += envoyes
+        curseur = prochain
+    return total
 
 
 def _try_apply(change) -> bool:
@@ -285,9 +342,11 @@ def _retry_failed(ecole) -> int:
 
 
 def _apply_pull_response(response, ecole):
+    """Applique un lot recu. Retourne (nombre_applique, nombre_recu)."""
     from .models import SyncChange
     if not response.get('ok'):
-        return 0
+        return 0, 0
+    recus = len(response.get('changes') or [])
     created = 0
     for item in response.get('changes', []):
         server_change_id = item.get('id')
@@ -308,7 +367,7 @@ def _apply_pull_response(response, ecole):
         if _try_apply(change):
             created += 1
     _save_since_id(response.get('latest_change_id'))
-    return created
+    return created, recus
 
 
 def _server_watermark(server, device_id, token):
@@ -339,6 +398,7 @@ def _server_watermark(server, device_id, token):
 
 
 def _pull(server, device_id, token, ecole):
+    """Recupere un lot. Retourne (nombre_applique, nombre_recu)."""
     since_id = _load_since_id()
     suffix = f'?since_id={since_id}' if since_id else ''
     response = _request_json(
@@ -348,18 +408,40 @@ def _pull(server, device_id, token, ecole):
     return _apply_pull_response(response, ecole)
 
 
-def _pull_if_needed(server, device_id, token, ecole):
-    """Ne telecharge que si le serveur a effectivement du nouveau."""
+def _since_local():
+    """Repere local, en entier. 0 si le fichier d'etat est illisible."""
     try:
-        local = int(_load_since_id() or 0)
+        return int(_load_since_id() or 0)
     except (TypeError, ValueError):
-        # Fichier d'etat illisible : on redemande tout plutot que de risquer
-        # de sauter un changement.
-        local = 0
+        # On redemande tout plutot que de risquer de sauter un changement.
+        return 0
+
+
+def _pull_if_needed(server, device_id, token, ecole):
+    """
+    Ne telecharge que si le serveur a effectivement du nouveau, puis vide
+    entierement le retard accumule au lieu d'un seul lot.
+    """
+    local = _since_local()
     distant = _server_watermark(server, device_id, token)
     if distant is not None and distant <= local:
         return 0
-    return _pull(server, device_id, token, ecole)
+
+    applique = 0
+    for _ in range(MAX_LOTS_PAR_CYCLE):
+        avant = _since_local()
+        lot_applique, recus = _pull(server, device_id, token, ecole)
+        applique += lot_applique
+        apres = _since_local()
+        if not recus or apres <= avant:
+            # Lot vide, ou repere qui n'avance pas : continuer bouclerait sur
+            # la meme requete sans jamais progresser.
+            break
+        if distant is not None and apres >= distant:
+            # Le poste a rattrape le filigrane releve en debut de cycle. Ce qui
+            # est arrive depuis sera servi au cycle suivant, dans la seconde.
+            break
+    return applique
 
 
 def _bootstrap_school(server, device_id, token, configured_ecole_id):
@@ -522,7 +604,7 @@ def _tenter_cycle() -> bool:
         _mark_transfer()
         return True
 
-    echanges = _push(server, device_id, token, ecole)
+    echanges = _push_tout(server, device_id, token, ecole)
     echanges += _pull_if_needed(server, device_id, token, ecole)
     # Le lot qui vient d'arriver apporte peut-etre la dependance qui manquait
     # aux echecs precedents : on les rejoue tout de suite.

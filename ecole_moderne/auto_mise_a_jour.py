@@ -158,21 +158,69 @@ def _nettoyer(dossier, sauf=None):
         pass
 
 
-def preparer_mise_a_jour():
+def _demander_github():
     """
-    Une passe complete : interroge, telecharge, verifie, enregistre.
+    Descripteur de la derniere publication GitHub, sans passer par le serveur.
 
-    Retourne le numero de version preparee, ou None. Ne leve jamais : hors
-    ligne ou serveur muet, le poste reessaiera plus tard.
+    Recours pour un poste dont le serveur est injoignable, ou qui n'a jamais
+    ete relie a un serveur : sans lui, une panne du site — ou une installation
+    autonome — figerait la machine sur sa version du moment.
+    """
+    try:
+        from administration import github_releases
+    except Exception:
+        return None
+
+    try:
+        descripteur = github_releases.derniere_version_github()
+    except Exception as erreur:
+        logger.warning('[MAJ] Lecture des publications GitHub impossible : %s', erreur)
+        return None
+
+    if not descripteur or not est_plus_recente(descripteur['version']):
+        return None
+
+    logger.info(
+        '[MAJ] Version %s trouvee sur GitHub (serveur injoignable).',
+        descripteur['version'],
+    )
+    return {
+        'ok': True,
+        'mise_a_jour_disponible': True,
+        'version': descripteur['version'],
+        'url': descripteur['url'],
+        'sha256': descripteur['sha256'],
+        'taille_octets': descripteur.get('taille_octets'),
+        'notes': descripteur.get('notes') or '',
+        # Une version n'est imposee que par decision explicite du serveur.
+        # GitHub ne porte pas cette nuance, et un poste coupe du serveur est
+        # justement celui a qui on ne veut rien imposer.
+        'obligatoire': False,
+    }
+
+
+def _descripteur_distant():
+    """
+    Ce qu'il y a a installer, ou None.
+
+    Le serveur de l'ecole est interroge en premier : c'est lui qui porte la
+    decision. Depublier une version defectueuse doit l'arreter partout, donc
+    un « rien de neuf » de sa part est definitif — aller demander a GitHub
+    par-dessus annulerait ce geste. GitHub n'intervient que quand le serveur
+    n'a pas repondu du tout.
     """
     configuration = _config()
     if not configuration:
-        return None
-    serveur, device_id, token = configuration
+        # Poste autonome, jamais relie a un serveur.
+        return _demander_github()
 
+    serveur, device_id, token = configuration
     try:
         reponse = _demander_derniere_version(serveur, device_id, token)
     except HTTPError as erreur:
+        # Le serveur a bien repondu, par un refus : ce poste n'est plus
+        # autorise. Ce n'est pas une panne de reseau, et contourner ce refus
+        # par GitHub reviendrait a servir une machine revoquee.
         logger.warning(
             '[MAJ] Verification refusee par le serveur (HTTP %s). '
             'Verifiez que ce poste est toujours autorise.',
@@ -180,13 +228,30 @@ def preparer_mise_a_jour():
         )
         return None
     except (URLError, OSError, ValueError) as erreur:
-        logger.warning('[MAJ] Verification impossible : %s', erreur)
-        return None
+        logger.warning(
+            '[MAJ] Serveur injoignable (%s) : lecture directe de GitHub.', erreur,
+        )
+        return _demander_github()
     except Exception as erreur:
-        logger.warning('[MAJ] Verification impossible : %s', erreur)
-        return None
+        logger.warning(
+            '[MAJ] Verification impossible (%s) : lecture directe de GitHub.', erreur,
+        )
+        return _demander_github()
 
     if not reponse.get('ok') or not reponse.get('mise_a_jour_disponible'):
+        return None
+    return reponse
+
+
+def preparer_mise_a_jour():
+    """
+    Une passe complete : interroge, telecharge, verifie, enregistre.
+
+    Retourne le numero de version preparee, ou None. Ne leve jamais : hors
+    ligne ou serveur muet, le poste reessaiera plus tard.
+    """
+    reponse = _descripteur_distant()
+    if not reponse:
         return None
 
     version = reponse.get('version')

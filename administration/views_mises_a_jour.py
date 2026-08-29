@@ -7,6 +7,8 @@ empreinte. Le telechargement lui-meme ne passe pas par ce serveur, qui
 n'aurait ni la place ni la bande passante pour distribuer un installateur de
 plusieurs centaines de megaoctets a chaque poste.
 """
+import logging
+
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.utils import timezone
@@ -15,7 +17,10 @@ from django.views.decorators.http import require_GET
 from ecole_moderne.version import est_plus_recente
 from synchronisation.views import appareil_authentifie
 
+from . import github_releases
 from .models import VersionApplication
+
+logger = logging.getLogger(__name__)
 
 
 @require_GET
@@ -31,6 +36,21 @@ def derniere_version(request):
     appareil, erreur = appareil_authentifie(request)
     if erreur:
         return erreur
+
+    # Les publications GitHub portent deja le numero, l'installateur et son
+    # empreinte : les recopier evite la ressaisie manuelle qui laissait des
+    # versions publiees invisibles des postes. L'import part en arriere-plan et
+    # au plus une fois par quart d'heure — cette requete ne doit pas attendre
+    # un aller-retour vers GitHub, qui immobiliserait l'un des rares processus
+    # servant aussi le site public. La version rapatriee sera servie a la
+    # prochaine question, six heures plus tard au pire.
+    try:
+        github_releases.declencher_import_en_arriere_plan()
+    except Exception:
+        logger.warning(
+            "[MAJ] Import des publications GitHub ignore pour cette requete.",
+            exc_info=True,
+        )
 
     version_du_poste = (request.GET.get('version') or '').strip()
     derniere = VersionApplication.derniere_publiee()

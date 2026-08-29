@@ -396,6 +396,23 @@ MYSCHOOL_SYNC_TOKEN = os.environ.get('MYSCHOOL_SYNC_TOKEN', '')
 MYSCHOOL_SYNC_ADMIN_TOKEN = os.environ.get('MYSCHOOL_SYNC_ADMIN_TOKEN', '')
 MYSCHOOL_SYNC_ECOLE_ID = os.environ.get('MYSCHOOL_SYNC_ECOLE_ID', '')
 
+# =================== Mises a jour de l'application Windows ===================
+# Depot dont les publications (releases) font foi. Chaque release y porte deja
+# le numero de version, l'installateur et son empreinte SHA-256 : le serveur
+# les recopie plutot que de les faire ressaisir a la main.
+MYSCHOOL_GITHUB_REPO = os.environ.get(
+    'MYSCHOOL_GITHUB_REPO', 'Faraleno2022/GS_hadja_kanfing_dian-',
+).strip()
+# Facultatif. Le depot est public, donc lisible sans jeton ; en fournir un
+# releve seulement le quota de 60 appels par heure et par adresse IP, partagee
+# sur un hebergement mutualise.
+MYSCHOOL_GITHUB_TOKEN = os.environ.get('MYSCHOOL_GITHUB_TOKEN', '').strip()
+# Mettre a 0 pour ne plus importer que par la commande
+# `manage.py importer_versions_github`.
+MYSCHOOL_GITHUB_AUTO_IMPORT = os.environ.get(
+    'MYSCHOOL_GITHUB_AUTO_IMPORT', '1',
+).strip().lower() not in {'0', 'false', 'no', 'non'}
+
 # =================== Configuration IA Chatbot ===================
 # Token HuggingFace pour l'API IA (obtenir sur https://huggingface.co/settings/tokens)
 HF_TOKEN = os.environ.get('HF_TOKEN', '')
