@@ -1,6 +1,6 @@
 ﻿; MySchoolGN - Inno Setup Installer Script
 ; ==========================================
-; Auteur  : GS Hadja Kanfing Dian
+; Édition : GS Les Jardins Wosewa
 ; Version : voir MyAppVersion ci-dessous (recopie depuis ecole_moderne/version.py
 ; par build_exe.py : un seul numero a modifier, jamais deux a garder d'accord)
 ;
@@ -16,7 +16,7 @@
 ;   - Installation fraîche
 ;   - Mise à jour (préserve base de données, médias et synchronisation)
 
-#define MyAppVersion "1.3.4"
+#define MyAppVersion "1.3.5"
 #ifndef MyBuildDir
   #define MyBuildDir "dist\MySchoolGN"
 #endif
@@ -27,10 +27,10 @@ AppId={{B7E4A2D1-F3C8-4B91-A5E6-GS2024HADJA01}
 AppName=MySchoolGN
 AppVersion={#MyAppVersion}
 AppVerName=MySchoolGN {#MyAppVersion}
-AppPublisher=GS Hadja Kanfing Dian
+AppPublisher=GS Les Jardins Wosewa
 AppPublisherURL=https://www.lesjardinswosewa.com
 AppSupportURL=https://www.lesjardinswosewa.com
-AppCopyright=Copyright © 2024 GS Hadja Kanfing Dian. Tous droits réservés.
+AppCopyright=Copyright © 2026 GS Les Jardins Wosewa. Tous droits réservés.
 
 ; ── Installation ───────────────────────────────────────────────────────────────
 DefaultDirName={autopf}\MySchoolGN
@@ -46,7 +46,7 @@ RestartApplications=no
 
 ; ── Sortie ─────────────────────────────────────────────────────────────────────
 OutputDir=Output
-OutputBaseFilename=MySchoolGN_Setup_v{#MyAppVersion}_Generic
+OutputBaseFilename=MySchoolGN_Setup_v{#MyAppVersion}_LesJardinsWosewa
 
 ; ── Icône et splash ────────────────────────────────────────────────────────────
 SetupIconFile=myschool.ico
@@ -70,9 +70,9 @@ CreateUninstallRegKey=yes
 
 ; ── Version info (visible dans Programmes et fonctionnalités) ──────────────────
 VersionInfoVersion={#MyAppVersion}.0
-VersionInfoCompany=GS Hadja Kanfing Dian
+VersionInfoCompany=GS Les Jardins Wosewa
 VersionInfoDescription=MySchoolGN - Système de Gestion Scolaire
-VersionInfoCopyright=Copyright © 2024 GS Hadja Kanfing Dian
+VersionInfoCopyright=Copyright © 2026 GS Les Jardins Wosewa
 
 [Languages]
 Name: "french"; MessagesFile: "compiler:Languages\French.isl"
@@ -123,6 +123,8 @@ Name: "{userstartup}\MySchoolGN"; Filename: "{app}\MySchoolGN.exe"; WorkingDir: 
 
 [Registry]
 ; Enregistrement pour le panneau "Programmes et fonctionnalités"
+; Le chemin historique est conserve pour que Windows reconnaisse cette version
+; comme une mise a jour des installations existantes.
 Root: HKCU; Subkey: "Software\GS Hadja Kanfing Dian\MySchoolGN"; ValueType: string; ValueName: "Version";    ValueData: "{#MyAppVersion}"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\GS Hadja Kanfing Dian\MySchoolGN"; ValueType: string; ValueName: "InstallDir"; ValueData: "{app}";  Flags: uninsdeletevalue
 
@@ -149,7 +151,7 @@ Type: files;          Name: "{app}\install_path.txt"
 
 [Messages]
 WelcomeLabel1=Bienvenue dans l'assistant d'installation de MySchoolGN
-WelcomeLabel2=Ce programme va installer MySchoolGN - Système de Gestion Scolaire sur votre ordinateur.%n%nMySchoolGN est une solution complète de gestion scolaire développée par GS Hadja Kanfing Dian. Elle fonctionne entièrement hors ligne.%n%nFermez toutes les autres applications avant de continuer.
+WelcomeLabel2=Ce programme va installer MySchoolGN - Système de Gestion Scolaire sur votre ordinateur.%n%nCette édition est configurée pour le GS Les Jardins Wosewa et fonctionne entièrement hors ligne avec synchronisation sécurisée.%n%nFermez toutes les autres applications avant de continuer.
 FinishedHeadingLabel=Installation de MySchoolGN terminée !
 FinishedLabel=MySchoolGN a été installé avec succès sur votre ordinateur.%n%nIdentifiants par défaut :%n  Utilisateur : admin%n  Mot de passe  : admin1234%n%nL'application fonctionne hors ligne et synchronise automatiquement les données avec www.lesjardinswosewa.com lorsque la connexion Internet est disponible.
 

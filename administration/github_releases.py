@@ -32,7 +32,7 @@ API = 'https://api.github.com'
 # Depot par defaut, defini ici et non dans les settings : le module doit
 # fonctionner tel quel sur un poste installe, dont le fichier de configuration
 # ne parle que de synchronisation.
-DEPOT_PAR_DEFAUT = 'Faraleno2022/GS_hadja_kanfing_dian-'
+DEPOT_PAR_DEFAUT = 'Faraleno2022/lesjardinswosewa'
 
 DELAI = 20
 

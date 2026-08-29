@@ -401,7 +401,7 @@ MYSCHOOL_SYNC_ECOLE_ID = os.environ.get('MYSCHOOL_SYNC_ECOLE_ID', '')
 # le numero de version, l'installateur et son empreinte SHA-256 : le serveur
 # les recopie plutot que de les faire ressaisir a la main.
 MYSCHOOL_GITHUB_REPO = os.environ.get(
-    'MYSCHOOL_GITHUB_REPO', 'Faraleno2022/GS_hadja_kanfing_dian-',
+    'MYSCHOOL_GITHUB_REPO', 'Faraleno2022/lesjardinswosewa',
 ).strip()
 # Facultatif. Le depot est public, donc lisible sans jeton ; en fournir un
 # releve seulement le quota de 60 appels par heure et par adresse IP, partagee

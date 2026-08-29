@@ -568,7 +568,8 @@ def empreinte_installateur(version):
     erreur de copie bloquerait toute la diffusion.
     """
     chemin = os.path.join(
-        BASE_DIR, 'Output', f'MySchoolGN_Setup_v{version}_Generic.exe',
+        BASE_DIR, 'Output',
+        f'MySchoolGN_Setup_v{version}_LesJardinsWosewa.exe',
     )
     if not os.path.exists(chemin):
         print('')

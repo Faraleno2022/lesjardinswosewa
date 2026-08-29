@@ -33,7 +33,7 @@ Le script recopie d'abord `APP_VERSION` (defini dans
 modifie qu'a un seul endroit** : `ecole_moderne/version.py`.
 
 Compilez ensuite l'installateur avec Inno Setup. Le fichier obtenu s'appelle
-`Output/MySchoolGN_Setup_v<version>_Generic.exe`.
+`Output/MySchoolGN_Setup_v<version>_LesJardinsWosewa.exe`.
 
 ### 2. Relever l'empreinte
 
@@ -45,7 +45,7 @@ Affiche le numero de version, l'empreinte SHA-256 et la taille exacte.
 L'equivalent Windows manuel :
 
 ```bash
-certutil -hashfile Output\MySchoolGN_Setup_v1.3.0_Generic.exe SHA256
+certutil -hashfile Output\MySchoolGN_Setup_v1.3.5_LesJardinsWosewa.exe SHA256
 ```
 
 ### 3. Publier la release GitHub
@@ -53,10 +53,10 @@ certutil -hashfile Output\MySchoolGN_Setup_v1.3.0_Generic.exe SHA256
 L'installateur ne doit **pas** etre depose sur PythonAnywhere : ni la place ni
 la bande passante n'y suffisent. Publiez-le la ou le telechargement est gratuit
 et illimite, en *release* GitHub sur le depot
-`Faraleno2022/GS_hadja_kanfing_dian-` :
+`Faraleno2022/lesjardinswosewa` :
 
-- **tag** : `desktop-v1.3.0` (seuls les nombres comptent, le prefixe est libre) ;
-- **fichier joint** : `MySchoolGN_Setup_v1.3.0.exe` ;
+- **tag** : `desktop-v1.3.5` (seuls les nombres comptent, le prefixe est libre) ;
+- **fichier joint** : `MySchoolGN_Setup_v1.3.5_LesJardinsWosewa.exe` ;
 - **description** : ce que la version apporte, en clair. Elle est reprise telle
   quelle comme notes de version.
 
@@ -139,7 +139,7 @@ Variables d'environnement, toutes facultatives :
 
 | Variable | Defaut | Role |
 |---|---|---|
-| `MYSCHOOL_GITHUB_REPO` | `Faraleno2022/GS_hadja_kanfing_dian-` | Depot dont les publications font foi |
+| `MYSCHOOL_GITHUB_REPO` | `Faraleno2022/lesjardinswosewa` | Depot dont les publications font foi |
 | `MYSCHOOL_GITHUB_TOKEN` | vide | Releve le quota de 60 appels/heure/IP, partage sur un hebergement mutualise. Le depot etant public, un jeton n'est pas necessaire |
 | `MYSCHOOL_GITHUB_AUTO_IMPORT` | `1` | Mettre a `0` pour n'importer que par la commande |
 
