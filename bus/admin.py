@@ -3,16 +3,16 @@ from .models import AbonnementBus, AbonnementCantine
 
 @admin.register(AbonnementBus)
 class AbonnementBusAdmin(admin.ModelAdmin):
-    list_display = ('eleve', 'montant', 'periodicite', 'date_debut', 'date_expiration', 'statut', 'zone', 'point_arret')
+    list_display = ('eleve', 'montant', 'reference_externe', 'periodicite', 'date_debut', 'date_expiration', 'statut', 'zone', 'point_arret')
     list_filter = ('statut', 'periodicite', 'zone')
-    search_fields = ('eleve__nom', 'eleve__prenom', 'eleve__matricule', 'zone', 'point_arret', 'contact_parent')
+    search_fields = ('eleve__nom', 'eleve__prenom', 'eleve__matricule', 'reference_externe', 'zone', 'point_arret', 'contact_parent')
 
 
 @admin.register(AbonnementCantine)
 class AbonnementCantineAdmin(admin.ModelAdmin):
-    list_display = ('eleve', 'type_repas', 'montant', 'periodicite', 'date_debut', 'date_expiration', 'statut', 'jours_restants')
+    list_display = ('eleve', 'type_repas', 'montant', 'reference_externe', 'periodicite', 'date_debut', 'date_expiration', 'statut', 'jours_restants')
     list_filter = ('statut', 'periodicite', 'type_repas', 'regime_alimentaire')
-    search_fields = ('eleve__nom', 'eleve__prenom', 'eleve__matricule', 'contact_parent', 'regime_alimentaire')
+    search_fields = ('eleve__nom', 'eleve__prenom', 'eleve__matricule', 'reference_externe', 'contact_parent', 'regime_alimentaire')
     readonly_fields = ('created_at', 'updated_at')
     
     fieldsets = (
@@ -20,7 +20,7 @@ class AbonnementCantineAdmin(admin.ModelAdmin):
             'fields': ('eleve', 'contact_parent')
         }),
         ('Abonnement', {
-            'fields': ('montant', 'periodicite', 'type_repas', 'date_debut', 'date_expiration', 'statut')
+            'fields': ('montant', 'reference_externe', 'periodicite', 'type_repas', 'date_debut', 'date_expiration', 'statut')
         }),
         ('Régime Alimentaire', {
             'fields': ('regime_alimentaire', 'allergies'),

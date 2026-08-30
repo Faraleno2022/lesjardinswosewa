@@ -51,6 +51,26 @@
         </div>
       </div>
     </div>
+    <hr>
+    <div class="row g-3 align-items-end">
+      <div class="col-lg-5">
+        <label class="form-label fw-semibold">Test d'accueil</label>
+        <div class="btn-group w-100" role="group" aria-label="Filtrer le test d'accueil">
+          <a href="{% url 'eleves:liste_eleves' %}" class="btn {% if not test_accueil %}btn-primary{% else %}btn-outline-primary{% endif %}">Tous</a>
+          <a href="{% url 'eleves:liste_eleves' %}?test_accueil=evalue" class="btn {% if test_accueil == 'evalue' %}btn-success{% else %}btn-outline-success{% endif %}">Évalués</a>
+          <a href="{% url 'eleves:liste_eleves' %}?test_accueil=non-evalue" class="btn {% if test_accueil == 'non-evalue' %}btn-warning{% else %}btn-outline-warning{% endif %}">Non évalués</a>
+        </div>
+      </div>
+      <div class="col-lg-7">
+        <label class="form-label fw-semibold">Exports du test d'accueil</label>
+        <div class="d-flex flex-wrap gap-2">
+          <a href="{% url 'eleves:export_test_accueil_pdf' 'evalues' %}" class="btn btn-outline-danger"><i class="fas fa-file-pdf me-1"></i>Évalués PDF</a>
+          <a href="{% url 'eleves:export_test_accueil_excel' 'evalues' %}" class="btn btn-outline-success"><i class="fas fa-file-excel me-1"></i>Évalués Excel</a>
+          <a href="{% url 'eleves:export_test_accueil_pdf' 'non-evalues' %}" class="btn btn-outline-danger"><i class="fas fa-file-pdf me-1"></i>Non évalués PDF</a>
+          <a href="{% url 'eleves:export_test_accueil_excel' 'non-evalues' %}" class="btn btn-outline-success"><i class="fas fa-file-excel me-1"></i>Non évalués Excel</a>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 

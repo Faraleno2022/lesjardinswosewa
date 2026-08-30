@@ -156,6 +156,25 @@ class ModificationPaiementForm(forms.ModelForm):
             raise forms.ValidationError("Le montant doit être supérieur à zéro.")
         return montant
 
+
+class SuppressionPaiementForm(forms.Form):
+    """Motif obligatoire d'une annulation conservée dans l'audit."""
+
+    motif_suppression = forms.CharField(
+        required=True,
+        min_length=5,
+        label="Motif de la suppression",
+        help_text=(
+            "Le paiement sera annulé et retiré de tous les calculs, mais il "
+            "restera conservé avec ce motif."
+        ),
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 4,
+            'placeholder': "Ex. : reçu créé en double ou montant attribué au mauvais élève",
+        }),
+    )
+
 class EcheancierForm(forms.ModelForm):
     """Formulaire pour créer/modifier un échéancier"""
     

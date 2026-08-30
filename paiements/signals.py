@@ -8,10 +8,10 @@ des champs ``*_paye`` périmés.
 
 import logging
 
-from django.db.models.signals import post_delete, post_save, pre_save
+from django.db.models.signals import post_delete, post_save, pre_delete, pre_save
 from django.dispatch import receiver
 
-from .models import Paiement, PaiementRemise
+from .models import HistoriqueModificationPaiement, Paiement, PaiementRemise
 
 
 logger = logging.getLogger(__name__)
@@ -64,6 +64,33 @@ def recalculer_apres_paiement(sender, instance, **kwargs):
 @receiver(post_delete, sender=Paiement)
 def recalculer_apres_suppression_paiement(sender, instance, **kwargs):
     _recalculer(instance.eleve_id, instance.annee_scolaire)
+
+
+@receiver(pre_delete, sender=Paiement)
+def auditer_suppression_technique_paiement(sender, instance, **kwargs):
+    """Conserve une preuve même si un ancien client supprime physiquement."""
+    before = sender._audit_snapshot(instance.pk) or {}
+    try:
+        eleve_label = f"{instance.eleve.matricule} - {instance.eleve.nom_complet}"
+    except Exception:
+        eleve_label = ''
+    HistoriqueModificationPaiement.objects.create(
+        # Ne pas créer une nouvelle FK vers l'objet pendant son pre_delete :
+        # le collecteur Django a déjà figé les relations à mettre à NULL.
+        paiement=None,
+        ecole=instance.ecole_reference,
+        numero_recu=instance.numero_recu,
+        eleve=eleve_label,
+        utilisateur=getattr(instance, '_audit_user', None),
+        operation=HistoriqueModificationPaiement.Operation.SUPPRESSION,
+        motif=(
+            getattr(instance, '_audit_reason', '')
+            or "Suppression technique ou reçue par synchronisation"
+        ),
+        champs_modifies=['suppression_definitive'],
+        donnees_avant=before,
+        donnees_apres={},
+    )
 
 
 @receiver(post_save, sender=PaiementRemise)

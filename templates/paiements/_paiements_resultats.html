@@ -249,6 +249,14 @@
                                             </a>
                                         </li>
                                         {% endif %}
+                                        {% if paiement.statut != 'ANNULE' and is_admin or paiement.statut != 'ANNULE' and user_permissions.can_delete_payments %}
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li>
+                                            <a class="dropdown-item text-danger" href="{% url 'paiements:supprimer_paiement' paiement.id %}">
+                                                <i class="fas fa-ban me-2"></i>Supprimer / annuler
+                                            </a>
+                                        </li>
+                                        {% endif %}
                                     </ul>
                                 </div>
                             </div>

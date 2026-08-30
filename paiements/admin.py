@@ -33,16 +33,22 @@ class PaiementAdmin(admin.ModelAdmin):
             obj._audit_reason = "Modification depuis l'administration Django"
         super().save_model(request, obj, form, change)
 
+    def has_delete_permission(self, request, obj=None):
+        # Les annulations passent par l'interface métier avec un motif afin de
+        # conserver le paiement et son historique. Aucune suppression définitive.
+        return False
+
 
 @admin.register(HistoriqueModificationPaiement)
 class HistoriqueModificationPaiementAdmin(admin.ModelAdmin):
     list_display = (
-        'date_modification', 'numero_recu', 'eleve', 'utilisateur', 'motif',
+        'date_modification', 'operation', 'numero_recu', 'ecole', 'eleve',
+        'utilisateur', 'motif',
     )
-    list_filter = ('date_modification', 'utilisateur')
+    list_filter = ('operation', 'ecole', 'date_modification', 'utilisateur')
     search_fields = ('numero_recu', 'eleve', 'motif', 'utilisateur__username')
     readonly_fields = (
-        'paiement', 'numero_recu', 'eleve', 'utilisateur', 'motif',
+        'paiement', 'ecole', 'operation', 'numero_recu', 'eleve', 'utilisateur', 'motif',
         'champs_modifies', 'donnees_avant', 'donnees_apres', 'date_modification',
     )
     date_hierarchy = 'date_modification'

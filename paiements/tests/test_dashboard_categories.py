@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+import time
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -33,6 +34,10 @@ class DashboardCategoryIndicatorsTests(TestCase):
         profil.is_validated = True
         profil.save(update_fields=['role', 'telephone', 'ecole', 'is_validated'])
         self.client.force_login(self.user)
+        session = self.client.session
+        session['phone_verified'] = True
+        session['phone_verified_at'] = time.time()
+        session.save()
         self.mode = ModePaiement.objects.create(nom='Espèces dashboard')
         self.types = {
             'scolarite': TypePaiement.objects.create(
@@ -167,7 +172,7 @@ class DashboardCategoryIndicatorsTests(TestCase):
 
         response = self.client.get(reverse('paiements:tableau_bord'))
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 200, getattr(response, 'url', ''))
         categories = self._categories(response)
         scolarite = self._periods(categories['scolarite'])
         self.assertEqual(scolarite['jour']['montant'], Decimal('50000'))
@@ -249,6 +254,7 @@ class DashboardCategoryIndicatorsTests(TestCase):
 
         response = self.client.get(reverse('paiements:tableau_bord'))
 
+        self.assertEqual(response.status_code, 200, getattr(response, 'url', ''))
         categories = self._categories(response)
         self.assertEqual(categories['scolarite']['retard']['montant'], Decimal('50000'))
         self.assertEqual(categories['scolarite']['retard']['nombre'], 1)
@@ -257,3 +263,40 @@ class DashboardCategoryIndicatorsTests(TestCase):
         self.assertEqual(categories['cantine']['retard']['montant'], Decimal('25000'))
         self.assertEqual(categories['cantine']['retard']['nombre'], 1)
         self.assertContains(response, 'Retard de paiement', count=3)
+
+    @patch('django.utils.timezone.localdate')
+    def test_bus_and_cantine_subscriptions_feed_payment_cards(self, localdate):
+        localdate.return_value = self.today
+        eleve = self._eleve('DASH-ABO-001')
+        autre = self._eleve('DASH-ABO-OTHER', self.autre_classe)
+        AbonnementBus.objects.create(
+            eleve=eleve,
+            montant=Decimal('45000'),
+            reference_externe='BUS-REC-001',
+            date_debut=self.today,
+            date_expiration=date(2026, 9, 26),
+        )
+        AbonnementCantine.objects.create(
+            eleve=eleve,
+            montant=Decimal('30000'),
+            reference_externe='CAN-REC-001',
+            date_debut=date(2026, 8, 24),
+            date_expiration=date(2026, 9, 24),
+        )
+        AbonnementBus.objects.create(
+            eleve=autre,
+            montant=Decimal('999000'),
+            date_debut=self.today,
+            date_expiration=date(2026, 9, 26),
+        )
+
+        response = self.client.get(reverse('paiements:tableau_bord'))
+
+        self.assertEqual(response.status_code, 200, getattr(response, 'url', ''))
+        categories = self._categories(response)
+        transport = self._periods(categories['transport'])
+        cantine = self._periods(categories['cantine'])
+        self.assertEqual(transport['jour']['montant'], Decimal('45000'))
+        self.assertEqual(transport['jour']['nombre'], 1)
+        self.assertEqual(cantine['semaine']['montant'], Decimal('30000'))
+        self.assertEqual(cantine['semaine']['nombre'], 1)

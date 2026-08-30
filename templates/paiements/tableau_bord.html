@@ -16,11 +16,20 @@
         <a href="{% url 'paiements:liste_paiements' %}" class="btn btn-outline-info">
             <i class="fas fa-list me-1"></i>Tous les Paiements
         </a>
+        <a href="{% url 'paiements:historique_operations' %}" class="btn btn-outline-dark">
+            <i class="fas fa-history me-1"></i>Modifications / suppressions
+        </a>
         <a href="{% url 'paiements:liste_eleves_soldes' %}" class="btn btn-outline-success">
             <i class="fas fa-check-circle me-1"></i>Élèves soldés
         </a>
         <a href="{% url 'paiements:liste_eleves_impayes' %}" class="btn btn-outline-danger">
             <i class="fas fa-exclamation-triangle me-1"></i>Élèves impayés
+        </a>
+        <a href="{% url 'paiements:liste_admissions' 'inscription' %}" class="btn btn-outline-success">
+            <i class="fas fa-user-plus me-1"></i>Élèves inscrits
+        </a>
+        <a href="{% url 'paiements:liste_admissions' 'reinscription' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-user-check me-1"></i>Élèves réinscrits
         </a>
         <a href="{% url 'paiements:garde_prolongee_report' %}" class="btn btn-outline-primary">
             <i class="fas fa-clock me-1"></i>Garde prolongée
@@ -254,6 +263,22 @@
                         </div>
                     </div>
 
+                    {% if categorie.key == 'inscription' or categorie.key == 'reinscription' %}
+                    <footer class="border-top bg-light p-3">
+                        <div class="btn-group btn-group-sm w-100" role="group" aria-label="Liste et exports {{ categorie.label }}">
+                            <a class="btn btn-outline-primary" href="{% url 'paiements:liste_admissions' categorie.key %}">
+                                <i class="fas fa-list me-1"></i>Liste
+                            </a>
+                            <a class="btn btn-outline-danger" href="{% url 'paiements:export_admissions_pdf' categorie.key %}">
+                                <i class="fas fa-file-pdf me-1"></i>PDF
+                            </a>
+                            <a class="btn btn-outline-success" href="{% url 'paiements:export_admissions_excel' categorie.key %}">
+                                <i class="fas fa-file-excel me-1"></i>Excel
+                            </a>
+                        </div>
+                    </footer>
+                    {% endif %}
+
                     {% if categorie.retard %}
                     <footer class="category-overdue">
                         <div class="d-flex justify-content-between align-items-start gap-3">
@@ -269,6 +294,46 @@
                 </article>
             </div>
             {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if audit_paiements %}
+    <section class="mb-4" aria-labelledby="audit-paiements-title">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end mb-3">
+            <div>
+                <h4 id="audit-paiements-title" class="mb-1">
+                    <i class="fas fa-exchange-alt text-danger me-2"></i>Montants modifiés et supprimés
+                </h4>
+                <p class="text-muted mb-0">Impact des corrections et annulations enregistré avec leurs motifs.</p>
+            </div>
+            <a href="{% url 'paiements:historique_operations' %}" class="btn btn-outline-dark btn-sm mt-2 mt-md-0">
+                <i class="fas fa-list me-1"></i>Afficher la liste détaillée
+            </a>
+        </div>
+        <div class="card border-danger shadow-sm">
+            <div class="card-body">
+                <div class="row g-3">
+                    {% for periode in audit_paiements %}
+                    <div class="col-md-6 col-xl-3">
+                        <div class="category-period h-100">
+                            <div class="category-period-label mb-2">{{ periode.label }}</div>
+                            <div class="small text-muted">Montants modifiés</div>
+                            <div class="fw-bold text-warning-emphasis">
+                                {{ periode.montant_avant|floatformat:0|intcomma }} → {{ periode.montant_apres|floatformat:0|intcomma }} GNF
+                            </div>
+                            <div class="small {% if periode.variation_nette < 0 %}text-danger{% elif periode.variation_nette > 0 %}text-success{% else %}text-muted{% endif %}">
+                                Variation nette : {{ periode.variation_nette|floatformat:0|intcomma }} GNF · {{ periode.modifications }} opération(s)
+                            </div>
+                            <hr class="my-2">
+                            <div class="small text-muted">Montants supprimés</div>
+                            <div class="fw-bold text-danger">{{ periode.montant_supprime|floatformat:0|intcomma }} GNF</div>
+                            <div class="small text-muted">{{ periode.suppressions }} suppression(s) douce(s)</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
         </div>
     </section>
     {% endif %}

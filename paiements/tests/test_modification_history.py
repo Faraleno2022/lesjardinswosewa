@@ -69,6 +69,11 @@ class ModificationPaiementHistoriqueTests(TestCase):
         self.assertEqual(self.paiement.montant, Decimal('200000'))
         historique = HistoriqueModificationPaiement.objects.get(paiement=self.paiement)
         self.assertEqual(historique.utilisateur, self.user)
+        self.assertEqual(historique.ecole, self.ecole)
+        self.assertEqual(
+            historique.operation,
+            HistoriqueModificationPaiement.Operation.MODIFICATION,
+        )
         self.assertEqual(historique.donnees_avant['montant'], '100000')
         self.assertEqual(historique.donnees_apres['montant'], '200000')
         self.assertIn('montant', historique.champs_modifies)
@@ -79,6 +84,92 @@ class ModificationPaiementHistoriqueTests(TestCase):
         detail = self.client.get(reverse('paiements:detail_paiement', args=[self.paiement.id]))
         self.assertContains(detail, 'Mémoire des modifications')
         self.assertContains(detail, 'Montant incomplet')
+
+        dashboard = self.client.get(reverse('paiements:tableau_bord'))
+        periode_jour = {
+            item['key']: item for item in dashboard.context['audit_paiements']
+        }['jour']
+        self.assertEqual(periode_jour['modifications'], 1)
+        self.assertEqual(periode_jour['montant_avant'], Decimal('100000'))
+        self.assertEqual(periode_jour['montant_apres'], Decimal('200000'))
+        self.assertEqual(periode_jour['variation_nette'], Decimal('100000'))
+
+    def test_suppression_douce_garde_motif_et_recalcule_toutes_les_cartes(self):
+        response = self.client.post(
+            reverse('paiements:supprimer_paiement', args=[self.paiement.id]),
+            {'motif_suppression': 'Reçu créé en double par erreur'},
+        )
+        self.assertRedirects(
+            response,
+            reverse('paiements:detail_paiement', args=[self.paiement.id]),
+        )
+        self.paiement.refresh_from_db()
+        self.assertEqual(self.paiement.statut, 'ANNULE')
+        self.assertEqual(
+            self.paiement.motif_annulation,
+            'Reçu créé en double par erreur',
+        )
+        historique = HistoriqueModificationPaiement.objects.get(
+            paiement=self.paiement,
+            operation=HistoriqueModificationPaiement.Operation.SUPPRESSION,
+        )
+        self.assertEqual(historique.montant_avant, Decimal('100000'))
+        self.assertEqual(historique.motif, 'Reçu créé en double par erreur')
+
+        self.eleve.echeancier.refresh_from_db()
+        self.assertEqual(self.eleve.echeancier.tranche_1_payee, Decimal('0'))
+
+        dashboard = self.client.get(reverse('paiements:tableau_bord'))
+        periode_jour = {
+            item['key']: item for item in dashboard.context['audit_paiements']
+        }['jour']
+        self.assertEqual(periode_jour['suppressions'], 1)
+        self.assertEqual(periode_jour['montant_supprime'], Decimal('100000'))
+        categories = {
+            item['key']: item for item in dashboard.context['indicateurs_categories']
+        }
+        scolarite_jour = {
+            item['key']: item for item in categories['scolarite']['periodes']
+        }['jour']
+        self.assertEqual(scolarite_jour['montant'], Decimal('0'))
+
+        journal = self.client.get(reverse('paiements:historique_operations'))
+        self.assertContains(journal, 'Reçu créé en double par erreur')
+        self.assertContains(journal, 'Suppression douce')
+
+    def test_suppression_refusee_sans_motif(self):
+        response = self.client.post(
+            reverse('paiements:supprimer_paiement', args=[self.paiement.id]),
+            {'motif_suppression': ''},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.paiement.refresh_from_db()
+        self.assertEqual(self.paiement.statut, 'VALIDE')
+        self.assertFalse(
+            HistoriqueModificationPaiement.objects.filter(
+                operation=HistoriqueModificationPaiement.Operation.SUPPRESSION,
+            ).exists()
+        )
+
+    def test_annulation_synchronisee_est_reconnue_comme_suppression(self):
+        """Le poste destinataire n'a pas les attributs temporaires de la vue."""
+        self.paiement.statut = 'ANNULE'
+        self.paiement.motif_annulation = 'Annulation reçue du poste principal'
+        self.paiement.save(update_fields=[
+            'statut', 'motif_annulation', 'date_modification',
+        ])
+
+        historique = HistoriqueModificationPaiement.objects.get(
+            paiement=self.paiement,
+        )
+        self.assertEqual(
+            historique.operation,
+            HistoriqueModificationPaiement.Operation.SUPPRESSION,
+        )
+        self.assertEqual(
+            historique.motif,
+            'Annulation reçue du poste principal',
+        )
 
     def test_le_champ_montant_accepte_les_montants_ronds(self):
         """Le couple min/step du champ ne doit refuser aucun montant entier.

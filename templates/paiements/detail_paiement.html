@@ -50,6 +50,11 @@
                 <i class="fas fa-edit me-1"></i>Corriger le paiement
             </a>
         {% endif %}
+        {% if paiement.statut != 'ANNULE' and is_admin or paiement.statut != 'ANNULE' and user_permissions.can_delete_payments %}
+            <a href="{% url 'paiements:supprimer_paiement' paiement.id %}" class="btn btn-outline-danger">
+                <i class="fas fa-ban me-1"></i>Supprimer / annuler
+            </a>
+        {% endif %}
         <!-- Bouton Relance visible en tête de page -->
         <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#relanceModal">
             <i class="fas fa-bell me-1"></i>Relance
@@ -219,6 +224,13 @@
                                 <span class="text-muted">{{ modification.utilisateur|default:"Système" }}</span>
                             </div>
                             <div class="small mt-1">{{ modification.motif }}</div>
+                            <div class="small">
+                                {% if modification.operation == 'SUPPRESSION' %}
+                                <span class="badge bg-danger">Suppression douce</span>
+                                {% else %}
+                                <span class="badge bg-warning text-dark">Modification</span>
+                                {% endif %}
+                            </div>
                             <div class="small text-muted">Champs : {{ modification.champs_modifies|join:", " }}</div>
                         </div>
                     {% endfor %}

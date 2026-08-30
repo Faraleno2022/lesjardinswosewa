@@ -67,6 +67,7 @@ def liste_abonnements(request):
             Q(eleve__matricule__icontains=q) |
             Q(zone__icontains=q) |
             Q(point_arret__icontains=q) |
+            Q(reference_externe__icontains=q) |
             Q(contact_parent__icontains=q)
         )
 
@@ -256,7 +257,7 @@ def export_relances_excel(request):
     data = [a for a in qs if a.est_expire or a.est_proche_expiration or a.statut != AbonnementBus.Statut.ACTIF]
 
     wb = Workbook(); ws = wb.active; ws.title = 'Relances Bus'
-    headers = ['Élève', 'Classe', 'École', 'Périodicité', 'Montant', 'Début', 'Expiration', 'Statut', 'Zone', "Point d'arrêt", 'Contact parent']
+    headers = ['Élève', 'Classe', 'École', 'Périodicité', 'Montant', 'Référence externe', 'Début', 'Expiration', 'Statut', 'Zone', "Point d'arrêt", 'Contact parent']
     ws.append(headers)
     for a in data:
         el = a.eleve
@@ -266,6 +267,7 @@ def export_relances_excel(request):
             getattr(getattr(el.classe, 'ecole', None), 'nom', ''),
             a.get_periodicite_display(),
             int(a.montant or 0),
+            a.reference_externe,
             a.date_debut.strftime('%d/%m/%Y') if a.date_debut else '',
             a.date_expiration.strftime('%d/%m/%Y') if a.date_expiration else '',
             a.get_statut_display(),
@@ -273,7 +275,7 @@ def export_relances_excel(request):
             a.point_arret,
             a.contact_parent,
         ])
-    widths = [30, 16, 22, 16, 14, 14, 14, 12, 16, 18, 20]
+    widths = [30, 16, 22, 16, 14, 22, 14, 14, 12, 16, 18, 20]
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
@@ -415,6 +417,8 @@ def generer_recu_abonnement_pdf(request, abo_id):
     line('École', getattr(getattr(el.classe, 'ecole', None), 'nom', ''))
     line('Périodicité', abo.get_periodicite_display())
     line('Montant', f"{int(abo.montant):,}".replace(',', ' ') + ' GNF')
+    if abo.reference_externe:
+        line('Référence externe', abo.reference_externe)
     line('Début', abo.date_debut.strftime('%d/%m/%Y') if abo.date_debut else '')
     line('Expiration', abo.date_expiration.strftime('%d/%m/%Y') if abo.date_expiration else '')
     

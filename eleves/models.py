@@ -432,6 +432,12 @@ class Eleve(SyncTrackedModel):
             "2 850 000 en 10ème année), auquel s'ajoutent les frais d'inscription ou de réinscription."
         ),
     )
+    test_accueil_evalue = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name="Test d'accueil évalué",
+        help_text="Cochez lorsque l'élève a passé et reçu l'évaluation du test d'accueil.",
+    )
     
     # Responsables
     responsable_principal = models.ForeignKey(

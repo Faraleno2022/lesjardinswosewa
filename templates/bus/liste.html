@@ -257,6 +257,7 @@
       <th>Classe</th>
       <th>Périodicité</th>
       <th>Montant</th>
+      <th>Référence</th>
       <th>Début</th>
       <th>Expiration</th>
       <th>Statut</th>
@@ -272,6 +273,7 @@
       <td>{{ a.eleve.classe.nom }}</td>
       <td>{{ a.get_periodicite_display }}</td>
       <td>{{ a.montant|intcomma }} GNF</td>
+      <td>{{ a.reference_externe|default:"-" }}</td>
       <td>{{ a.date_debut|date:'d/m/Y' }}</td>
       <td>{{ a.date_expiration|date:'d/m/Y' }}</td>
       <td>{{ a.get_statut_display }}</td>
@@ -286,7 +288,7 @@
       </td>
     </tr>
     {% empty %}
-    <tr><td colspan="10" class="text-center text-muted py-4">Aucun abonnement trouvé</td></tr>
+    <tr><td colspan="11" class="text-center text-muted py-4">Aucun abonnement trouvé</td></tr>
     {% endfor %}
   </tbody>
 </table>

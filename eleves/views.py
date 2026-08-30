@@ -101,6 +101,14 @@ def liste_eleves(request):
             eleves = eleves.filter(classe_id=classe_id)
         except (TypeError, ValueError):
             classe_id = None
+
+    test_accueil = (request.GET.get('test_accueil') or '').strip().lower()
+    if test_accueil == 'evalue':
+        eleves = eleves.filter(test_accueil_evalue=True)
+    elif test_accueil == 'non-evalue':
+        eleves = eleves.filter(test_accueil_evalue=False)
+    else:
+        test_accueil = ''
     
     # Statistiques optimisées avec cache
     stats_cache_key = f'eleves_stats_{request.user.id}_{hash(str(eleves.query))}'
@@ -118,7 +126,7 @@ def liste_eleves(request):
     # Pagination optimisée
     page_number = request.GET.get('page', 1)
     page_obj, paginator = PaginationOptimizer.optimize_pagination(
-        eleves.order_by('nom', 'prenom'), 
+        eleves.order_by('-date_creation', '-id'),
         page_number, 
         per_page=15
     )
@@ -175,6 +183,7 @@ def liste_eleves(request):
         'classes': classes,
         # Conserver la sélection actuelle de classe dans l'UI
         'selected_classe_id': str(classe_id) if classe_id else '',
+        'test_accueil': test_accueil,
     }
 
     # Rendu partiel pour la recherche dynamique

@@ -146,6 +146,7 @@ class Paiement(SyncTrackedModel):
         ('VALIDE', 'Validé'),
         ('REJETE', 'Rejeté'),
         ('REMBOURSE', 'Remboursé'),
+        ('ANNULE', 'Annulé (suppression douce)'),
     ]
     
     # Références
@@ -197,6 +198,11 @@ class Paiement(SyncTrackedModel):
         help_text="Numéro de transaction Mobile Money, chèque, etc."
     )
     observations = models.TextField(blank=True, null=True, verbose_name="Observations")
+    motif_annulation = models.TextField(
+        blank=True,
+        verbose_name="Motif de l'annulation",
+        help_text="Conservé et synchronisé lors d'une suppression douce.",
+    )
     
     # Métadonnées
     date_creation = models.DateTimeField(auto_now_add=True)
@@ -285,7 +291,8 @@ class Paiement(SyncTrackedModel):
     AUDIT_FIELDS = (
         'eleve_id', 'type_paiement_id', 'mode_paiement_id',
         'ecole_encaissement_id', 'classe_encaissement_id', 'montant',
-        'annee_scolaire', 'date_paiement', 'statut', 'reference_externe', 'observations',
+        'annee_scolaire', 'date_paiement', 'statut', 'reference_externe',
+        'observations', 'motif_annulation',
         'valide_par_id', 'date_validation',
     )
 
@@ -368,13 +375,30 @@ class Paiement(SyncTrackedModel):
                     eleve_label = f"{self.eleve.matricule} - {self.eleve.nom_complet}"
                 except Exception:
                     eleve_label = ''
+                operation = getattr(
+                    self,
+                    '_audit_operation',
+                    HistoriqueModificationPaiement.Operation.MODIFICATION,
+                )
+                if (
+                    before.get('statut') != 'ANNULE'
+                    and after.get('statut') == 'ANNULE'
+                ):
+                    operation = HistoriqueModificationPaiement.Operation.SUPPRESSION
                 HistoriqueModificationPaiement.objects.create(
                     paiement=self,
+                    ecole=self.ecole_reference,
                     numero_recu=self.numero_recu,
                     eleve=eleve_label,
                     utilisateur=getattr(self, '_audit_user', None),
+                    operation=operation,
                     motif=(
                         getattr(self, '_audit_reason', '')
+                        or (
+                            self.motif_annulation
+                            if operation == HistoriqueModificationPaiement.Operation.SUPPRESSION
+                            else ''
+                        )
                         or "Modification automatique du paiement"
                     ),
                     champs_modifies=changed_fields,
@@ -384,6 +408,7 @@ class Paiement(SyncTrackedModel):
 
         self._audit_user = None
         self._audit_reason = ''
+        self._audit_operation = HistoriqueModificationPaiement.Operation.MODIFICATION
     
     @property
     def montant_avec_frais(self):
@@ -404,12 +429,24 @@ class Paiement(SyncTrackedModel):
 class HistoriqueModificationPaiement(models.Model):
     """Mémoire inaltérable des changements apportés aux paiements."""
 
+    class Operation(models.TextChoices):
+        MODIFICATION = 'MODIFICATION', 'Modification'
+        SUPPRESSION = 'SUPPRESSION', 'Suppression douce'
+
     paiement = models.ForeignKey(
         Paiement,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='historique_modifications',
+    )
+    ecole = models.ForeignKey(
+        'eleves.Ecole',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='historiques_paiements',
+        verbose_name="École concernée",
     )
     numero_recu = models.CharField(max_length=20, db_index=True)
     eleve = models.CharField(max_length=250, blank=True)
@@ -419,6 +456,12 @@ class HistoriqueModificationPaiement(models.Model):
         null=True,
         blank=True,
         related_name='modifications_paiements',
+    )
+    operation = models.CharField(
+        max_length=20,
+        choices=Operation.choices,
+        default=Operation.MODIFICATION,
+        db_index=True,
     )
     motif = models.TextField()
     champs_modifies = models.JSONField(default=list, blank=True)
@@ -433,6 +476,25 @@ class HistoriqueModificationPaiement(models.Model):
 
     def __str__(self):
         return f"{self.numero_recu} - {self.date_modification:%d/%m/%Y %H:%M}"
+
+    @staticmethod
+    def _montant_snapshot(donnees):
+        try:
+            return Decimal(str((donnees or {}).get('montant') or 0))
+        except (TypeError, ValueError, ArithmeticError):
+            return Decimal('0')
+
+    @property
+    def montant_avant(self):
+        return self._montant_snapshot(self.donnees_avant)
+
+    @property
+    def montant_apres(self):
+        return self._montant_snapshot(self.donnees_apres)
+
+    @property
+    def variation_montant(self):
+        return self.montant_apres - self.montant_avant
 
 class EcheancierPaiement(SyncTrackedModel):
     """Modèle pour l'échéancier des paiements d'un élève"""

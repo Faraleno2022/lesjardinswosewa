@@ -112,6 +112,12 @@
             <label class="form-label small-label" for="{{ form.statut.id_for_label }}">Statut</label>
             {{ form.statut }}
           </div>
+          <div class="col-12 mb-3">
+            <label class="form-label small-label" for="{{ form.reference_externe.id_for_label }}">Référence externe du paiement</label>
+            {{ form.reference_externe }}
+            <div class="help-text">Numéro du reçu, transaction Mobile Money, chèque ou autre référence.</div>
+            {% if form.reference_externe.errors %}<div class="text-danger small">{{ form.reference_externe.errors.0 }}</div>{% endif %}
+          </div>
         </div>
 
         <div class="row">

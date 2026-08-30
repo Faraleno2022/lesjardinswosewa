@@ -199,6 +199,16 @@
                                 {% if form.garde_prolongee.errors %}
                                     <div class="text-danger small mt-1">{{ form.garde_prolongee.errors.0 }}</div>
                                 {% endif %}
+                                <div class="form-check mt-3">
+                                    {{ form.test_accueil_evalue }}
+                                    <label class="form-check-label" for="{{ form.test_accueil_evalue.id_for_label }}">
+                                        {{ form.test_accueil_evalue.label }}
+                                    </label>
+                                </div>
+                                <small class="text-muted d-block">{{ form.test_accueil_evalue.help_text }}</small>
+                                {% if form.test_accueil_evalue.errors %}
+                                    <div class="text-danger small mt-1">{{ form.test_accueil_evalue.errors.0 }}</div>
+                                {% endif %}
                             </div>
                         </div>
                     </div>

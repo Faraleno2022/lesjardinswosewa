@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views
+from . import views, views_admissions, views_audit
 from .views_tranches import export_tranches_par_classe_pdf, export_tranches_par_classe_excel
 from .rapports_professionnels import (
     apercu_comptabilite_pdf,
@@ -29,11 +29,16 @@ app_name = 'paiements'
 urlpatterns = [
     # Tableau de bord
     path('', views.tableau_bord_paiements, name='tableau_bord'),
+    path('audit/', views_audit.historique_paiements, name='historique_operations'),
+    path('admissions/<str:nature>/', views_admissions.liste_admissions, name='liste_admissions'),
+    path('admissions/<str:nature>/pdf/', views_admissions.export_admissions_pdf, name='export_admissions_pdf'),
+    path('admissions/<str:nature>/excel/', views_admissions.export_admissions_excel, name='export_admissions_excel'),
     
     # Gestion des paiements
     path('liste/', views.liste_paiements, name='liste_paiements'),
     path('detail/<int:paiement_id>/', views.detail_paiement, name='detail_paiement'),
     path('modifier/<int:paiement_id>/', views.modifier_paiement, name='modifier_paiement'),
+    path('supprimer/<int:paiement_id>/', views.supprimer_paiement, name='supprimer_paiement'),
     path('ajouter/', views.ajouter_paiement, name='ajouter_paiement'),
     path('ajouter/<int:eleve_id>/', views.ajouter_paiement, name='ajouter_paiement_eleve'),
     path('valider/<int:paiement_id>/', views.valider_paiement, name='valider_paiement'),

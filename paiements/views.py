@@ -36,10 +36,17 @@ except Exception:
 from ecole_moderne.pdf_utils import draw_logo_watermark
 from ecole_moderne.security_decorators import require_school_object
 
-from .models import Paiement, EcheancierPaiement, TypePaiement, ModePaiement, RemiseReduction, PaiementRemise, Relance, TwilioInboundMessage
+from .models import (
+    Paiement, HistoriqueModificationPaiement, EcheancierPaiement,
+    TypePaiement, ModePaiement, RemiseReduction, PaiementRemise, Relance,
+    TwilioInboundMessage,
+)
 from eleves.models import Eleve, GrilleTarifaire, Classe
 from eleves.utils_annee import get_annee_active
-from .forms import PaiementForm, ModificationPaiementForm, EcheancierForm, RechercheForm
+from .forms import (
+    PaiementForm, ModificationPaiementForm, SuppressionPaiementForm,
+    EcheancierForm, RechercheForm,
+)
 from .allocation import (
     allocate_amount_sequentially,
     allocate_discounts,
@@ -62,7 +69,10 @@ from .notifications import (
     send_relance_notification,
     send_retard_notification,
 )
-from .dashboard import calculer_indicateurs_categories
+from .dashboard import (
+    calculer_indicateurs_audit_paiements,
+    calculer_indicateurs_categories,
+)
 
 
 def _normalize_payment_type_name(type_name: str) -> str:
@@ -1161,6 +1171,10 @@ def tableau_bord_paiements(request):
         today,
         retard_scolarite,
     )
+    audit_paiements = calculer_indicateurs_audit_paiements(
+        request.user,
+        today,
+    )
     eleves_en_retard.sort(key=lambda item: item.retard_db, reverse=True)
     eleves_en_retard = eleves_en_retard[:10]
 
@@ -1310,6 +1324,7 @@ def tableau_bord_paiements(request):
         'titre_page': 'Tableau de bord des paiements',
         'stats': stats,
         'indicateurs_categories': indicateurs_categories,
+        'audit_paiements': audit_paiements,
         'paiements_recents': paiements_recents,
         'eleves_en_retard': eleves_en_retard,
         'finance_direction': finance_direction,
@@ -1695,6 +1710,8 @@ def liste_paiements(request):
         'filtre_mode_id': mode_filtre,
         'filtre_type_id': type_filtre,
         'filtre_situation': situation,
+        'user_permissions': get_user_permissions(request.user),
+        'is_admin': user_is_admin(request.user),
     }
 
     # Réponse partielle pour les requêtes AJAX (utilisé par la recherche/pagination dynamique)
@@ -1940,6 +1957,56 @@ def modifier_paiement(request, paiement_id: int):
         'form': form,
         'paiement': paiement,
         'titre_page': f"Modifier le paiement {paiement.numero_recu}",
+    })
+
+
+@login_required
+@can_delete_payments
+@require_school_object(Paiement, pk_kwarg='paiement_id', field_path='eleve__classe__ecole')
+def supprimer_paiement(request, paiement_id: int):
+    """Annule un paiement sans jamais effacer sa ligne ni son audit."""
+    paiement_qs = Paiement.objects.select_related(
+        'eleve', 'eleve__classe', 'eleve__classe__ecole',
+        'type_paiement', 'mode_paiement',
+    )
+    paiement_qs = filter_by_user_school(
+        paiement_qs, request.user, 'eleve__classe__ecole'
+    )
+    paiement = get_object_or_404(paiement_qs, pk=paiement_id)
+
+    if paiement.statut == 'ANNULE':
+        messages.info(request, "Ce paiement est déjà annulé.")
+        return redirect('paiements:detail_paiement', paiement_id=paiement.id)
+
+    if request.method == 'POST':
+        form = SuppressionPaiementForm(request.POST)
+        if form.is_valid():
+            with transaction.atomic():
+                paiement.statut = 'ANNULE'
+                paiement.motif_annulation = form.cleaned_data['motif_suppression'].strip()
+                paiement._audit_user = request.user
+                paiement._audit_reason = paiement.motif_annulation
+                paiement._audit_operation = (
+                    HistoriqueModificationPaiement.Operation.SUPPRESSION
+                )
+                paiement.save(update_fields=[
+                    'statut', 'motif_annulation', 'date_modification',
+                ])
+            messages.success(
+                request,
+                (
+                    f"Le paiement {paiement.numero_recu} a été annulé. "
+                    "Tous les montants et échéanciers ont été recalculés."
+                ),
+            )
+            return redirect('paiements:detail_paiement', paiement_id=paiement.id)
+    else:
+        form = SuppressionPaiementForm()
+
+    return render(request, 'paiements/supprimer_paiement.html', {
+        'form': form,
+        'paiement': paiement,
+        'titre_page': f"Annuler le paiement {paiement.numero_recu}",
     })
 
 @login_required

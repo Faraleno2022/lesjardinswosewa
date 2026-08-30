@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views
+from . import views, views_test_accueil
 from .views_import import (
     importer_eleves, telecharger_template_eleves, exporter_eleves_classe,
     exporter_tous_eleves_modele,
@@ -17,6 +17,9 @@ urlpatterns = [
     # Liste et recherche des élèves
     path('', views.liste_eleves, name='liste_eleves'),
     path('liste/', views.liste_eleves, name='liste_eleves'),
+    path('<int:eleve_id>/test-accueil/pointer/', views_test_accueil.pointer_test_accueil, name='pointer_test_accueil'),
+    path('test-accueil/<str:statut>/pdf/', views_test_accueil.export_test_accueil_pdf, name='export_test_accueil_pdf'),
+    path('test-accueil/<str:statut>/excel/', views_test_accueil.export_test_accueil_excel, name='export_test_accueil_excel'),
     
     # Détails d'un élève
     path('<int:eleve_id>/', views.detail_eleve, name='detail_eleve'),
