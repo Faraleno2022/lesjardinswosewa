@@ -26,7 +26,13 @@ class AbonnementBus(SyncTrackedModel):
         verbose_name="Référence externe du paiement",
         help_text="Numéro du reçu, transaction Mobile Money, chèque ou autre référence.",
     )
-    periodicite = models.CharField(max_length=10, choices=Periodicite.choices, default=Periodicite.MENSUEL)
+    periodicite = models.CharField(
+        max_length=10,
+        choices=Periodicite.choices,
+        default=Periodicite.MENSUEL,
+        verbose_name="Type de paiement",
+        help_text="Choisissez notamment Mensuel, Annuel ou une tranche.",
+    )
     date_debut = models.DateField(default=timezone.localdate)
     date_expiration = models.DateField(db_index=True)
     statut = models.CharField(max_length=10, choices=Statut.choices, default=Statut.ACTIF, db_index=True)
@@ -95,6 +101,8 @@ class AbonnementCantine(SyncTrackedModel):
         DEJEUNER = 'DEJEUNER', 'Déjeuner uniquement'
         GOUTER = 'GOUTER', 'Goûter uniquement'
         COMPLET = 'COMPLET', 'Déjeuner + Goûter'
+        REPAS_10H = 'REPAS_10H', 'Repas de 10 h'
+        REPAS_14H = 'REPAS_14H', 'Repas de 14 h'
     
     eleve = models.ForeignKey(Eleve, on_delete=models.CASCADE, related_name='abonnements_cantine')
     montant = models.DecimalField(max_digits=10, decimal_places=0, verbose_name="Montant (GNF)")
@@ -105,8 +113,20 @@ class AbonnementCantine(SyncTrackedModel):
         verbose_name="Référence externe du paiement",
         help_text="Numéro du reçu, transaction Mobile Money, chèque ou autre référence.",
     )
-    periodicite = models.CharField(max_length=15, choices=Periodicite.choices, default=Periodicite.MENSUEL)
-    type_repas = models.CharField(max_length=10, choices=TypeRepas.choices, default=TypeRepas.DEJEUNER)
+    periodicite = models.CharField(
+        max_length=15,
+        choices=Periodicite.choices,
+        default=Periodicite.MENSUEL,
+        verbose_name="Type de paiement",
+        help_text="Le paiement annuel est disponible en plus des autres périodes.",
+    )
+    type_repas = models.CharField(
+        max_length=10,
+        choices=TypeRepas.choices,
+        default=TypeRepas.DEJEUNER,
+        verbose_name="Type de repas / heure de service",
+        help_text="Choisissez le repas et, si nécessaire, le service de 10 h ou de 14 h.",
+    )
     
     date_debut = models.DateField(default=timezone.localdate, verbose_name="Date de début")
     date_expiration = models.DateField(db_index=True, verbose_name="Date d'expiration")
