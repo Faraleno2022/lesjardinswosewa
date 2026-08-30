@@ -45,7 +45,7 @@ Affiche le numero de version, l'empreinte SHA-256 et la taille exacte.
 L'equivalent Windows manuel :
 
 ```bash
-certutil -hashfile Output\MySchoolGN_Setup_v1.3.5_LesJardinsWosewa.exe SHA256
+certutil -hashfile Output\MySchoolGN_Setup_v1.3.6_LesJardinsWosewa.exe SHA256
 ```
 
 ### 3. Publier la release GitHub
@@ -55,8 +55,8 @@ la bande passante n'y suffisent. Publiez-le la ou le telechargement est gratuit
 et illimite, en *release* GitHub sur le depot
 `Faraleno2022/lesjardinswosewa` :
 
-- **tag** : `desktop-v1.3.5` (seuls les nombres comptent, le prefixe est libre) ;
-- **fichier joint** : `MySchoolGN_Setup_v1.3.5_LesJardinsWosewa.exe` ;
+- **tag** : `desktop-v1.3.6` (seuls les nombres comptent, le prefixe est libre) ;
+- **fichier joint** : `MySchoolGN_Setup_v1.3.6_LesJardinsWosewa.exe` ;
 - **description** : ce que la version apporte, en clair. Elle est reprise telle
   quelle comme notes de version.
 

@@ -23,7 +23,7 @@ MYSCHOOL_SYNC_SERVER_URL=https://www.lesjardinswosewa.com
 4. Cliquer sur **Créer et télécharger la configuration**.
 5. Conserver le fichier téléchargé sous le nom exact `sync_config.json`.
 6. Placer ce fichier à côté de
-   `MySchoolGN_Setup_v1.3.5_LesJardinsWosewa.exe`.
+   `MySchoolGN_Setup_v1.3.6_LesJardinsWosewa.exe`.
 7. Lancer l'installateur, puis MySchoolGN.
 
 L'installateur copie automatiquement la configuration personnalisée. Au premier
