@@ -40,6 +40,7 @@ from .services import (
     calculer_etat_salaire,
     enseignants_eligibles,
     heures_reellement_travaillees,
+    preparer_etats_salaire_periode,
 )
 from eleves.models import Ecole, Classe
 from utilisateurs.utils import user_is_admin, user_school
@@ -1297,28 +1298,15 @@ def calculer_salaires(request, periode_id):
                 )
                 return redirect('salaires:etats_salaire')
 
-            calculs_effectues = 0
-            enseignants = list(
-                enseignants_eligibles(periode).select_for_update()
+            preparation = preparer_etats_salaire_periode(
+                periode, request.user
             )
-            ids_eligibles = [enseignant.id for enseignant in enseignants]
-            # Retirer les brouillons devenus inéligibles afin qu'un ancien état
-            # ne puisse pas être validé après une démission ou une correction
-            # de date d'embauche. Les états déjà validés/payés restent archivés.
-            periode.etats_salaire.filter(
-                valide=False,
-                paye=False,
-            ).exclude(enseignant_id__in=ids_eligibles).delete()
-
-            for enseignant in enseignants:
-                _, modifie = calculer_etat_salaire(
-                    enseignant, periode, request.user
-                )
-                calculs_effectues += int(modifie)
 
         messages.success(
             request,
-            f"Calcul des salaires terminé. {calculs_effectues} état(s) calculé(s).",
+            "Calcul des salaires terminé. "
+            f"{preparation['etats_calcules']} état(s) calculé(s) pour "
+            f"{preparation['enseignants']} enseignant(s).",
         )
     except Exception as exc:
         messages.error(
@@ -2032,18 +2020,24 @@ def creer_periode(request):
                 )
                 return redirect('salaires:gestion_periodes')
             
-            # Créer la nouvelle période
-            nouvelle_periode = PeriodeSalaire.objects.create(
-                mois=mois,
-                annee=annee,
-                ecole=ecole,
-                nombre_semaines=nombre_semaines,
-                cree_par=request.user
-            )
+            # Créer la période et préparer immédiatement le lot mensuel.
+            with transaction.atomic():
+                nouvelle_periode = PeriodeSalaire.objects.create(
+                    mois=mois,
+                    annee=annee,
+                    ecole=ecole,
+                    nombre_semaines=nombre_semaines,
+                    cree_par=request.user
+                )
+                preparation = preparer_etats_salaire_periode(
+                    nouvelle_periode, request.user
+                )
             
             messages.success(
-                request, 
-                f"Période {nouvelle_periode} créée avec succès !"
+                request,
+                f"Période {nouvelle_periode} créée avec succès : "
+                f"{preparation['enseignants']} enseignant(s) regroupé(s) et "
+                f"{preparation['etats_calcules']} état(s) préparé(s)."
             )
             
         except (ValueError, TypeError, InvalidOperation):
@@ -2094,19 +2088,24 @@ def cloturer_periode(request, periode_id):
             ).exists()
             
             if not periode_suivante_existe:
-                # Créer automatiquement la période suivante
-                nouvelle_periode = PeriodeSalaire.objects.create(
-                    mois=mois_suivant,
-                    annee=annee_suivante,
-                    ecole=periode.ecole,
-                    nombre_semaines=periode.nombre_semaines,  # Reprendre le même nombre de semaines
-                    cree_par=request.user
-                )
+                # Créer automatiquement la période suivante et son lot de paie.
+                with transaction.atomic():
+                    nouvelle_periode = PeriodeSalaire.objects.create(
+                        mois=mois_suivant,
+                        annee=annee_suivante,
+                        ecole=periode.ecole,
+                        nombre_semaines=periode.nombre_semaines,
+                        cree_par=request.user
+                    )
+                    preparation = preparer_etats_salaire_periode(
+                        nouvelle_periode, request.user
+                    )
                 
                 messages.success(
-                    request, 
+                    request,
                     f"Période {periode} clôturée avec succès ! "
-                    f"Nouvelle période créée automatiquement : {nouvelle_periode}"
+                    f"Nouvelle période créée automatiquement : {nouvelle_periode}. "
+                    f"{preparation['enseignants']} enseignant(s) regroupé(s)."
                 )
             else:
                 messages.success(

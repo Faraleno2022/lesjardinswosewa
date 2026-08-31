@@ -3930,6 +3930,60 @@ def generer_recu_pdf(request, paiement_id:int):
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
 
+
+@login_required
+@require_school_object(Paiement, pk_kwarg='paiement_id', field_path='eleve__classe__ecole')
+def generer_carnet_paiement_pdf(request, paiement_id: int):
+    """Télécharge le carnet annuel des paiements de scolarité de l'élève."""
+    paiement_qs = Paiement.objects.select_related(
+        'eleve', 'type_paiement', 'eleve__classe',
+        'eleve__classe__ecole', 'classe_encaissement', 'ecole_encaissement',
+    )
+    paiement_qs = filter_by_user_school(
+        paiement_qs, request.user, 'eleve__classe__ecole'
+    )
+    paiement = get_object_or_404(paiement_qs, pk=paiement_id)
+
+    if paiement.statut != 'VALIDE':
+        messages.warning(
+            request,
+            "Le carnet est disponible à partir d'un paiement validé.",
+        )
+        return redirect('paiements:detail_paiement', paiement_id=paiement.pk)
+
+    if not est_type_scolarite(paiement.type_paiement):
+        messages.warning(
+            request,
+            "Le carnet de paiement concerne uniquement les frais de scolarité.",
+        )
+        return redirect('paiements:detail_paiement', paiement_id=paiement.pk)
+
+    try:
+        with transaction.atomic():
+            _auto_validate_echeancier_for_eleve(
+                paiement.eleve,
+                annee_scolaire=paiement.annee_scolaire,
+            )
+        from .carnet_paiement import (
+            construire_carnet_paiement_pdf,
+            nom_fichier_carnet,
+        )
+        contenu = construire_carnet_paiement_pdf(paiement)
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "Génération du carnet de paiement échouée"
+        )
+        return HttpResponse(
+            "La génération du carnet de paiement a échoué.",
+            status=500,
+        )
+
+    response = HttpResponse(contenu, content_type='application/pdf')
+    response['Content-Disposition'] = (
+        f'attachment; filename="{nom_fichier_carnet(paiement)}"'
+    )
+    return response
+
 @login_required
 def export_liste_paiements_excel(request):
     """Exporte en Excel la liste des paiements selon les filtres (q, statut).

@@ -498,7 +498,7 @@ class MoteurPaieTests(TestCase):
                 raise RuntimeError('erreur simulée')
             return calculer_etat_salaire_reel(enseignant, periode, utilisateur)
 
-        with patch('salaires.views.calculer_etat_salaire', side_effect=calcul_avec_erreur):
+        with patch('salaires.services.calculer_etat_salaire', side_effect=calcul_avec_erreur):
             self.calculer()
 
         self.assertEqual(EtatSalaire.objects.count(), 0)
@@ -524,7 +524,7 @@ class MoteurPaieTests(TestCase):
         with self.assertRaises(ValidationError):
             self.creer_fixe(salaire='-100000')
 
-    def test_recalcul_supprime_un_brouillon_devenu_ineligible(self):
+    def test_recalcul_conserve_un_brouillon_devenu_ineligible(self):
         enseignant = self.creer_fixe()
         self.calculer()
         self.assertTrue(
@@ -537,7 +537,7 @@ class MoteurPaieTests(TestCase):
         enseignant.save(update_fields=['statut'])
         self.calculer()
 
-        self.assertFalse(
+        self.assertTrue(
             EtatSalaire.objects.filter(
                 enseignant=enseignant, periode=self.periode
             ).exists()
@@ -646,6 +646,48 @@ class MoteurPaieTests(TestCase):
                 ecole=self.ecole, mois=8, annee=2026
             ).exists()
         )
+
+    def test_creation_periode_regroupe_et_calcule_tous_les_enseignants(self):
+        enseignant_fixe = self.creer_fixe()
+        enseignant_horaire = self.creer_secondaire()
+
+        response = self.client.post(
+            reverse('salaires:creer_periode'),
+            {
+                'mois': '8',
+                'annee': '2026',
+                'ecole': str(self.ecole.pk),
+                'nombre_semaines': '4.33',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        periode = PeriodeSalaire.objects.get(
+            ecole=self.ecole, mois=8, annee=2026
+        )
+        self.assertEqual(periode.etats_salaire.count(), 2)
+        etat_fixe = periode.etats_salaire.get(enseignant=enseignant_fixe)
+        etat_horaire = periode.etats_salaire.get(
+            enseignant=enseignant_horaire
+        )
+        self.assertEqual(etat_fixe.salaire_net, Decimal('1000000.00'))
+        self.assertEqual(etat_horaire.salaire_net, Decimal('0.00'))
+
+    def test_cloture_prepare_aussi_le_lot_de_la_periode_suivante(self):
+        enseignant = self.creer_fixe()
+
+        response = self.client.post(
+            reverse('salaires:cloturer_periode', args=[self.periode.pk])
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.periode.refresh_from_db()
+        self.assertTrue(self.periode.cloturee)
+        periode_suivante = PeriodeSalaire.objects.get(
+            ecole=self.ecole, mois=8, annee=2026
+        )
+        etat = periode_suivante.etats_salaire.get(enseignant=enseignant)
+        self.assertEqual(etat.salaire_net, Decimal('1000000.00'))
 
     def test_formulaire_ajustement_refuse_les_valeurs_negatives(self):
         enseignant = self.creer_fixe()

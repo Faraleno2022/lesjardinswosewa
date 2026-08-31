@@ -242,6 +242,31 @@ def calculer_etat_salaire(enseignant, periode, utilisateur):
     return etat, True
 
 
+@transaction.atomic
+def preparer_etats_salaire_periode(periode, utilisateur):
+    """Regroupe et calcule les états de tous les enseignants d'une période.
+
+    Le même service est utilisé à la création de la période et lors d'un
+    recalcul manuel. Les états validés restent intacts ; aucun état existant
+    n'est supprimé définitivement.
+    """
+    enseignants = list(
+        enseignants_eligibles(periode).select_for_update()
+    )
+    calculs_effectues = 0
+
+    for enseignant in enseignants:
+        _, modifie = calculer_etat_salaire(
+            enseignant, periode, utilisateur
+        )
+        calculs_effectues += int(modifie)
+
+    return {
+        'enseignants': len(enseignants),
+        'etats_calcules': calculs_effectues,
+    }
+
+
 def recalculer_etat_salaire_pour_date(enseignant, date_pointage, utilisateur):
     """Recalcule le brouillon de salaire du mois après un pointage."""
     periode = PeriodeSalaire.objects.filter(

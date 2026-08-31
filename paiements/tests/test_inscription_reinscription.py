@@ -383,6 +383,26 @@ class InscriptionReinscriptionReportingTests(TestCase):
         self.assertIn("Remise scolarité 5% (T1)", receipt_text)
         self.assertNotIn("Remise accordée", receipt_text)
 
+        carnet = self.client.get(
+            reverse("paiements:generer_carnet_paiement_pdf", args=[payment.pk])
+        )
+        self.assertEqual(carnet.status_code, 200)
+        self.assertEqual(carnet["Content-Type"], "application/pdf")
+        self.assertIn("Carnet_paiement_", carnet["Content-Disposition"])
+        carnet_text = "\n".join(
+            page.extract_text() or ""
+            for page in PdfReader(BytesIO(carnet.content)).pages
+        )
+        self.assertIn("CARNET DE PAIEMENT SCOLAIRE", carnet_text)
+        self.assertIn("MOIS", carnet_text)
+        self.assertIn("DATE", carnet_text)
+        self.assertIn("MONTANT", carnet_text)
+        self.assertIn("RESTE À PAYER", carnet_text)
+        self.assertIn("SIGNATURE COMPTABLE", carnet_text)
+        self.assertIn("Août 2026", carnet_text)
+        self.assertIn("550 000 GNF", carnet_text)
+        self.assertIn("975 000 GNF", carnet_text)
+
     @patch("paiements.views.timezone.localdate", return_value=date(2025, 10, 1))
     def test_reenrollment_plus_first_installment_sets_nature_and_allocates(self, _localdate):
         student = self._student("VENT-007", "Binta")
