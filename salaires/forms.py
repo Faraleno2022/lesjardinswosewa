@@ -1,11 +1,16 @@
 from django import forms
 from django.core.exceptions import ValidationError
+from django.db.models import Q, Sum
+from django.utils import timezone
 from decimal import Decimal
 from .models import (
     AffectationClasse,
+    AvanceSalaire,
     Enseignant,
     EtatSalaire,
+    PeriodeSalaire,
     PresenceEnseignant,
+    StatutAvanceSalaire,
     StatutEnseignant,
     TypeEnseignant,
 )
@@ -395,10 +400,139 @@ class EtatSalaireAjustementForm(forms.ModelForm):
         deductions = cleaned_data.get('deductions') or 0
         salaire_base = self.instance.salaire_base or 0
 
-        if deductions > salaire_base + primes:
+        avances = self.instance.avances or 0
+        if deductions + avances > salaire_base + primes:
             self.add_error(
                 'deductions',
-                'Les retenues ne peuvent pas dépasser le salaire de base et les primes.',
+                'Les retenues et les avances ne peuvent pas dépasser '
+                'le salaire de base et les primes.',
             )
 
         return cleaned_data
+
+
+class AvanceSalaireForm(forms.ModelForm):
+    """Création et modification contrôlées d'une avance sur salaire."""
+
+    class Meta:
+        model = AvanceSalaire
+        fields = [
+            'enseignant', 'periode', 'date_avance', 'montant',
+            'reference', 'motif',
+        ]
+        widgets = {
+            'enseignant': forms.Select(attrs={'class': 'form-select'}),
+            'periode': forms.Select(attrs={'class': 'form-select'}),
+            'date_avance': forms.DateInput(attrs={
+                'class': 'form-control', 'type': 'date',
+            }),
+            'montant': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '1', 'step': '1',
+                'placeholder': 'Montant versé en GNF',
+            }),
+            'reference': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Numéro de reçu ou référence (facultatif)',
+            }),
+            'motif': forms.Textarea(attrs={
+                'class': 'form-control', 'rows': 3,
+                'placeholder': "Motif ou observation concernant l'avance",
+            }),
+        }
+
+    def __init__(self, *args, user=None, ecole=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.user = user
+        self.ecole = ecole
+
+        enseignants = Enseignant.objects.filter(statut=StatutEnseignant.ACTIF)
+        periodes = PeriodeSalaire.objects.filter(cloturee=False)
+        if ecole is not None:
+            enseignants = enseignants.filter(ecole=ecole)
+            periodes = periodes.filter(ecole=ecole)
+
+        if self.instance.pk:
+            enseignants = Enseignant.objects.filter(
+                Q(pk=self.instance.enseignant_id)
+                | Q(pk__in=enseignants.values('pk'))
+            )
+            periodes = PeriodeSalaire.objects.filter(
+                Q(pk=self.instance.periode_id)
+                | Q(pk__in=periodes.values('pk'))
+            )
+
+        self.fields['enseignant'].queryset = enseignants.select_related(
+            'ecole'
+        ).order_by('nom', 'prenoms')
+        self.fields['periode'].queryset = periodes.select_related(
+            'ecole'
+        ).order_by('-annee', '-mois')
+        self.fields['enseignant'].label_from_instance = lambda obj: (
+            f"{obj.nom_complet} — {obj.get_type_enseignant_display()}"
+        )
+        self.fields['date_avance'].initial = (
+            self.instance.date_avance if self.instance.pk else timezone.localdate()
+        )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        enseignant = cleaned_data.get('enseignant')
+        periode = cleaned_data.get('periode')
+        montant = cleaned_data.get('montant')
+        date_avance = cleaned_data.get('date_avance')
+
+        if date_avance and date_avance > timezone.localdate():
+            self.add_error('date_avance', "La date de l'avance ne peut pas être future.")
+
+        if periode and periode.cloturee:
+            self.add_error('periode', "Cette période de salaire est clôturée.")
+
+        if enseignant and periode and enseignant.ecole_id != periode.ecole_id:
+            self.add_error(
+                'enseignant',
+                "L'enseignant et la période doivent appartenir à la même école.",
+            )
+
+        if enseignant and periode:
+            etat = EtatSalaire.objects.filter(
+                enseignant=enseignant,
+                periode=periode,
+            ).first()
+            if etat and (etat.valide or etat.paye):
+                self.add_error(
+                    'periode',
+                    "Le salaire de cet enseignant est déjà validé pour cette période.",
+                )
+            elif etat and montant:
+                autres = AvanceSalaire.objects.filter(
+                    enseignant=enseignant,
+                    periode=periode,
+                    statut=StatutAvanceSalaire.EN_ATTENTE,
+                )
+                if self.instance.pk:
+                    autres = autres.exclude(pk=self.instance.pk)
+                total_autres = autres.aggregate(total=Sum('montant'))['total'] or 0
+                disponible = (
+                    (etat.salaire_base or 0)
+                    + (etat.primes or 0)
+                    - (etat.deductions or 0)
+                )
+                if total_autres + montant > disponible:
+                    self.add_error(
+                        'montant',
+                        "Le total des avances dépasse le salaire disponible "
+                        f"({disponible:,.0f} GNF).",
+                    )
+
+        return cleaned_data
+
+
+class AnnulationAvanceSalaireForm(forms.Form):
+    motif_annulation = forms.CharField(
+        label="Motif de l'annulation",
+        min_length=3,
+        widget=forms.Textarea(attrs={
+            'class': 'form-control', 'rows': 3,
+            'placeholder': "Expliquez pourquoi cette avance est annulée",
+        }),
+    )

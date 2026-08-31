@@ -347,6 +347,44 @@
         </div>
     </div>
 
+    <!-- Historique des avances -->
+    <div class="row">
+        <div class="col-12">
+            <div class="teacher-info-card">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-hand-holding-usd me-2 text-warning"></i>
+                        Avances sur salaire ({{ avances_salaire.count }})
+                    </h5>
+                    <div>
+                        <span class="badge bg-warning text-dark me-2">À déduire : {{ stats.avances_a_deduire|floatformat:0|intcomma }} GNF</span>
+                        <a href="{% url 'salaires:avances_salaire' %}?enseignant={{ enseignant.id }}" class="btn btn-sm btn-outline-warning">Gérer les avances</a>
+                    </div>
+                </div>
+                {% if avances_salaire %}
+                <div class="salary-history">
+                    {% for avance in avances_salaire %}
+                    <div class="salary-item">
+                        <div>
+                            <strong>{{ avance.date_avance|date:'d/m/Y' }}</strong>
+                            <small class="text-muted d-block">{{ avance.periode.nom_periode }}{% if avance.reference %} · {{ avance.reference }}{% endif %}</small>
+                        </div>
+                        <div>
+                            {% if avance.statut == 'EN_ATTENTE' %}<span class="badge bg-warning text-dark">À déduire</span>
+                            {% elif avance.statut == 'DEDUITE' %}<span class="badge bg-success">Déduite</span>
+                            {% else %}<span class="badge bg-secondary">Annulée</span>{% endif %}
+                        </div>
+                        <div class="salary-amount text-end">{{ avance.montant|floatformat:0|intcomma }} GNF</div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-3 text-muted">Aucune avance enregistrée.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
     <!-- Actions -->
     <div class="row">
         <div class="col-12">

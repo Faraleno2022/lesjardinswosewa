@@ -19,6 +19,12 @@
                         <span>Salaire de base</span>
                         <strong>{{ etat.salaire_base|intcomma }} GNF</strong>
                     </div>
+                    {% if etat.avances %}
+                    <div class="alert alert-warning d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-hand-holding-usd me-1"></i>Avances déjà rattachées à cette période</span>
+                        <strong>-{{ etat.avances|intcomma }} GNF</strong>
+                    </div>
+                    {% endif %}
 
                     <form method="post" novalidate>
                         {% csrf_token %}

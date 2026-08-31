@@ -9,16 +9,25 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from eleves.models import Classe, Ecole
+from synchronisation.engine import queryset_for_ecole, serialize_instance
+from synchronisation.registry import SYNC_MODEL_SET
 
-from .forms import EnseignantForm, EtatSalaireAjustementForm, PresenceForm
+from .forms import (
+    AvanceSalaireForm,
+    EnseignantForm,
+    EtatSalaireAjustementForm,
+    PresenceForm,
+)
 from .models import (
     AffectationClasse,
+    AvanceSalaire,
     Enseignant,
     EtatSalaire,
     PeriodeSalaire,
     PresenceEnseignant,
     SaisieHeuresMensuelles,
     SourceHeuresSalaire,
+    StatutAvanceSalaire,
     TypeEnseignant,
 )
 from .services import calculer_etat_salaire as calculer_etat_salaire_reel
@@ -130,6 +139,170 @@ class MoteurPaieTests(TestCase):
             calcule_par=self.user,
         )
         self.assertEqual(etat.salaire_net, Decimal('1075000.00'))
+
+    def test_avance_est_deduite_automatiquement_du_salaire(self):
+        enseignant = self.creer_fixe()
+        AvanceSalaire.objects.create(
+            enseignant=enseignant,
+            periode=self.periode,
+            date_avance=date(2026, 7, 10),
+            montant=Decimal('200000'),
+            reference='REC-AV-001',
+            cree_par=self.user,
+        )
+
+        self.calculer()
+
+        etat = EtatSalaire.objects.get(
+            enseignant=enseignant,
+            periode=self.periode,
+        )
+        self.assertEqual(etat.salaire_base, Decimal('1000000.00'))
+        self.assertEqual(etat.avances, Decimal('200000.00'))
+        self.assertEqual(etat.salaire_net, Decimal('800000.00'))
+
+    def test_ajout_avance_recalcule_immediatement_un_brouillon(self):
+        enseignant = self.creer_fixe()
+        self.calculer()
+
+        response = self.client.post(
+            reverse('salaires:avances_salaire'),
+            {
+                'enseignant': enseignant.id,
+                'periode': self.periode.id,
+                'date_avance': '2026-07-12',
+                'montant': '150000',
+                'reference': 'REC-AV-002',
+                'motif': 'Besoin familial',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        avance = AvanceSalaire.objects.get(reference='REC-AV-002')
+        etat = EtatSalaire.objects.get(
+            enseignant=enseignant,
+            periode=self.periode,
+        )
+        self.assertEqual(avance.statut, StatutAvanceSalaire.EN_ATTENTE)
+        self.assertEqual(etat.avances, Decimal('150000.00'))
+        self.assertEqual(etat.salaire_net, Decimal('850000.00'))
+
+    def test_validation_fixe_les_avances_deduites(self):
+        enseignant = self.creer_fixe()
+        avance = AvanceSalaire.objects.create(
+            enseignant=enseignant,
+            periode=self.periode,
+            date_avance=date(2026, 7, 10),
+            montant=Decimal('125000'),
+            cree_par=self.user,
+        )
+        self.calculer()
+        etat = EtatSalaire.objects.get(
+            enseignant=enseignant,
+            periode=self.periode,
+        )
+
+        response = self.client.post(
+            reverse('salaires:valider_etat_salaire', args=[etat.id])
+        )
+
+        self.assertEqual(response.status_code, 302)
+        etat.refresh_from_db()
+        avance.refresh_from_db()
+        self.assertTrue(etat.valide)
+        self.assertEqual(etat.avances, Decimal('125000.00'))
+        self.assertEqual(avance.statut, StatutAvanceSalaire.DEDUITE)
+        self.assertEqual(avance.etat_salaire, etat)
+        self.assertFalse(avance.peut_etre_modifiee)
+
+    def test_annulation_conserve_avance_et_recalcule_le_brouillon(self):
+        enseignant = self.creer_fixe()
+        avance = AvanceSalaire.objects.create(
+            enseignant=enseignant,
+            periode=self.periode,
+            date_avance=date(2026, 7, 10),
+            montant=Decimal('100000'),
+            cree_par=self.user,
+        )
+        self.calculer()
+
+        response = self.client.post(
+            reverse('salaires:annuler_avance_salaire', args=[avance.id]),
+            {'motif_annulation': 'Montant saisi par erreur'},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        avance.refresh_from_db()
+        etat = EtatSalaire.objects.get(
+            enseignant=enseignant,
+            periode=self.periode,
+        )
+        self.assertEqual(AvanceSalaire.objects.count(), 1)
+        self.assertEqual(avance.statut, StatutAvanceSalaire.ANNULEE)
+        self.assertEqual(avance.motif_annulation, 'Montant saisi par erreur')
+        self.assertEqual(etat.avances, Decimal('0.00'))
+        self.assertEqual(etat.salaire_net, Decimal('1000000.00'))
+
+    def test_formulaire_refuse_des_avances_superieures_au_salaire(self):
+        enseignant = self.creer_fixe()
+        self.calculer()
+        form = AvanceSalaireForm(
+            data={
+                'enseignant': enseignant.id,
+                'periode': self.periode.id,
+                'date_avance': '2026-07-10',
+                'montant': '1000001',
+                'reference': '',
+                'motif': '',
+            },
+            user=self.user,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn('montant', form.errors)
+
+    def test_ecran_gestion_avances_est_accessible(self):
+        enseignant = self.creer_fixe()
+        AvanceSalaire.objects.create(
+            enseignant=enseignant,
+            periode=self.periode,
+            date_avance=date(2026, 7, 10),
+            montant=Decimal('50000'),
+            reference='REC-ECRAN-001',
+            cree_par=self.user,
+        )
+
+        response = self.client.get(reverse('salaires:avances_salaire'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Avances sur salaire')
+        self.assertContains(response, 'REC-ECRAN-001')
+        self.assertContains(response, enseignant.nom_complet)
+
+    def test_avance_est_incluse_dans_la_synchronisation_de_lecole(self):
+        enseignant = self.creer_fixe()
+        avance = AvanceSalaire.objects.create(
+            enseignant=enseignant,
+            periode=self.periode,
+            date_avance=date(2026, 7, 10),
+            montant=Decimal('75000'),
+            reference='REC-SYNC-001',
+            cree_par=self.user,
+        )
+
+        self.assertIn('salaires.AvanceSalaire', SYNC_MODEL_SET)
+        self.assertTrue(
+            queryset_for_ecole(AvanceSalaire, self.ecole).filter(
+                pk=avance.pk
+            ).exists()
+        )
+        payload = serialize_instance(avance, include_files=False)
+        self.assertEqual(payload['montant'], '75000')
+        self.assertEqual(payload['reference'], 'REC-SYNC-001')
+        self.assertEqual(
+            payload['enseignant']['sync_uuid'],
+            str(enseignant.sync_uuid),
+        )
 
     def test_salaire_horaire_utilise_le_pointage_reel(self):
         enseignant = self.creer_secondaire()

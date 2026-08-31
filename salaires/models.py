@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
+from django.utils import timezone
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime
 from eleves.models import Classe, Ecole
@@ -30,6 +31,14 @@ class StatutEnseignant(models.TextChoices):
     CONGE = 'CONGE', 'En congé'
     SUSPENDU = 'SUSPENDU', 'Suspendu'
     DEMISSIONNAIRE = 'DEMISSIONNAIRE', 'Démissionnaire'
+
+
+class StatutAvanceSalaire(models.TextChoices):
+    """Cycle de vie d'une avance sans suppression définitive."""
+
+    EN_ATTENTE = 'EN_ATTENTE', 'À déduire'
+    DEDUITE = 'DEDUITE', 'Déduite du salaire'
+    ANNULEE = 'ANNULEE', 'Annulée'
 
 
 class Enseignant(SyncTrackedModel):
@@ -486,6 +495,14 @@ class EtatSalaire(SyncTrackedModel):
         verbose_name="Déductions",
         validators=[MinValueValidator(Decimal('0'))],
     )
+    avances = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0'),
+        verbose_name="Avances sur salaire",
+        help_text="Total des avances rattachées à cette période et déduites du salaire net",
+        validators=[MinValueValidator(Decimal('0'))],
+    )
     salaire_net = models.DecimalField(
         max_digits=12, 
         decimal_places=2,
@@ -544,11 +561,13 @@ class EtatSalaire(SyncTrackedModel):
         salaire_base = self.salaire_base or Decimal('0')
         primes = self.primes or Decimal('0')
         deductions = self.deductions or Decimal('0')
+        avances = self.avances or Decimal('0')
         errors = {}
 
-        if deductions > salaire_base + primes:
+        if deductions + avances > salaire_base + primes:
             errors['deductions'] = (
-                'Les retenues ne peuvent pas dépasser le salaire de base et les primes.'
+                'Le total des retenues et des avances ne peut pas dépasser '
+                'le salaire de base et les primes.'
             )
 
         if (
@@ -568,7 +587,8 @@ class EtatSalaire(SyncTrackedModel):
         salaire_base = self.salaire_base or Decimal('0')
         primes = self.primes or Decimal('0')
         deductions = self.deductions or Decimal('0')
-        self.salaire_net = (salaire_base + primes - deductions).quantize(
+        avances = self.avances or Decimal('0')
+        self.salaire_net = (salaire_base + primes - deductions - avances).quantize(
             Decimal('0.01'), rounding=ROUND_HALF_UP
         )
         self.full_clean()
@@ -598,6 +618,144 @@ class EtatSalaire(SyncTrackedModel):
     def peut_etre_paye(self):
         """Vérifie si l'état de salaire peut être marqué comme payé"""
         return self.valide and not self.paye
+
+
+class AvanceSalaire(SyncTrackedModel):
+    """Somme versée avant la paie et récupérée sur une période donnée.
+
+    Une avance n'est jamais supprimée depuis l'interface. Elle reste soit à
+    déduire, soit liée à l'état de salaire validé, soit annulée avec son motif.
+    """
+
+    enseignant = models.ForeignKey(
+        Enseignant,
+        on_delete=models.CASCADE,
+        related_name='avances_salaire',
+        verbose_name="Enseignant",
+    )
+    periode = models.ForeignKey(
+        PeriodeSalaire,
+        on_delete=models.CASCADE,
+        related_name='avances_salaire',
+        verbose_name="Période de déduction",
+    )
+    etat_salaire = models.ForeignKey(
+        EtatSalaire,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='avances_deduites',
+        verbose_name="État de salaire",
+    )
+    date_avance = models.DateField(
+        default=timezone.localdate,
+        verbose_name="Date de l'avance",
+    )
+    montant = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        verbose_name="Montant de l'avance (GNF)",
+        validators=[MinValueValidator(Decimal('0.01'))],
+    )
+    reference = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Référence / reçu",
+    )
+    motif = models.TextField(blank=True, verbose_name="Motif / observations")
+    statut = models.CharField(
+        max_length=16,
+        choices=StatutAvanceSalaire.choices,
+        default=StatutAvanceSalaire.EN_ATTENTE,
+        verbose_name="Statut",
+    )
+    motif_annulation = models.TextField(
+        blank=True,
+        verbose_name="Motif de l'annulation",
+    )
+    cree_par = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='avances_salaire_creees',
+        verbose_name="Créée par",
+    )
+    annulee_par = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='avances_salaire_annulees',
+        verbose_name="Annulée par",
+    )
+    date_creation = models.DateTimeField(auto_now_add=True)
+    date_modification = models.DateTimeField(auto_now=True)
+    date_annulation = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Avance sur salaire"
+        verbose_name_plural = "Avances sur salaire"
+        ordering = ['-date_avance', '-date_creation']
+        indexes = [
+            models.Index(
+                fields=['enseignant', 'periode', 'statut'],
+                name='sal_av_ens_per_stat_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.enseignant.nom_complet} - {self.montant:,.0f} GNF "
+            f"({self.periode.nom_periode})"
+        )
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if (
+            self.enseignant_id
+            and self.periode_id
+            and self.enseignant.ecole_id != self.periode.ecole_id
+        ):
+            errors['enseignant'] = (
+                "L'enseignant et la période doivent appartenir à la même école."
+            )
+        if self.statut == StatutAvanceSalaire.DEDUITE:
+            if not self.etat_salaire_id:
+                errors['etat_salaire'] = (
+                    "Une avance déduite doit être liée à un état de salaire."
+                )
+            elif (
+                self.etat_salaire.enseignant_id != self.enseignant_id
+                or self.etat_salaire.periode_id != self.periode_id
+            ):
+                errors['etat_salaire'] = (
+                    "L'état de salaire doit correspondre à l'enseignant et à la période."
+                )
+        if self.statut == StatutAvanceSalaire.ANNULEE and not self.motif_annulation.strip():
+            errors['motif_annulation'] = "Le motif de l'annulation est obligatoire."
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    @property
+    def peut_etre_modifiee(self):
+        etat = EtatSalaire.objects.filter(
+            enseignant_id=self.enseignant_id,
+            periode_id=self.periode_id,
+        ).only('valide', 'paye').first()
+        return (
+            self.statut == StatutAvanceSalaire.EN_ATTENTE
+            and not self.periode.cloturee
+            and not (etat and (etat.valide or etat.paye))
+        )
+
+    @property
+    def peut_etre_annulee(self):
+        return self.peut_etre_modifiee
 
 
 class PresenceEnseignant(SyncTrackedModel):

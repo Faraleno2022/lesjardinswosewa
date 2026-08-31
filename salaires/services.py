@@ -13,12 +13,14 @@ from django.db import transaction
 from django.db.models import Q, Sum
 
 from .models import (
+    AvanceSalaire,
     DetailHeuresClasse,
     Enseignant,
     EtatSalaire,
     PeriodeSalaire,
     SaisieHeuresMensuelles,
     SourceHeuresSalaire,
+    StatutAvanceSalaire,
 )
 
 
@@ -160,6 +162,32 @@ def salaire_fixe_proratise(enseignant, periode):
     )
 
 
+def total_avances_a_deduire(enseignant, periode):
+    """Total des avances actives à récupérer sur la période."""
+    total = AvanceSalaire.objects.filter(
+        enseignant=enseignant,
+        periode=periode,
+        statut=StatutAvanceSalaire.EN_ATTENTE,
+    ).aggregate(total=Sum('montant'))['total']
+    return arrondir_montant(total)
+
+
+@transaction.atomic
+def actualiser_avances_etat(enseignant, periode):
+    """Répercute immédiatement les avances sur un état encore modifiable."""
+    etat = EtatSalaire.objects.select_for_update().filter(
+        enseignant=enseignant,
+        periode=periode,
+        valide=False,
+        paye=False,
+    ).first()
+    if etat is None:
+        return None
+    etat.avances = total_avances_a_deduire(enseignant, periode)
+    etat.save()
+    return etat
+
+
 @transaction.atomic
 def calculer_etat_salaire(enseignant, periode, utilisateur):
     """Crée ou recalcule un état non validé et retourne ``(etat, modifie)``."""
@@ -170,6 +198,7 @@ def calculer_etat_salaire(enseignant, periode, utilisateur):
             'calcule_par': utilisateur,
             'salaire_base': Decimal('0'),
             'salaire_net': Decimal('0'),
+            'avances': Decimal('0'),
         },
     )
 
@@ -177,6 +206,7 @@ def calculer_etat_salaire(enseignant, periode, utilisateur):
         return etat, False
 
     etat.details_heures.all().delete()
+    etat.avances = total_avances_a_deduire(enseignant, periode)
 
     if enseignant.est_taux_horaire:
         total_heures, source_heures = heures_payables_et_source(
