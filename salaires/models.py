@@ -357,8 +357,8 @@ class PeriodeSalaire(SyncTrackedModel):
 class SaisieHeuresMensuelles(SyncTrackedModel):
     """Heures réelles saisies globalement pour un enseignant et une période.
 
-    Une ligne remplace explicitement la somme des pointages du mois. Une
-    valeur égale à zéro signifie donc bien qu'aucune heure n'est payable.
+    Cette saisie sert de solution de repli lorsqu'aucune heure n'a été
+    enregistrée dans les pointages journaliers de la période.
     """
 
     enseignant = models.ForeignKey(
@@ -454,7 +454,8 @@ class EtatSalaire(SyncTrackedModel):
         null=True, 
         blank=True,
         verbose_name="Total heures",
-        help_text="Total des heures enseignées dans le mois"
+        help_text="Total des heures enseignées dans le mois",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     taux_horaire_applique = models.DecimalField(
         max_digits=10,
@@ -472,6 +473,11 @@ class EtatSalaire(SyncTrackedModel):
         blank=True,
         verbose_name="Source du calcul",
         help_text="Origine des heures ou du montant utilisé pour calculer le salaire",
+    )
+    nombre_jours_presence = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Nombre de jours de présence",
+        help_text="Nombre de jours pointés présent ou en retard pendant la période",
     )
     
     # Montants

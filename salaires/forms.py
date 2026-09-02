@@ -178,11 +178,13 @@ class HeuresMensuellesPeriodeForm(forms.Form):
         enseignants,
         initiales=None,
         verrouilles=None,
+        pointes=None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         initiales = initiales or {}
         verrouilles = set(verrouilles or ())
+        pointes = set(pointes or ())
         for enseignant in enseignants:
             nom_champ = f'heures_{enseignant.pk}'
             self.fields[nom_champ] = forms.DecimalField(
@@ -193,7 +195,9 @@ class HeuresMensuellesPeriodeForm(forms.Form):
                 decimal_places=2,
                 label=f'Heures de {enseignant.nom_complet}',
                 help_text=(
-                    'Laisser vide pour calculer depuis les pointages journaliers.'
+                    'Les pointages journaliers sont prioritaires.'
+                    if enseignant.pk in pointes
+                    else "À utiliser uniquement si aucune heure n'a été pointée."
                 ),
                 widget=forms.NumberInput(attrs={
                     'class': 'form-control form-control-sm',
@@ -203,7 +207,9 @@ class HeuresMensuellesPeriodeForm(forms.Form):
                     'placeholder': 'Pointages',
                 }),
                 initial=initiales.get(enseignant.pk),
-                disabled=enseignant.pk in verrouilles,
+                disabled=(
+                    enseignant.pk in verrouilles or enseignant.pk in pointes
+                ),
             )
 
 class AffectationClasseForm(forms.ModelForm):
@@ -376,12 +382,24 @@ class PresenceForm(forms.ModelForm):
 
 
 class EtatSalaireAjustementForm(forms.ModelForm):
-    """Modification contrôlée des primes et retenues avant validation."""
+    """Modification contrôlée du calcul avant validation définitive."""
 
     class Meta:
         model = EtatSalaire
-        fields = ['primes', 'deductions', 'observations']
+        fields = [
+            'salaire_base', 'total_heures', 'taux_horaire_applique',
+            'primes', 'deductions', 'observations',
+        ]
         widgets = {
+            'salaire_base': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '0', 'step': '0.01'
+            }),
+            'total_heures': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '0', 'max': '744', 'step': '0.25'
+            }),
+            'taux_horaire_applique': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '0', 'step': '0.01'
+            }),
             'primes': forms.NumberInput(attrs={
                 'class': 'form-control', 'min': '0', 'step': '0.01'
             }),
@@ -394,11 +412,41 @@ class EtatSalaireAjustementForm(forms.ModelForm):
             }),
         }
 
+    def __init__(self, *args, heures_pointage=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.heures_pointage = Decimal(heures_pointage or 0)
+
+        if self.instance.enseignant.est_taux_horaire:
+            self.fields.pop('salaire_base')
+            self.fields['total_heures'].required = True
+            self.fields['taux_horaire_applique'].required = True
+            if self.heures_pointage > 0:
+                self.fields['total_heures'].disabled = True
+                self.fields['total_heures'].help_text = (
+                    'Valeur calculée automatiquement depuis les pointages journaliers.'
+                )
+            else:
+                self.fields['total_heures'].help_text = (
+                    "Saisie manuelle autorisée car aucune heure n'a été pointée."
+                )
+        else:
+            self.fields.pop('total_heures')
+            self.fields.pop('taux_horaire_applique')
+            self.fields['salaire_base'].required = True
+
     def clean(self):
         cleaned_data = super().clean()
         primes = cleaned_data.get('primes') or 0
         deductions = cleaned_data.get('deductions') or 0
-        salaire_base = self.instance.salaire_base or 0
+        if self.instance.enseignant.est_taux_horaire:
+            heures = cleaned_data.get('total_heures')
+            taux = cleaned_data.get('taux_horaire_applique')
+            if heures is None or taux is None:
+                salaire_base = Decimal('0')
+            else:
+                salaire_base = heures * taux
+        else:
+            salaire_base = cleaned_data.get('salaire_base') or Decimal('0')
 
         avances = self.instance.avances or 0
         if deductions + avances > salaire_base + primes:

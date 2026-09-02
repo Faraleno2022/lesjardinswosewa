@@ -16,10 +16,10 @@
     </div>
 
     <div class="alert alert-info">
-        <strong>Deux modes de calcul sont disponibles.</strong>
-        Laissez la saisie globale vide pour utiliser automatiquement la somme des pointages
-        arrivée/départ. Si vous entrez un total mensuel, ce total remplace les pointages pour
-        cette période. Le salaire est recalculé dès l'enregistrement.
+        <strong>Les pointages journaliers sont prioritaires.</strong>
+        Le système additionne automatiquement les heures d'arrivée et de départ.
+        La saisie mensuelle est disponible uniquement lorsqu'aucune heure n'a été pointée
+        pour l'enseignant pendant cette période.
     </div>
 
     <form method="post" novalidate>
@@ -62,13 +62,21 @@
                                 {% for error in ligne.champ.errors %}
                                 <div class="text-danger small">{{ error }}</div>
                                 {% endfor %}
-                                <div class="form-text">Vide = utiliser les pointages</div>
+                                <div class="form-text">
+                                    {% if ligne.pointage_prioritaire %}
+                                    Désactivé : les pointages journaliers déterminent le salaire.
+                                    {% else %}
+                                    À renseigner seulement en l'absence de pointage.
+                                    {% endif %}
+                                </div>
                             </td>
                             <td>
-                                {% if ligne.saisie_globale %}
+                                {% if ligne.pointage_prioritaire %}
+                                <span class="badge bg-info text-dark">Pointages arrivée / départ</span>
+                                {% elif ligne.saisie_globale %}
                                 <span class="badge bg-warning text-dark">Saisie mensuelle globale</span>
                                 {% else %}
-                                <span class="badge bg-info text-dark">Pointages arrivée / départ</span>
+                                <span class="badge bg-secondary">Aucune heure enregistrée</span>
                                 {% endif %}
                             </td>
                             <td class="text-end fw-bold text-primary">

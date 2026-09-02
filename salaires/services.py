@@ -66,22 +66,37 @@ def heures_reellement_travaillees(enseignant, periode):
     return arrondir_heures(total)
 
 
+def nombre_jours_presence(enseignant, periode):
+    """Compte les jours de présence effective, quel que soit le mode de paie."""
+    premier_jour, dernier_jour = bornes_periode(periode)
+    return (
+        enseignant.presences.filter(
+            date__range=(premier_jour, dernier_jour),
+            statut__in=('PRESENT', 'RETARD'),
+        )
+        .values('date')
+        .distinct()
+        .count()
+    )
+
+
 def heures_payables_et_source(enseignant, periode):
     """Retourne les heures à payer et leur source explicite.
 
-    Une saisie mensuelle globale, même égale à zéro, remplace les pointages du
-    mois. En son absence, les heures journalières restent la source de vérité.
+    Les heures des pointages journaliers sont toujours prioritaires. La saisie
+    mensuelle globale ne sert que lorsqu'aucune heure n'a été pointée.
     """
+    heures_pointage = heures_reellement_travaillees(enseignant, periode)
+    if heures_pointage > 0:
+        return heures_pointage, SourceHeuresSalaire.POINTAGE
+
     saisie = SaisieHeuresMensuelles.objects.filter(
         enseignant=enseignant,
         periode=periode,
     ).first()
     if saisie is not None:
         return arrondir_heures(saisie.heures), SourceHeuresSalaire.SAISIE_MENSUELLE
-    return (
-        heures_reellement_travaillees(enseignant, periode),
-        SourceHeuresSalaire.POINTAGE,
-    )
+    return heures_pointage, SourceHeuresSalaire.POINTAGE
 
 
 def affectations_de_la_periode(enseignant, periode):
@@ -149,6 +164,37 @@ def repartir_heures(total_heures, lignes_prevues):
     return repartition
 
 
+def synchroniser_details_heures(etat):
+    """Met à jour la ventilation d'un état horaire sans effacer son historique."""
+    lignes_prevues = heures_prevues_par_affectation(etat.enseignant, etat.periode)
+    repartition = repartir_heures(etat.total_heures or 0, lignes_prevues)
+    affectations_courantes = set()
+
+    for affectation, heures_prevues, heures_realisees in repartition:
+        affectations_courantes.add(affectation.pk)
+        DetailHeuresClasse.objects.update_or_create(
+            etat_salaire=etat,
+            affectation_classe=affectation,
+            defaults={
+                'heures_prevues': heures_prevues,
+                'heures_realisees': heures_realisees,
+                'taux_horaire_applique': etat.taux_horaire_applique or Decimal('0'),
+            },
+        )
+
+    # Les anciennes ventilations sont conservées pour l'audit, mais neutralisées.
+    anciens_details = etat.details_heures.all()
+    if affectations_courantes:
+        anciens_details = anciens_details.exclude(
+            affectation_classe_id__in=affectations_courantes
+        )
+    for detail in anciens_details:
+        detail.heures_prevues = Decimal('0')
+        detail.heures_realisees = Decimal('0')
+        detail.taux_horaire_applique = etat.taux_horaire_applique or Decimal('0')
+        detail.save()
+
+
 def salaire_fixe_proratise(enseignant, periode):
     premier_jour, dernier_jour = bornes_periode(periode)
     if enseignant.date_embauche > dernier_jour:
@@ -205,8 +251,8 @@ def calculer_etat_salaire(enseignant, periode, utilisateur):
     if etat.valide:
         return etat, False
 
-    etat.details_heures.all().delete()
     etat.avances = total_avances_a_deduire(enseignant, periode)
+    etat.nombre_jours_presence = nombre_jours_presence(enseignant, periode)
 
     if enseignant.est_taux_horaire:
         total_heures, source_heures = heures_payables_et_source(
@@ -220,17 +266,7 @@ def calculer_etat_salaire(enseignant, periode, utilisateur):
         etat.calcule_par = utilisateur
         etat.save()
 
-        lignes_prevues = heures_prevues_par_affectation(enseignant, periode)
-        for affectation, heures_prevues, heures_realisees in repartir_heures(
-            total_heures, lignes_prevues
-        ):
-            DetailHeuresClasse.objects.create(
-                etat_salaire=etat,
-                affectation_classe=affectation,
-                heures_prevues=heures_prevues,
-                heures_realisees=heures_realisees,
-                taux_horaire_applique=taux_horaire,
-            )
+        synchroniser_details_heures(etat)
     else:
         etat.total_heures = None
         etat.taux_horaire_applique = None

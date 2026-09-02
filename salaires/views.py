@@ -24,7 +24,7 @@ from reportlab.lib.units import cm
 from .models import (
     Enseignant, AffectationClasse, AvanceSalaire, PeriodeSalaire,
     EtatSalaire, DetailHeuresClasse, TypeEnseignant, PresenceEnseignant,
-    SaisieHeuresMensuelles, StatutAvanceSalaire,
+    SaisieHeuresMensuelles, SourceHeuresSalaire, StatutAvanceSalaire,
 )
 from .forms import (
     AffectationClasseForm,
@@ -40,7 +40,9 @@ from .services import (
     calculer_etat_salaire,
     enseignants_eligibles,
     heures_reellement_travaillees,
+    nombre_jours_presence,
     preparer_etats_salaire_periode,
+    synchroniser_details_heures,
 )
 from eleves.models import Ecole, Classe
 from utilisateurs.utils import user_is_admin, user_school
@@ -1220,11 +1222,21 @@ def saisir_heures_mensuelles(request, periode_id):
         for enseignant_id, etat in etats.items()
         if etat.valide or etat.paye
     }
+    heures_pointage_par_enseignant = {
+        enseignant.pk: heures_reellement_travaillees(enseignant, periode)
+        for enseignant in enseignants
+    }
+    pointes = {
+        enseignant_id
+        for enseignant_id, heures in heures_pointage_par_enseignant.items()
+        if heures > 0
+    }
     form = HeuresMensuellesPeriodeForm(
         request.POST or None,
         enseignants=enseignants,
         initiales=initiales,
         verrouilles=verrouilles,
+        pointes=pointes,
     )
 
     if request.method == 'POST' and form.is_valid():
@@ -1240,6 +1252,12 @@ def saisir_heures_mensuelles(request, periode_id):
             calculs_effectues = 0
             for enseignant in enseignants:
                 if enseignant.pk in verrouilles:
+                    continue
+                if enseignant.pk in pointes:
+                    _, modifie = calculer_etat_salaire(
+                        enseignant, periode_verrouillee, request.user
+                    )
+                    calculs_effectues += int(modifie)
                     continue
                 heures = form.cleaned_data[f'heures_{enseignant.pk}']
                 if heures is None:
@@ -1276,8 +1294,12 @@ def saisir_heures_mensuelles(request, periode_id):
     for enseignant in enseignants:
         saisie = saisies.get(enseignant.pk)
         etat = etats.get(enseignant.pk)
-        heures_pointage = heures_reellement_travaillees(enseignant, periode)
-        heures_calcul = saisie.heures if saisie is not None else heures_pointage
+        heures_pointage = heures_pointage_par_enseignant[enseignant.pk]
+        heures_calcul = (
+            heures_pointage
+            if heures_pointage > 0
+            else (saisie.heures if saisie is not None else heures_pointage)
+        )
         lignes.append({
             'enseignant': enseignant,
             'champ': form[f'heures_{enseignant.pk}'],
@@ -1286,7 +1308,8 @@ def saisir_heures_mensuelles(request, periode_id):
             'salaire_calcule': heures_calcul * (enseignant.taux_horaire or Decimal('0')),
             'etat': etat,
             'verrouille': enseignant.pk in verrouilles,
-            'saisie_globale': saisie is not None,
+            'saisie_globale': saisie is not None and heures_pointage <= 0,
+            'pointage_prioritaire': heures_pointage > 0,
         })
 
     return render(
@@ -1340,7 +1363,7 @@ def calculer_salaires(request, periode_id):
 @login_required
 @require_school_object(model=EtatSalaire, pk_kwarg='etat_id', field_path='periode__ecole')
 def ajuster_etat_salaire(request, etat_id):
-    """Modifier les primes, retenues et observations avant validation."""
+    """Modifier le calcul complet d'un état avant validation."""
     etat = get_object_or_404(
         EtatSalaire.objects.select_related('enseignant', 'periode'), id=etat_id
     )
@@ -1352,8 +1375,16 @@ def ajuster_etat_salaire(request, etat_id):
         )
         return redirect('salaires:etats_salaire')
 
+    heures_pointage = heures_reellement_travaillees(
+        etat.enseignant, etat.periode
+    )
+
     if request.method == 'POST':
-        form = EtatSalaireAjustementForm(request.POST, instance=etat)
+        form = EtatSalaireAjustementForm(
+            request.POST,
+            instance=etat,
+            heures_pointage=heures_pointage,
+        )
         if form.is_valid():
             with transaction.atomic():
                 etat_verrouille = EtatSalaire.objects.select_for_update().get(pk=etat.pk)
@@ -1361,23 +1392,63 @@ def ajuster_etat_salaire(request, etat_id):
                     messages.error(request, "Cet état ne peut plus être ajusté.")
                     return redirect('salaires:etats_salaire')
 
+                if etat_verrouille.enseignant.est_taux_horaire:
+                    heures_pointage_actuelles = heures_reellement_travaillees(
+                        etat_verrouille.enseignant, etat_verrouille.periode
+                    )
+                    if heures_pointage_actuelles > 0:
+                        total_heures = heures_pointage_actuelles
+                        source_heures = SourceHeuresSalaire.POINTAGE
+                    else:
+                        total_heures = form.cleaned_data['total_heures']
+                        source_heures = SourceHeuresSalaire.SAISIE_MENSUELLE
+                        SaisieHeuresMensuelles.objects.update_or_create(
+                            enseignant=etat_verrouille.enseignant,
+                            periode=etat_verrouille.periode,
+                            defaults={
+                                'heures': total_heures,
+                                'saisi_par': request.user,
+                            },
+                        )
+
+                    taux_horaire = form.cleaned_data['taux_horaire_applique']
+                    etat_verrouille.total_heures = total_heures
+                    etat_verrouille.taux_horaire_applique = taux_horaire
+                    etat_verrouille.source_heures = source_heures
+                    etat_verrouille.salaire_base = total_heures * taux_horaire
+                else:
+                    etat_verrouille.salaire_base = form.cleaned_data['salaire_base']
+
+                etat_verrouille.nombre_jours_presence = nombre_jours_presence(
+                    etat_verrouille.enseignant, etat_verrouille.periode
+                )
+                etat_verrouille.calcule_par = request.user
                 etat_verrouille.primes = form.cleaned_data['primes']
                 etat_verrouille.deductions = form.cleaned_data['deductions']
                 etat_verrouille.observations = form.cleaned_data['observations']
                 etat_verrouille.save()
+                if etat_verrouille.enseignant.est_taux_horaire:
+                    synchroniser_details_heures(etat_verrouille)
 
             messages.success(
                 request,
-                f"Primes et retenues de {etat.enseignant.nom_complet} mises à jour.",
+                f"Salaire de {etat.enseignant.nom_complet} mis à jour avant validation.",
             )
             return redirect('salaires:etats_salaire')
     else:
-        form = EtatSalaireAjustementForm(instance=etat)
+        form = EtatSalaireAjustementForm(
+            instance=etat,
+            heures_pointage=heures_pointage,
+        )
 
     return render(
         request,
         'salaires/ajuster_etat_salaire.html',
-        {'form': form, 'etat': etat},
+        {
+            'form': form,
+            'etat': etat,
+            'heures_pointage': heures_pointage,
+        },
     )
 
 
@@ -1422,6 +1493,9 @@ def valider_etat_salaire(request, etat_id):
             return redirect('salaires:etats_salaire')
 
         etat.avances = total_avances
+        etat.nombre_jours_presence = nombre_jours_presence(
+            etat.enseignant, etat.periode
+        )
         etat.valide = True
         etat.valide_par = request.user
         etat.date_validation = timezone.now()
@@ -1583,13 +1657,20 @@ def fiche_paie_pdf(request, etat_id):
     p.drawString(2*cm, y_pos, "DÉTAILS DU SALAIRE")
     
     # Tableau des montants
+    libelle_jours = (
+        'jour' if etat.nombre_jours_presence == 1 else 'jours'
+    )
     data = [
-        ['Élément', 'Montant (GNF)'],
+        ['Élément', 'Valeur'],
+        [
+            'Jours de présence',
+            f"{etat.nombre_jours_presence} {libelle_jours}",
+        ],
         ['Salaire de base', f"{etat.salaire_base:,.0f}".replace(',', ' ')],
     ]
     
-    if etat.total_heures:
-        data.append(['Heures travaillées', f"{etat.total_heures}h"])
+    if etat.total_heures is not None:
+        data.append(['Heures travaillées', f"{etat.total_heures} h"])
         data.append(['Taux horaire', f"{etat.taux_horaire_applique or 0:,.0f}".replace(',', ' ')])
     
     if etat.primes:
