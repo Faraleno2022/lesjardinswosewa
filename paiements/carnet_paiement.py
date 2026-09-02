@@ -22,6 +22,7 @@ from reportlab.platypus import (
 )
 
 from ecole_moderne.pdf_utils import draw_logo_watermark
+from ecole_moderne.branding import get_pdf_palette
 
 from .allocation import (
     allocate_amount_sequentially,
@@ -130,6 +131,7 @@ def construire_carnet_paiement_pdf(paiement):
     donnees = collecter_carnet_paiement(paiement)
     ecole = donnees['ecole']
     eleve = donnees['eleve']
+    palette = get_pdf_palette(ecole)
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -149,7 +151,7 @@ def construire_carnet_paiement_pdf(paiement):
         fontName='Helvetica-Bold',
         fontSize=17,
         leading=20,
-        textColor=colors.HexColor('#163B65'),
+        textColor=palette['primary'],
         alignment=TA_CENTER,
         spaceAfter=3,
     )
@@ -159,7 +161,7 @@ def construire_carnet_paiement_pdf(paiement):
         fontName='Helvetica',
         fontSize=8.5,
         leading=11,
-        textColor=colors.HexColor('#526579'),
+        textColor=palette['muted'],
         alignment=TA_CENTER,
     )
     libelle = ParagraphStyle(
@@ -167,7 +169,7 @@ def construire_carnet_paiement_pdf(paiement):
         parent=styles['Normal'],
         fontName='Helvetica-Bold',
         fontSize=8,
-        textColor=colors.HexColor('#526579'),
+        textColor=palette['muted'],
     )
     valeur = ParagraphStyle(
         'CarnetValeur',
@@ -175,7 +177,7 @@ def construire_carnet_paiement_pdf(paiement):
         fontName='Helvetica-Bold',
         fontSize=9.5,
         leading=12,
-        textColor=colors.HexColor('#172B3A'),
+        textColor=palette['text'],
     )
     cellule = ParagraphStyle(
         'CarnetCellule',
@@ -194,7 +196,7 @@ def construire_carnet_paiement_pdf(paiement):
         'CarnetCelluleEntete',
         parent=cellule_centre,
         fontName='Helvetica-Bold',
-        textColor=colors.white,
+        textColor=palette['header_text'],
     )
 
     elements = []
@@ -247,9 +249,9 @@ def construire_carnet_paiement_pdf(paiement):
          Paragraph('ANNÉE SCOLAIRE', libelle), Paragraph(donnees['annee_scolaire'] or '—', valeur)],
     ], colWidths=[2.3 * cm, 6.7 * cm, 2.8 * cm, 6.8 * cm])
     informations.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#EEF4FA')),
-        ('BOX', (0, 0), (-1, -1), 0.7, colors.HexColor('#AFC3D6')),
-        ('INNERGRID', (0, 0), (-1, -1), 0.35, colors.HexColor('#CEDAE5')),
+        ('BACKGROUND', (0, 0), (-1, -1), palette['table_light']),
+        ('BOX', (0, 0), (-1, -1), 0.7, palette['border']),
+        ('INNERGRID', (0, 0), (-1, -1), 0.35, palette['border']),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('TOPPADDING', (0, 0), (-1, -1), 7),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
@@ -270,9 +272,9 @@ def construire_carnet_paiement_pdf(paiement):
          Paragraph(montant_ou_tiret(donnees['reste_final']), valeur)],
     ], colWidths=[2.7 * cm, 6.3 * cm, 2.7 * cm, 6.9 * cm])
     resume.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F8FAFC')),
-        ('BOX', (0, 0), (-1, -1), 0.7, colors.HexColor('#9AAFC2')),
-        ('INNERGRID', (0, 0), (-1, -1), 0.35, colors.HexColor('#D5DEE7')),
+        ('BACKGROUND', (0, 0), (-1, -1), palette['surface']),
+        ('BOX', (0, 0), (-1, -1), 0.7, palette['border']),
+        ('INNERGRID', (0, 0), (-1, -1), 0.35, palette['border']),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('TOPPADDING', (0, 0), (-1, -1), 7),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
@@ -315,10 +317,10 @@ def construire_carnet_paiement_pdf(paiement):
         repeatRows=1,
     )
     style_tableau = [
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#163B65')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#6F879E')),
-        ('INNERGRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#AFC0CF')),
+        ('BACKGROUND', (0, 0), (-1, 0), palette['header']),
+        ('TEXTCOLOR', (0, 0), (-1, 0), palette['header_text']),
+        ('BOX', (0, 0), (-1, -1), 0.8, palette['border']),
+        ('INNERGRID', (0, 0), (-1, -1), 0.4, palette['border']),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('TOPPADDING', (0, 0), (-1, -1), 5),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
@@ -326,7 +328,7 @@ def construire_carnet_paiement_pdf(paiement):
     for index in range(1, len(tableau)):
         if index % 2 == 0:
             style_tableau.append(
-                ('BACKGROUND', (0, index), (-1, index), colors.HexColor('#F4F7FA'))
+                ('BACKGROUND', (0, index), (-1, index), palette['table_light'])
             )
     historique.setStyle(TableStyle(style_tableau))
     elements.extend([
@@ -345,9 +347,9 @@ def construire_carnet_paiement_pdf(paiement):
             draw_logo_watermark(pdf, A4[0], A4[1], ecole=ecole)
         except Exception:
             pass
-        pdf.setStrokeColor(colors.HexColor('#AFC0CF'))
+        pdf.setStrokeColor(palette['border'])
         pdf.line(1.2 * cm, 0.95 * cm, A4[0] - 1.2 * cm, 0.95 * cm)
-        pdf.setFillColor(colors.HexColor('#647789'))
+        pdf.setFillColor(palette['muted'])
         pdf.setFont('Helvetica', 7)
         pdf.drawString(
             1.2 * cm,

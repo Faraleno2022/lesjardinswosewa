@@ -2,6 +2,7 @@ import json
 import secrets
 
 from django.conf import settings
+from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
@@ -9,7 +10,7 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
 from .models import Ecole, Classe, Eleve, EleveCorbeille, GrilleTarifaire
 
 
@@ -25,7 +26,8 @@ INTERVALLE_SYNC_RAPIDE = 2
 class EcoleAdmin(admin.ModelAdmin):
     list_display = (
         "nom", "etat", "code_prefixe", "telephone", "email", "directeur",
-        "censeur", "created_by", "logo_mini", "configuration_offline",
+        "censeur", "created_by", "logo_mini", "apercu_charte",
+        "configuration_offline",
     )
     list_filter = ("etat",)
     search_fields = ("nom", "directeur", "censeur", "telephone", "email")
@@ -45,12 +47,51 @@ class EcoleAdmin(admin.ModelAdmin):
             "fields": ("logo", "logo_preview", "image", "image_preview"),
             "description": "Logo pour filigrane et en-tetes. Photo de l'ecole pour le livret scolaire."
         }),
+        ("Charte graphique", {
+            "fields": (
+                "couleur_primaire", "couleur_secondaire", "couleur_accent",
+                "couleur_succes", "couleur_avertissement", "couleur_danger",
+                "couleur_information", "couleur_fond_documents",
+                "couleur_texte_documents", "couleur_bordure_documents",
+            ),
+            "description": (
+                "Ces couleurs personnalisent les cartes de l'application, "
+                "les bulletins et les documents PDF de l'école."
+            ),
+        }),
         ("Version hors ligne", {
             "fields": ("configuration_offline",),
             "description": "Créez une connexion sécurisée propre à cette école pour chaque poste hors ligne."
         }),
     )
     actions = ("valider_ecoles", "rejeter_ecoles")
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        formfield = super().formfield_for_dbfield(db_field, request, **kwargs)
+        if db_field.name.startswith('couleur_') and formfield is not None:
+            formfield.widget = forms.TextInput(attrs={
+                'type': 'color',
+                'style': 'width: 7rem; height: 2.5rem; padding: .2rem;',
+            })
+        return formfield
+
+    @admin.display(description="Charte")
+    def apercu_charte(self, obj):
+        couleurs = (
+            obj.couleur_primaire,
+            obj.couleur_secondaire,
+            obj.couleur_accent,
+            obj.couleur_succes,
+            obj.couleur_avertissement,
+            obj.couleur_danger,
+        )
+        return format_html_join(
+            '',
+            '<span title="{}" style="display:inline-block;width:16px;'
+            'height:16px;border-radius:50%;background:{};margin-right:3px;'
+            'border:1px solid #999"></span>',
+            ((couleur, couleur) for couleur in couleurs),
+        )
 
     def get_urls(self):
         custom_urls = [

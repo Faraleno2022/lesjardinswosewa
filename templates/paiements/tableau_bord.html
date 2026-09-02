@@ -56,7 +56,7 @@
         padding: 25px;
         text-align: center;
         box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        border-top: 4px solid #007bff;
+        border-top: 4px solid var(--school-primary);
         margin-bottom: 20px;
         transition: transform 0.2s;
     }
@@ -66,7 +66,7 @@
     .stat-number {
         font-size: 1.8rem;
         font-weight: bold;
-        color: #007bff;
+        color: var(--school-primary);
         margin-bottom: 10px;
         line-height: 1.2;
     }
@@ -76,12 +76,12 @@
         text-transform: uppercase;
         letter-spacing: 1px;
     }
-    .stat-card.success { border-top-color: #28a745; }
-    .stat-card.success .stat-number { color: #28a745; }
-    .stat-card.warning { border-top-color: #ffc107; }
-    .stat-card.warning .stat-number { color: #ffc107; }
-    .stat-card.danger { border-top-color: #dc3545; }
-    .stat-card.danger .stat-number { color: #dc3545; }
+    .stat-card.success { border-top-color: var(--school-success); }
+    .stat-card.success .stat-number { color: var(--school-success); }
+    .stat-card.warning { border-top-color: var(--school-warning); }
+    .stat-card.warning .stat-number { color: var(--school-warning); }
+    .stat-card.danger { border-top-color: var(--school-danger); }
+    .stat-card.danger .stat-number { color: var(--school-danger); }
     
     .recent-payments {
         max-height: 400px;
@@ -89,16 +89,16 @@
     }
     
     .payment-item {
-        border-left: 4px solid #007bff;
+        border-left: 4px solid var(--school-primary);
         padding: 15px;
         margin-bottom: 10px;
         background: #f8f9fa;
         border-radius: 0 8px 8px 0;
     }
     
-    .payment-item.validated { border-left-color: #28a745; }
-    .payment-item.pending { border-left-color: #ffc107; }
-    .payment-item.rejected { border-left-color: #dc3545; }
+    .payment-item.validated { border-left-color: var(--school-success); }
+    .payment-item.pending { border-left-color: var(--school-warning); }
+    .payment-item.rejected { border-left-color: var(--school-danger); }
 
     .director-card {
         background: #ffffff;
@@ -135,8 +135,8 @@
     }
     .category-card-header {
         align-items: center;
-        background: #0d6efd;
-        color: #fff;
+        background: var(--school-primary);
+        color: var(--school-primary-text);
         display: flex;
         gap: 12px;
         padding: 16px 18px;
@@ -150,12 +150,12 @@
         justify-content: center;
         width: 38px;
     }
-    .category-card--info .category-card-header { background: #0b8fa8; }
-    .category-card--warning .category-card-header { background: #c78600; }
-    .category-card--success .category-card-header { background: #218838; }
-    .category-card--secondary .category-card-header { background: #5b6470; }
+    .category-card--info .category-card-header { background: var(--school-info); color: var(--school-info-text); }
+    .category-card--warning .category-card-header { background: var(--school-warning); color: var(--school-warning-text); }
+    .category-card--success .category-card-header { background: var(--school-success); color: var(--school-success-text); }
+    .category-card--secondary .category-card-header { background: var(--school-secondary); color: var(--school-secondary-text); }
     .category-period {
-        background: #f8fafc;
+        background: var(--school-surface);
         border: 1px solid #edf1f5;
         border-radius: 9px;
         height: 100%;
@@ -175,9 +175,9 @@
         margin-top: 4px;
     }
     .category-overdue {
-        background: #fff6f6;
+        background: var(--school-danger-light);
         border-top: 1px solid #f5d7d7;
-        color: #a92222;
+        color: var(--school-danger);
         padding: 13px 18px;
     }
 </style>

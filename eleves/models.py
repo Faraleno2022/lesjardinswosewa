@@ -5,6 +5,12 @@ from decimal import Decimal
 import unicodedata
 from synchronisation.mixins import SyncTrackedModel
 
+
+COULEUR_HEX_VALIDATOR = RegexValidator(
+    r'^#[0-9A-Fa-f]{6}$',
+    'Utilisez une couleur hexadécimale au format #RRGGBB.',
+)
+
 class Ecole(SyncTrackedModel):
     """Modèle pour représenter une école"""
     ETAT_CHOICES = [
@@ -41,6 +47,47 @@ class Ecole(SyncTrackedModel):
     image = models.ImageField(upload_to='ecoles/images/', blank=True, null=True,
                               verbose_name="Photo de l'ecole",
                               help_text="Photo du batiment de l'ecole (affichee sur le livret scolaire)")
+    couleur_primaire = models.CharField(
+        max_length=7, default='#163B65', validators=[COULEUR_HEX_VALIDATOR],
+        verbose_name="Couleur principale",
+        help_text="Navigation, titres, cartes principales et en-têtes de documents.",
+    )
+    couleur_secondaire = models.CharField(
+        max_length=7, default='#2F75B5', validators=[COULEUR_HEX_VALIDATOR],
+        verbose_name="Couleur secondaire",
+    )
+    couleur_accent = models.CharField(
+        max_length=7, default='#F2B134', validators=[COULEUR_HEX_VALIDATOR],
+        verbose_name="Couleur d'accent",
+    )
+    couleur_succes = models.CharField(
+        max_length=7, default='#198754', validators=[COULEUR_HEX_VALIDATOR],
+        verbose_name="Couleur succès",
+    )
+    couleur_avertissement = models.CharField(
+        max_length=7, default='#F59E0B', validators=[COULEUR_HEX_VALIDATOR],
+        verbose_name="Couleur avertissement",
+    )
+    couleur_danger = models.CharField(
+        max_length=7, default='#DC3545', validators=[COULEUR_HEX_VALIDATOR],
+        verbose_name="Couleur danger / retard",
+    )
+    couleur_information = models.CharField(
+        max_length=7, default='#0EA5E9', validators=[COULEUR_HEX_VALIDATOR],
+        verbose_name="Couleur information",
+    )
+    couleur_fond_documents = models.CharField(
+        max_length=7, default='#F5F8FB', validators=[COULEUR_HEX_VALIDATOR],
+        verbose_name="Fond clair des documents",
+    )
+    couleur_texte_documents = models.CharField(
+        max_length=7, default='#172B3A', validators=[COULEUR_HEX_VALIDATOR],
+        verbose_name="Texte principal des documents",
+    )
+    couleur_bordure_documents = models.CharField(
+        max_length=7, default='#AFC3D6', validators=[COULEUR_HEX_VALIDATOR],
+        verbose_name="Bordures des documents",
+    )
     # Préfixe explicite pour les matricules (ex: "AL-FUR/")
     code_prefixe = models.CharField(
         max_length=20,

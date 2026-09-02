@@ -1,9 +1,20 @@
+{% load branding %}
+{% school_document_branding ecole bulletin=True as palette %}
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <title>Fiche de Saisie des Notes - {{ classe.nom }}</title>
     <style>
+        :root {
+            --brand-primary: {{ palette.primary }};
+            --brand-header: {{ palette.header }};
+            --brand-header-text: {{ palette.header_text }};
+            --brand-table: {{ palette.table_light }};
+            --brand-text: {{ palette.text }};
+            --brand-border: {{ palette.border }};
+            --brand-danger: {{ palette.danger }};
+        }
         @page {
             size: A4 landscape;
             margin: 0.8cm;
@@ -52,7 +63,7 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 10px;
-            border-bottom: 2px solid #333;
+            border-bottom: 2px solid var(--brand-primary);
             padding-bottom: 5px;
         }
         
@@ -68,13 +79,13 @@
         
         .header-center h1 {
             font-size: 20px;
-            color: #1a5276;
+            color: var(--brand-primary);
             margin-bottom: 3px;
         }
         
         .header-center h2 {
             font-size: 15px;
-            color: #333;
+            color: var(--brand-text);
         }
         
         .header-right {
@@ -91,13 +102,13 @@
         
         .info-row span {
             padding: 2px 5px;
-            background: #f0f0f0;
+            background: var(--brand-table);
             border-radius: 3px;
         }
         
         .periode-title {
-            background: #1a5276;
-            color: white;
+            background: var(--brand-header);
+            color: var(--brand-header-text);
             padding: 5px 10px;
             font-size: 15px;
             font-weight: bold;
@@ -112,15 +123,15 @@
         }
         
         th, td {
-            border: 1px solid #333;
+            border: 1px solid var(--brand-border);
             padding: 5px 4px;
             text-align: center;
             font-size: 12px;
         }
         
         th {
-            background: #2c3e50;
-            color: white;
+            background: var(--brand-header);
+            color: var(--brand-header-text);
             font-weight: bold;
             font-size: 11px;
         }
@@ -154,7 +165,7 @@
         
         th.col-comp {
             width: 50px;
-            background: #e74c3c;
+            background: var(--brand-danger);
         }
         
         td.col-prenom, td.col-nom {
@@ -183,7 +194,7 @@
         }
         
         .signature-box {
-            border: 1px solid #333;
+            border: 1px solid var(--brand-border);
             padding: 5px;
             width: 200px;
             text-align: center;

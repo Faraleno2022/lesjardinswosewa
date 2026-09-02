@@ -12,7 +12,7 @@
     {# SEO : description par défaut, écrasable par les pages via le bloc meta_description #}
     <meta name="description" content="{% block meta_description %}{{ site.description }}{% endblock %}">
     <meta name="robots" content="{% block meta_robots %}index,follow{% endblock %}">
-    <meta name="theme-color" content="#0d6efd">
+    <meta name="theme-color" content="{{ school_branding.primary }}">
     <link rel="canonical" href="{% block canonical_url %}{{ request.build_absolute_uri }}{% endblock %}">
 
     {# Open Graph (Facebook, WhatsApp, LinkedIn, etc.) #}
@@ -84,7 +84,92 @@
     {% endif %}
 
     <style>
+        :root {
+            --school-primary: {{ school_branding.primary }};
+            --school-primary-dark: {{ school_branding.primary_dark }};
+            --school-primary-light: {{ school_branding.primary_light }};
+            --school-primary-text: {{ school_branding.primary_text }};
+            --school-primary-rgb: {{ school_branding.primary_rgb }};
+            --school-secondary: {{ school_branding.secondary }};
+            --school-secondary-light: {{ school_branding.secondary_light }};
+            --school-secondary-text: {{ school_branding.secondary_text }};
+            --school-accent: {{ school_branding.accent }};
+            --school-accent-light: {{ school_branding.accent_light }};
+            --school-success: {{ school_branding.success }};
+            --school-success-light: {{ school_branding.success_light }};
+            --school-success-text: {{ school_branding.success_text }};
+            --school-warning: {{ school_branding.warning }};
+            --school-warning-light: {{ school_branding.warning_light }};
+            --school-warning-text: {{ school_branding.warning_text }};
+            --school-danger: {{ school_branding.danger }};
+            --school-danger-light: {{ school_branding.danger_light }};
+            --school-danger-text: {{ school_branding.danger_text }};
+            --school-info: {{ school_branding.info }};
+            --school-info-light: {{ school_branding.info_light }};
+            --school-info-text: {{ school_branding.info_text }};
+            --school-surface: {{ school_branding.surface }};
+            --school-text: {{ school_branding.text }};
+            --school-border: {{ school_branding.border }};
+        }
         body { padding-top: 70px; }
+        .site-navbar.bg-primary {
+            --bs-navbar-color: var(--school-primary-text);
+            --bs-navbar-hover-color: var(--school-primary-text);
+            --bs-navbar-brand-color: var(--school-primary-text);
+            --bs-navbar-brand-hover-color: var(--school-primary-text);
+            background-color: var(--school-primary) !important;
+            color: var(--school-primary-text);
+        }
+        .btn-primary {
+            --bs-btn-bg: var(--school-primary);
+            --bs-btn-border-color: var(--school-primary);
+            --bs-btn-color: var(--school-primary-text);
+            --bs-btn-hover-bg: var(--school-primary-dark);
+            --bs-btn-hover-border-color: var(--school-primary-dark);
+            --bs-btn-hover-color: var(--school-primary-text);
+            --bs-btn-active-bg: var(--school-primary-dark);
+            --bs-btn-active-border-color: var(--school-primary-dark);
+            --bs-btn-active-color: var(--school-primary-text);
+        }
+        .btn-outline-primary {
+            --bs-btn-color: var(--school-primary);
+            --bs-btn-border-color: var(--school-primary);
+            --bs-btn-hover-bg: var(--school-primary);
+            --bs-btn-hover-border-color: var(--school-primary);
+            --bs-btn-hover-color: var(--school-primary-text);
+        }
+        .bg-primary { background-color: var(--school-primary) !important; }
+        .text-primary { color: var(--school-primary) !important; }
+        .border-primary { border-color: var(--school-primary) !important; }
+        .card-stats { border-left-color: var(--school-primary) !important; }
+        .card-stats.success { border-left-color: var(--school-success) !important; }
+        .card-stats.warning { border-left-color: var(--school-warning) !important; }
+        .card-stats.danger { border-left-color: var(--school-danger) !important; }
+        :is(.notes-card, .transport-card, .depenses-card, .stats-card, .stat-card).primary {
+            border-color: var(--school-primary) !important;
+        }
+        :is(.notes-card, .transport-card, .depenses-card, .stats-card, .stat-card).success {
+            border-color: var(--school-success) !important;
+        }
+        :is(.notes-card, .transport-card, .depenses-card, .stats-card, .stat-card).info {
+            border-color: var(--school-info) !important;
+        }
+        :is(.notes-card, .transport-card, .depenses-card, .stats-card, .stat-card).warning {
+            border-color: var(--school-warning) !important;
+        }
+        :is(.notes-card, .transport-card, .depenses-card, .stats-card, .stat-card).danger {
+            border-color: var(--school-danger) !important;
+        }
+        :is(.notes-card, .transport-card, .depenses-card).primary [class*="card-icon"] { color: var(--school-primary) !important; }
+        :is(.notes-card, .transport-card, .depenses-card).success [class*="card-icon"] { color: var(--school-success) !important; }
+        :is(.notes-card, .transport-card, .depenses-card).info [class*="card-icon"] { color: var(--school-info) !important; }
+        :is(.notes-card, .transport-card, .depenses-card).warning [class*="card-icon"] { color: var(--school-warning) !important; }
+        :is(.notes-card, .transport-card, .depenses-card).danger [class*="card-icon"] { color: var(--school-danger) !important; }
+        .rec-kpi--primary, .sal-kpi--primary { border-top-color: var(--school-primary) !important; }
+        .rec-kpi--success, .sal-kpi--success { border-top-color: var(--school-success) !important; }
+        .rec-kpi--warning, .sal-kpi--warning { border-top-color: var(--school-warning) !important; }
+        .rec-kpi--danger, .sal-kpi--danger { border-top-color: var(--school-danger) !important; }
+        .rec-kpi--info, .sal-kpi--info { border-top-color: var(--school-info) !important; }
         .navbar-brand {
             font-weight: bold;
             min-width: 0;

@@ -147,6 +147,8 @@ def emploi_du_temps_pdf(request):
 
     classe = get_object_or_404(ClasseNote, pk=request.GET.get('classe_id'))
     lignes, _ = _grille_edt(classe)
+    from ecole_moderne.branding import get_pdf_palette
+    palette = get_pdf_palette(classe.ecole, bulletin=True)
 
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(A4),
@@ -154,7 +156,7 @@ def emploi_du_temps_pdf(request):
                             leftMargin=1 * cm, rightMargin=1 * cm)
     styles = getSampleStyleSheet()
     titre = ParagraphStyle('T', parent=styles['Heading1'], fontSize=14,
-                           textColor=colors.HexColor('#007bff'), alignment=TA_CENTER)
+                           textColor=palette['primary'], alignment=TA_CENTER)
     cell_style = ParagraphStyle('C', parent=styles['Normal'], fontSize=7.5, alignment=TA_CENTER, leading=9)
 
     elements = [Paragraph(f"<b>{(classe.ecole.nom if classe.ecole else '').upper()}</b>", titre)]
@@ -185,11 +187,11 @@ def emploi_du_temps_pdf(request):
         colj = (page_w - col0) / len(JOURS)
         table = Table(data, colWidths=[col0] + [colj] * len(JOURS), repeatRows=1)
         table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#007bff')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('BACKGROUND', (0, 0), (-1, 0), palette['header']),
+            ('TEXTCOLOR', (0, 0), (-1, 0), palette['header_text']),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, -1), 8),
-            ('BACKGROUND', (0, 1), (0, -1), colors.HexColor('#eef3f8')),
+            ('BACKGROUND', (0, 1), (0, -1), palette['table_light']),
             ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),

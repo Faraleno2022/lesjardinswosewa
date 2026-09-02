@@ -49,6 +49,7 @@ from .calculs import (
 from .classifier import classify
 from utilisateurs.utils import filter_by_user_school, user_school
 from ecole_moderne.security_decorators import require_school_object
+from ecole_moderne.branding import get_pdf_palette
 
 
 class CalculateurBulletinIntelligent:
@@ -332,26 +333,26 @@ def generer_pdf_avec_filigrane(bulletin_data, logo_path=None, ecole=None):
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
     
-    # Couleurs du design (exactement comme le modèle)
-    BLEU_HEADER = colors.HexColor('#4a90d9')  # Bleu de l'en-tête du tableau
-    BLEU_CLAIR = colors.HexColor('#e8f4fd')   # Fond des infos élève
-    BLEU_APPRECIATION = colors.HexColor('#d6eaf8')  # Fond appréciation
-    VERT_MOY = colors.HexColor('#c8e6c9')     # Colonne MOY
-    ROUGE_PTS = colors.HexColor('#ffcdd2')    # Colonne PTS
+    palette = get_pdf_palette(ecole, bulletin=True)
+    BLEU_HEADER = palette['header']
+    BLEU_CLAIR = palette['primary_light']
+    BLEU_APPRECIATION = palette['secondary_light']
+    VERT_MOY = palette['success_light']
+    ROUGE_PTS = palette['danger_light']
     ROUGE_DRAPEAU = colors.HexColor('#CE1126')
     JAUNE_DRAPEAU = colors.HexColor('#FCD116')
     VERT_DRAPEAU = colors.HexColor('#009460')
-    GRIS_TOTAL = colors.HexColor('#37474f')   # Ligne total
+    GRIS_TOTAL = palette['text']
     
     # Couleurs des mentions
     MENTION_COLORS = {
-        'EXCELLENT': colors.HexColor('#1b5e20'),
-        'TRÈS BIEN': colors.HexColor('#2e7d32'),
-        'BIEN': colors.HexColor('#0277bd'),
-        'ASSEZ BIEN': colors.HexColor('#f9a825'),
-        'PASSABLE': colors.HexColor('#ef6c00'),
-        'INSUFFISANT': colors.HexColor('#c62828'),
-        'FAIBLE': colors.HexColor('#b71c1c'),
+        'EXCELLENT': palette.get('mention_tb', palette['success_dark']),
+        'TRÈS BIEN': palette.get('mention_tb', palette['success']),
+        'BIEN': palette.get('mention_bien', palette['secondary']),
+        'ASSEZ BIEN': palette.get('mention_ab', palette['warning']),
+        'PASSABLE': palette.get('mention_passable', palette['accent']),
+        'INSUFFISANT': palette.get('mention_insuffisant', palette['danger']),
+        'FAIBLE': palette['danger_dark'],
     }
     
     # ===== FILIGRANE (logo en transparence au centre) =====
@@ -877,7 +878,7 @@ def generer_pdf_avec_filigrane(bulletin_data, logo_path=None, ecole=None):
     style = [
         # En-tête bleu
         ('BACKGROUND', (0, 0), (-1, 0), BLEU_HEADER),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('TEXTCOLOR', (0, 0), (-1, 0), palette['header_text']),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), font_header),
         ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
@@ -1145,13 +1146,13 @@ def _dessiner_bulletin_maternelle(c, bulletin_data, width, height, y, ecole):
     from reportlab.lib.units import cm
     from reportlab.platypus import Table, TableStyle
     
-    # Couleurs
-    BLEU_HEADER = colors.HexColor('#4a90d9')
-    BLEU_CLAIR = colors.HexColor('#e8f4fd')
-    VERT_ACQUIS = colors.HexColor('#c8e6c9')
-    JAUNE_ENCOURS = colors.HexColor('#fff9c4')
-    ROUGE_NONACQUIS = colors.HexColor('#ffcdd2')
-    GRIS_TOTAL = colors.HexColor('#37474f')
+    palette = get_pdf_palette(ecole, bulletin=True)
+    BLEU_HEADER = palette['header']
+    BLEU_CLAIR = palette['primary_light']
+    VERT_ACQUIS = palette['success_light']
+    JAUNE_ENCOURS = palette['warning_light']
+    ROUGE_NONACQUIS = palette['danger_light']
+    GRIS_TOTAL = palette['text']
     
     table_total_width = width - 2.4*cm
     margin_left = 1.2*cm
@@ -1221,7 +1222,7 @@ def _dessiner_bulletin_maternelle(c, bulletin_data, width, height, y, ecole):
     style = [
         # En-tête
         ('BACKGROUND', (0, 0), (-1, 0), BLEU_HEADER),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('TEXTCOLOR', (0, 0), (-1, 0), palette['header_text']),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 10),
         ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
@@ -1906,25 +1907,25 @@ def _dessiner_bulletin_page(c, bulletin_data, logo_path, ecole, logo_reader=None
     """Dessine un bulletin sur la page courante du canvas - fonction interne optimisée"""
     width, height = A4
     
-    # Couleurs du design (constantes)
-    BLEU_HEADER = colors.HexColor('#4a90d9')
-    BLEU_CLAIR = colors.HexColor('#e8f4fd')
-    BLEU_APPRECIATION = colors.HexColor('#d6eaf8')
-    VERT_MOY = colors.HexColor('#c8e6c9')
-    ROUGE_PTS = colors.HexColor('#ffcdd2')
+    palette = get_pdf_palette(ecole, bulletin=True)
+    BLEU_HEADER = palette['header']
+    BLEU_CLAIR = palette['primary_light']
+    BLEU_APPRECIATION = palette['secondary_light']
+    VERT_MOY = palette['success_light']
+    ROUGE_PTS = palette['danger_light']
     ROUGE_DRAPEAU = colors.HexColor('#CE1126')
     JAUNE_DRAPEAU = colors.HexColor('#FCD116')
     VERT_DRAPEAU = colors.HexColor('#009460')
-    GRIS_TOTAL = colors.HexColor('#37474f')
+    GRIS_TOTAL = palette['text']
     
     MENTION_COLORS = {
-        'EXCELLENT': colors.HexColor('#1b5e20'),
-        'TRÈS BIEN': colors.HexColor('#2e7d32'),
-        'BIEN': colors.HexColor('#0277bd'),
-        'ASSEZ BIEN': colors.HexColor('#f9a825'),
-        'PASSABLE': colors.HexColor('#ef6c00'),
-        'INSUFFISANT': colors.HexColor('#c62828'),
-        'FAIBLE': colors.HexColor('#b71c1c'),
+        'EXCELLENT': palette.get('mention_tb', palette['success_dark']),
+        'TRÈS BIEN': palette.get('mention_tb', palette['success']),
+        'BIEN': palette.get('mention_bien', palette['secondary']),
+        'ASSEZ BIEN': palette.get('mention_ab', palette['warning']),
+        'PASSABLE': palette.get('mention_passable', palette['accent']),
+        'INSUFFISANT': palette.get('mention_insuffisant', palette['danger']),
+        'FAIBLE': palette['danger_dark'],
     }
     
     # Utiliser le logo pré-chargé ou le charger si nécessaire
@@ -2335,7 +2336,7 @@ def _dessiner_bulletin_page(c, bulletin_data, logo_path, ecole, logo_reader=None
     # Styles de base
     style = [
         ('BACKGROUND', (0, 0), (-1, 0), BLEU_HEADER),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('TEXTCOLOR', (0, 0), (-1, 0), palette['header_text']),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 13),
         ('ALIGN', (0, 0), (-1, 0), 'CENTER'),

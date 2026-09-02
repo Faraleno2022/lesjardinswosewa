@@ -24,23 +24,23 @@
   .transport-card:hover {
     transform: translateY(-5px);
     box-shadow: 0 8px 25px rgba(0,0,0,.15);
-    border-color: #007bff;
+    border-color: var(--school-primary);
   }
   .transport-card-icon { font-size: 2.6rem; margin-bottom: 1rem; display: block; }
   .transport-card-title { font-size: 1.1rem; font-weight: 600; color: #333; margin-bottom: .4rem; }
   .transport-card-text { color: #666; font-size: .88rem; margin: 0; }
-  .transport-card.primary { border-left: 5px solid #007bff; }
-  .transport-card.primary:hover { background: linear-gradient(135deg,#e7f1ff 0%,#fff 100%); }
-  .transport-card.primary .transport-card-icon { color: #007bff; }
-  .transport-card.success { border-left: 5px solid #28a745; }
-  .transport-card.success:hover { background: linear-gradient(135deg,#e3eaf2 0%,#fff 100%); }
-  .transport-card.success .transport-card-icon { color: #28a745; }
-  .transport-card.info { border-left: 5px solid #17a2b8; }
-  .transport-card.info:hover { background: linear-gradient(135deg,#e8edf3 0%,#fff 100%); }
-  .transport-card.info .transport-card-icon { color: #17a2b8; }
-  .transport-card.warning { border-left: 5px solid #ffc107; }
-  .transport-card.warning:hover { background: linear-gradient(135deg,#fff8e1 0%,#fff 100%); }
-  .transport-card.warning .transport-card-icon { color: #e6a700; }
+  .transport-card.primary { border-left: 5px solid var(--school-primary); }
+  .transport-card.primary:hover { background: linear-gradient(135deg,var(--school-primary-light) 0%,#fff 100%); }
+  .transport-card.primary .transport-card-icon { color: var(--school-primary); }
+  .transport-card.success { border-left: 5px solid var(--school-success); }
+  .transport-card.success:hover { background: linear-gradient(135deg,var(--school-success-light) 0%,#fff 100%); }
+  .transport-card.success .transport-card-icon { color: var(--school-success); }
+  .transport-card.info { border-left: 5px solid var(--school-info); }
+  .transport-card.info:hover { background: linear-gradient(135deg,var(--school-info-light) 0%,#fff 100%); }
+  .transport-card.info .transport-card-icon { color: var(--school-info); }
+  .transport-card.warning { border-left: 5px solid var(--school-warning); }
+  .transport-card.warning:hover { background: linear-gradient(135deg,var(--school-warning-light) 0%,#fff 100%); }
+  .transport-card.warning .transport-card-icon { color: var(--school-warning); }
   .transport-modules-title { color: #2c3e50; font-weight: 700; margin: 0 0 1rem; }
 </style>
 {% endblock %}

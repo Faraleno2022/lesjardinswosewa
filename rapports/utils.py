@@ -23,6 +23,7 @@ from salaires.models import Enseignant, EtatSalaire
 from utilisateurs.utils import user_is_admin, user_is_superadmin, user_school
 from django.contrib.staticfiles import finders
 from django.conf import settings
+from ecole_moderne.branding import get_pdf_palette
 
 
 def _get_logo_path(ecole=None):
@@ -55,6 +56,7 @@ def _draw_header_and_watermark(c, doc, ecole=None, titre_override=None):
     # des rapports en paysage.
     width, height = getattr(doc, 'pagesize', None) or getattr(c, '_pagesize', A4)
     logo_path = _get_logo_path(ecole)
+    palette = get_pdf_palette(ecole)
 
     c.saveState()
     try:
@@ -100,7 +102,7 @@ def _draw_header_and_watermark(c, doc, ecole=None, titre_override=None):
             c.drawImage(logo_path, margin_x, height - margin_y - 30, width=60, height=30, preserveAspectRatio=True, mask='auto')
 
         # Titre à droite du logo avec taille réduite
-        c.setFillColor(colors.HexColor('#0d47a1'))
+        c.setFillColor(palette['primary'])
         c.setFont('Helvetica-Bold', 12)
         school_name = (getattr(ecole, 'nom', None) or "").strip() or "Rapport"
         # Si un titre explicite est fourni par l'appelant, l'afficher à droite
@@ -110,7 +112,7 @@ def _draw_header_and_watermark(c, doc, ecole=None, titre_override=None):
         c.drawString(margin_x + 70, height - margin_y - 10, header_text)
 
         # Ligne de séparation
-        c.setStrokeColor(colors.HexColor('#0d47a1'))
+        c.setStrokeColor(palette['primary'])
         c.setLineWidth(0.7)
         c.line(margin_x, height - margin_y - 38, width - margin_x, height - margin_y - 38)
     finally:
@@ -350,13 +352,14 @@ def generer_pdf_periode(donnees, debut, fin, type_periode, ecole=None):
     doc = SimpleDocTemplate(buffer, pagesize=A4)
     styles = getSampleStyleSheet()
     story = []
+    palette = get_pdf_palette(ecole)
     
     # Titre
     titre_style = ParagraphStyle(
         'TitreRapport',
         parent=styles['Heading1'],
         fontSize=18,
-        textColor=colors.darkblue,
+        textColor=palette['primary'],
         alignment=1
     )
     
@@ -390,14 +393,14 @@ def generer_pdf_periode(donnees, debut, fin, type_periode, ecole=None):
 
         table = Table(data, colWidths=[3*inch, 2*inch])
         table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('BACKGROUND', (0, 0), (-1, 0), palette['header']),
+            ('TEXTCOLOR', (0, 0), (-1, 0), palette['header_text']),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 12),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ('BACKGROUND', (0, 1), (-1, -1), palette['surface']),
+            ('GRID', (0, 0), (-1, -1), 1, palette['border'])
         ]))
 
         story.append(table)
@@ -422,13 +425,13 @@ def generer_pdf_periode(donnees, debut, fin, type_periode, ecole=None):
 
             class_table = Table(class_data, colWidths=[120, 60, 90, 90, 90, 90])
             class_table.setStyle(TableStyle([
-                ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
-                ('TEXTCOLOR', (0,0), (-1,0), colors.black),
+                ('BACKGROUND', (0,0), (-1,0), palette['table_light']),
+                ('TEXTCOLOR', (0,0), (-1,0), palette['text']),
                 ('ALIGN', (1,1), (-1,-1), 'RIGHT'),
                 ('ALIGN', (0,0), (0,-1), 'LEFT'),
                 ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
                 ('BOTTOMPADDING', (0,0), (-1,0), 6),
-                ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
+                ('GRID', (0,0), (-1,-1), 0.25, palette['border']),
             ]))
             story.append(class_table)
             story.append(Spacer(1, 16))
@@ -445,13 +448,13 @@ def generer_pdf_periode(donnees, debut, fin, type_periode, ecole=None):
                 ])
             remise_table = Table(remise_data, colWidths=[200, 120])
             remise_table.setStyle(TableStyle([
-                ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
-                ('TEXTCOLOR', (0,0), (-1,0), colors.black),
+                ('BACKGROUND', (0,0), (-1,0), palette['table_light']),
+                ('TEXTCOLOR', (0,0), (-1,0), palette['text']),
                 ('ALIGN', (1,1), (-1,-1), 'RIGHT'),
                 ('ALIGN', (0,0), (0,-1), 'LEFT'),
                 ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
                 ('BOTTOMPADDING', (0,0), (-1,0), 6),
-                ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
+                ('GRID', (0,0), (-1,-1), 0.25, palette['border']),
             ]))
             story.append(remise_table)
             story.append(Spacer(1, 16))
@@ -466,10 +469,10 @@ def generer_pdf_periode(donnees, debut, fin, type_periode, ecole=None):
     ]
     dep_table = Table(depenses_data, colWidths=[3*inch, 2*inch])
     dep_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.whitesmoke),
+        ('BACKGROUND', (0, 0), (-1, -1), palette['surface']),
         ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
         ('FONTSIZE', (0, 0), (-1, -1), 11),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ('GRID', (0, 0), (-1, -1), 1, palette['border'])
     ]))
     story.append(dep_table)
     story.append(Spacer(1, 16))
@@ -491,10 +494,10 @@ def generer_pdf_periode(donnees, debut, fin, type_periode, ecole=None):
     
     resume_table = Table(resume_data, colWidths=[3*inch, 2*inch])
     resume_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.lightblue),
+        ('BACKGROUND', (0, 0), (-1, -1), palette['primary_light']),
         ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, -1), 12),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ('GRID', (0, 0), (-1, -1), 1, palette['border'])
     ]))
     
     story.append(resume_table)

@@ -46,6 +46,7 @@ from eleves.models import Ecole, Classe
 from utilisateurs.utils import user_is_admin, user_school
 from utilisateurs.permissions import can_add_teachers
 from ecole_moderne.security_decorators import delete_permission_required, require_school_object
+from ecole_moderne.branding import get_pdf_palette
 
 # Importer les vues de présence
 from .views_presences import (
@@ -1057,6 +1058,11 @@ def export_etats_salaire_pdf(request):
         )
 
     etats = etats.order_by('-periode__annee', '-periode__mois', 'enseignant__nom')
+    ecole_document = ecole_user
+    if ecole_document is None:
+        premier_etat = etats.first()
+        ecole_document = premier_etat.periode.ecole if premier_etat else None
+    palette = get_pdf_palette(ecole_document)
 
     # Préparer la réponse HTTP
     response = HttpResponse(content_type='application/pdf')
@@ -1068,7 +1074,12 @@ def export_etats_salaire_pdf(request):
     styles = getSampleStyleSheet()
 
     title_text = "États de salaire"
-    elements.append(Paragraph(title_text, styles['Title']))
+    title_style = ParagraphStyle(
+        'TitreEtatsSalaire',
+        parent=styles['Title'],
+        textColor=palette['primary'],
+    )
+    elements.append(Paragraph(title_text, title_style))
     elements.append(Spacer(1, 0.5*cm))
 
     # Table
@@ -1096,12 +1107,12 @@ def export_etats_salaire_pdf(request):
 
     table = Table(data, repeatRows=1)
     table.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (-1,0), colors.lightgrey),
-        ('TEXTCOLOR', (0,0), (-1,0), colors.black),
+        ('BACKGROUND', (0,0), (-1,0), palette['header']),
+        ('TEXTCOLOR', (0,0), (-1,0), palette['header_text']),
         ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
         ('FONTSIZE', (0,0), (-1,0), 9),
         ('ALIGN', (0,0), (-1,0), 'CENTER'),
-        ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
+        ('GRID', (0,0), (-1,-1), 0.25, palette['border']),
         ('FONTSIZE', (0,1), (-1,-1), 8),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
     ]))
@@ -1132,9 +1143,17 @@ def export_etats_salaire_pdf(request):
             pass
         canvas.setFont('Helvetica-Bold', 8)
         school_label = getattr(ecole_user, 'nom', None) or title_text
+        canvas.setFillColor(palette['primary'])
         canvas.drawString(doc_.leftMargin + 40, doc_.pagesize[1]-25, school_label)
         canvas.setFont('Helvetica', 8)
         canvas.drawRightString(doc_.pagesize[0]-doc_.rightMargin, doc_.pagesize[1]-25, title_text)
+        canvas.setStrokeColor(palette['primary'])
+        canvas.line(
+            doc_.leftMargin,
+            doc_.pagesize[1] - 44,
+            doc_.pagesize[0] - doc_.rightMargin,
+            doc_.pagesize[1] - 44,
+        )
 
         # Filigrane avec logo (comme les autres documents), dynamique par école
         canvas.saveState()

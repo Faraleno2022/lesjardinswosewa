@@ -1,5 +1,7 @@
 from django import forms
+from django.core.exceptions import ValidationError
 from django.forms import ClearableFileInput
+from ecole_moderne.branding import HEX_COLOR_RE
 from .models import ClasseNote, MatiereNote, Evaluation, NoteEleve, ThemeBulletin, ActiviteJournaliere, PieceJointeActivite
 
 class ClasseNoteForm(forms.ModelForm):
@@ -253,6 +255,22 @@ class ThemeBulletinForm(forms.ModelForm):
                 'class': 'form-check-input'
             }),
         }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        for nom in self.Meta.fields:
+            if not nom.startswith('couleur_'):
+                continue
+            valeur = str(cleaned_data.get(nom) or '')
+            if not HEX_COLOR_RE.fullmatch(valeur):
+                self.add_error(
+                    nom,
+                    ValidationError(
+                        'Utilisez une couleur au format #RRGGBB.',
+                        code='invalid_color',
+                    ),
+                )
+        return cleaned_data
 
 
 class ActiviteJournaliereForm(forms.ModelForm):

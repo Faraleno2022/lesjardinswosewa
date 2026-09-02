@@ -16,6 +16,7 @@ import io
 import os
 from django.utils import timezone
 from datetime import timedelta
+from ecole_moderne.branding import get_school_branding
 
 
 def _safe_text(value, default=""):
@@ -52,13 +53,16 @@ def _draw_fit_text(c, text, x, y, max_width, font_name, max_size, min_size, colo
     return size
 
 
-def _draw_value_row(c, label, value, x, y, label_width, value_width, main_font, bold_font):
+def _draw_value_row(
+    c, label, value, x, y, label_width, value_width, main_font, bold_font,
+    muted='#64748B', text='#111827',
+):
     label = _safe_text(label)
     value = _safe_text(value, "-")
-    c.setFillColor(colors.HexColor("#64748b"))
+    c.setFillColor(colors.HexColor(muted))
     c.setFont(bold_font, 5.6)
     c.drawString(x, y, label.upper())
-    _draw_fit_text(c, value, x + label_width, y, value_width, main_font, 6.6, 4.7, "#111827")
+    _draw_fit_text(c, value, x + label_width, y, value_width, main_font, 6.6, 4.7, text)
 
 
 def _draw_cover_image(c, image_path, x, y, width, height, radius=0):
@@ -676,20 +680,23 @@ def generer_cartes_classe_moderne(classe, eleves, response):
 
 def _dessiner_carte_simple(c, eleve, x, y, width, height, main_font, bold_font):
     """Draw one print-ready CR80 student card for batch PDFs."""
-    primary = "#1746a2"
-    accent = "#0f766e"
-    dark = "#0f172a"
-    muted = "#64748b"
-    line = "#dbe3ef"
+    school = eleve.classe.ecole
+    palette = get_school_branding(school)
+    primary = palette['primary']
+    primary_dark = palette['primary_dark']
+    primary_text = palette['primary_text']
+    accent = palette['secondary']
+    dark = palette['text']
+    muted = palette['muted']
+    line = palette['border']
     paper = "#ffffff"
-    soft = "#f5f8fc"
+    soft = palette['surface']
 
     margin = 2.2 * mm
     header_h = 10.5 * mm
     footer_h = 6.2 * mm
     radius = 4.5
 
-    school = eleve.classe.ecole
     school_name = _safe_text(getattr(school, "nom", "")).upper()
     student_name = _safe_text(f"{getattr(eleve, 'prenom', '')} {getattr(eleve, 'nom', '')}").upper()
     matricule = _safe_text(getattr(eleve, "matricule", ""))
@@ -726,14 +733,14 @@ def _dessiner_carte_simple(c, eleve, x, y, width, height, main_font, bold_font):
         else:
             raise ValueError("No logo")
     except Exception:
-        c.setFillColor(colors.HexColor(primary))
+        c.setFillColor(colors.HexColor(primary_dark))
         c.setFont(bold_font, 7)
         c.drawCentredString(logo_x + logo_size / 2, logo_y + logo_size / 2 - 2, school_name[:2] or "EC")
 
     title_x = logo_x + logo_size + 2 * mm
     title_w = width - (title_x - x) - margin
-    _draw_fit_text(c, school_name, title_x, y + height - 5.1 * mm, title_w, bold_font, 7.6, 4.8, "#ffffff")
-    _draw_fit_text(c, "CARTE SCOLAIRE", title_x, y + height - 8.2 * mm, title_w, main_font, 5.2, 4.2, "#dbeafe")
+    _draw_fit_text(c, school_name, title_x, y + height - 5.1 * mm, title_w, bold_font, 7.6, 4.8, primary_text)
+    _draw_fit_text(c, "CARTE SCOLAIRE", title_x, y + height - 8.2 * mm, title_w, main_font, 5.2, 4.2, primary_text)
 
     try:
         c.saveState()
@@ -781,7 +788,7 @@ def _dessiner_carte_simple(c, eleve, x, y, width, height, main_font, bold_font):
         initials = (_safe_text(getattr(eleve, "prenom", "E"))[:1] + _safe_text(getattr(eleve, "nom", "L"))[:1]).upper()
         c.setFillColor(colors.HexColor("#e8eef8"))
         c.roundRect(photo_x + 1, photo_y + 1, photo_w - 2, photo_h - 2, 2.5, stroke=0, fill=1)
-        c.setFillColor(colors.HexColor(primary))
+        c.setFillColor(colors.HexColor(primary_dark))
         c.setFont(bold_font, 17)
         c.drawCentredString(photo_x + photo_w / 2, photo_y + photo_h / 2 - 4, initials or "EL")
 
@@ -797,39 +804,39 @@ def _dessiner_carte_simple(c, eleve, x, y, width, height, main_font, bold_font):
     row_y = name_y - 5.3 * mm
     label_w = 14 * mm
     value_w = info_w - label_w
-    _draw_value_row(c, "Mat.", matricule, info_x, row_y, label_w, value_w, main_font, bold_font)
+    _draw_value_row(c, "Mat.", matricule, info_x, row_y, label_w, value_w, main_font, bold_font, muted, dark)
     row_y -= 4.2 * mm
-    _draw_value_row(c, "Classe", classe_nom, info_x, row_y, label_w, value_w, main_font, bold_font)
+    _draw_value_row(c, "Classe", classe_nom, info_x, row_y, label_w, value_w, main_font, bold_font, muted, dark)
 
     try:
         niveau = eleve.classe.get_niveau_display()
     except Exception:
         niveau = getattr(eleve.classe, "niveau", "")
     row_y -= 4.2 * mm
-    _draw_value_row(c, "Niveau", niveau, info_x, row_y, label_w, value_w, main_font, bold_font)
+    _draw_value_row(c, "Niveau", niveau, info_x, row_y, label_w, value_w, main_font, bold_font, muted, dark)
 
     if getattr(eleve, "date_naissance", None):
         row_y -= 4.2 * mm
-        _draw_value_row(c, "Ne(e)", eleve.date_naissance.strftime("%d/%m/%Y"), info_x, row_y, label_w, value_w, main_font, bold_font)
+        _draw_value_row(c, "Ne(e)", eleve.date_naissance.strftime("%d/%m/%Y"), info_x, row_y, label_w, value_w, main_font, bold_font, muted, dark)
 
     if getattr(eleve, "lieu_naissance", None):
         row_y -= 4.2 * mm
-        _draw_value_row(c, "Lieu", eleve.lieu_naissance, info_x, row_y, label_w, value_w, main_font, bold_font)
+        _draw_value_row(c, "Lieu", eleve.lieu_naissance, info_x, row_y, label_w, value_w, main_font, bold_font, muted, dark)
 
     resp = getattr(eleve, "responsable_principal", None)
     if resp:
         contact = _safe_text(getattr(resp, "telephone", "")) or _safe_text(getattr(resp, "nom_complet", ""))
         if contact:
             row_y -= 4.2 * mm
-            _draw_value_row(c, "Contact", contact, info_x, row_y, label_w, value_w, main_font, bold_font)
+            _draw_value_row(c, "Contact", contact, info_x, row_y, label_w, value_w, main_font, bold_font, muted, dark)
 
-    c.setFillColor(colors.HexColor("#eef4fb"))
+    c.setFillColor(colors.HexColor(palette['table_light']))
     c.rect(x + 0.8, y + 0.8, width - 1.6, footer_h, stroke=0, fill=1)
     c.setStrokeColor(colors.HexColor(line))
     c.setLineWidth(0.5)
     c.line(x + 0.8, y + footer_h + 0.8, x + width - 0.8, y + footer_h + 0.8)
 
-    _draw_fit_text(c, f"ANNEE SCOLAIRE {annee}", x + margin, y + 2.4 * mm, width * 0.55, bold_font, 5.8, 4.2, primary)
+    _draw_fit_text(c, f"ANNEE SCOLAIRE {annee}", x + margin, y + 2.4 * mm, width * 0.55, bold_font, 5.8, 4.2, dark)
     c.setFillColor(colors.HexColor(muted))
     c.setFont(main_font, 4.6)
     c.drawRightString(x + width - margin, y + 2.4 * mm, f"ID #{getattr(eleve, 'id', 0):06d}")
