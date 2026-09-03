@@ -66,22 +66,10 @@
     {% endif %}
     {% endblock %}
 
-    {% if is_offline %}
-    <!-- Mode offline : fichiers locaux -->
-    <link href="{% static 'vendor/bootstrap/bootstrap.min.css' %}" rel="stylesheet">
-    <link href="{% static 'vendor/fontawesome/all.min.css' %}" rel="stylesheet">
-    {% else %}
-    <!-- Resource Hints for faster connections -->
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
-    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-    <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
-
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font Awesome -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    {% endif %}
+    <!-- Ressources locales : la navigation reste fonctionnelle même si un CDN
+         est indisponible ou filtré sur une tablette. -->
+    <link href="{% static_versioned 'vendor/bootstrap/bootstrap.min.css' %}" rel="stylesheet">
+    <link href="{% static_versioned 'vendor/fontawesome/all.min.css' %}" rel="stylesheet">
 
     <style>
         :root {
@@ -205,6 +193,11 @@
         }
         .site-navbar .navbar-toggler {
             flex: 0 0 auto;
+            min-height: 44px;
+            min-width: 44px;
+            position: relative;
+            touch-action: manipulation;
+            z-index: 2;
         }
         /* Style des boutons dropdown dans navbar */
         .navbar-nav .btn-link.dropdown-toggle {
@@ -334,7 +327,12 @@
         /* Le panneau repliable reste limité aux mêmes largeurs que dans la
            disposition Bootstrap initiale. */
         @media (max-width: 991.98px) {
+            .site-navbar > .container-fluid {
+                align-items: center;
+                flex-wrap: wrap;
+            }
             .site-navbar .navbar-collapse {
+                flex-basis: 100%;
                 max-height: calc(100vh - 70px);
                 max-height: calc(100dvh - 70px);
                 overflow-x: hidden;
@@ -419,7 +417,7 @@
                 <span>{{ site.nom }}</span>
             </a>
 
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+            <button class="navbar-toggler" id="siteNavbarToggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
                     aria-controls="navbarNav" aria-expanded="false" aria-label="Afficher ou masquer la navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
@@ -790,12 +788,31 @@
         </div>
     </footer>
 
-    <!-- Bootstrap JS -->
-    {% if is_offline %}
-    <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
-    {% else %}
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    {% endif %}
+    <!-- Bootstrap local : évite un bouton hamburger inactif quand le CDN ne répond pas. -->
+    <script src="{% static_versioned 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
+    <script>
+    (function () {
+      const bouton = document.getElementById('siteNavbarToggler');
+      const menu = document.getElementById('navbarNav');
+      if (!bouton || !menu || (window.bootstrap && window.bootstrap.Collapse)) {
+        return;
+      }
+
+      function fermerMenu() {
+        menu.classList.remove('show');
+        bouton.setAttribute('aria-expanded', 'false');
+      }
+
+      bouton.addEventListener('click', function () {
+        const ouvert = menu.classList.toggle('show');
+        bouton.setAttribute('aria-expanded', ouvert ? 'true' : 'false');
+      });
+
+      menu.querySelectorAll('a.nav-link:not(.dropdown-toggle)').forEach(function (lien) {
+        lien.addEventListener('click', fermerMenu);
+      });
+    })();
+    </script>
 
     <!-- Global phone normalization (+224) -->
     <script>
