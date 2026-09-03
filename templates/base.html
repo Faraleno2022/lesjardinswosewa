@@ -5,6 +5,23 @@
     {% load static_versioned %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+    (function () {
+      var agent = navigator.userAgent || '';
+      var pointsTactiles = navigator.maxTouchPoints || 0;
+      var appareilMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(agent);
+      var ipadModeOrdinateur = /Macintosh/i.test(agent) && pointsTactiles > 1;
+      var tabletteTactile = pointsTactiles > 1
+        && window.matchMedia
+        && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+
+      document.documentElement.classList.add(
+        appareilMobile || ipadModeOrdinateur || tabletteTactile
+          ? 'nav-device-mobile'
+          : 'nav-device-desktop'
+      );
+    })();
+    </script>
     {% comment %}Titre et description suivent le domaine servi (voir ecole_moderne/identite_site.py) :
        sur lesjardinswosewa.com, aucune page ne doit annoncer le logiciel hôte.{% endcomment %}
     <title>{% block title %}{{ site.titre }}{% endblock %}</title>
@@ -199,6 +216,121 @@
             touch-action: manipulation;
             z-index: 2;
         }
+
+        /* Sur ordinateur, tous les boutons restent sur une seule ligne. La
+           zone centrale défile horizontalement uniquement si la fenêtre est
+           exceptionnellement étroite. */
+        html.nav-device-desktop .site-navbar > .container-fluid {
+            align-items: center;
+            flex-wrap: nowrap;
+        }
+        html.nav-device-desktop .site-navbar .navbar-toggler {
+            display: none !important;
+        }
+        html.nav-device-desktop .site-navbar .navbar-collapse {
+            align-items: center;
+            display: flex !important;
+            flex-basis: auto !important;
+            height: auto !important;
+            max-height: none;
+            min-width: 0;
+            overflow: visible;
+            padding: 0;
+            width: auto;
+        }
+        html.nav-device-desktop .site-navbar .navbar-nav {
+            align-items: center;
+            flex-direction: row;
+            flex-wrap: nowrap;
+        }
+        html.nav-device-desktop .site-navbar .navbar-nav.me-auto {
+            min-width: 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+            scrollbar-width: thin;
+        }
+        html.nav-device-desktop .site-navbar .navbar-nav .nav-link,
+        html.nav-device-desktop .site-navbar .navbar-nav .btn-link.dropdown-toggle {
+            align-items: center;
+            display: flex;
+            max-width: none;
+            overflow: visible;
+            text-align: inherit;
+            text-overflow: clip;
+            white-space: nowrap;
+            width: auto;
+        }
+        html.nav-device-desktop .site-navbar .navbar-nav + .navbar-nav {
+            border-top: 0;
+            margin-top: 0;
+            padding-top: 0;
+        }
+        html.nav-device-desktop .site-navbar .navbar-nav .dropdown-menu {
+            left: auto;
+            min-width: 250px;
+            position: absolute;
+            right: 0;
+            transform: translateX(-20px);
+            width: auto;
+        }
+
+        /* iOS, Android et les tablettes tactiles conservent toujours le menu
+           hamburger, y compris en paysage sur les écrans de plus de 992 px. */
+        html.nav-device-mobile .navbar-expand-lg .navbar-toggler {
+            display: block !important;
+        }
+        html.nav-device-mobile .navbar-expand-lg .navbar-collapse.collapse:not(.show) {
+            display: none !important;
+        }
+        html.nav-device-mobile .navbar-expand-lg .navbar-collapse.collapse.show,
+        html.nav-device-mobile .navbar-expand-lg .navbar-collapse.collapsing {
+            display: block !important;
+        }
+        html.nav-device-mobile .site-navbar > .container-fluid {
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        html.nav-device-mobile .site-navbar .navbar-collapse {
+            flex-basis: 100% !important;
+            max-height: calc(100vh - 70px);
+            max-height: calc(100dvh - 70px);
+            overflow-x: hidden;
+            overflow-y: auto;
+            padding: 0.5rem 0 0.85rem;
+            scrollbar-gutter: stable;
+            width: 100%;
+        }
+        html.nav-device-mobile .site-navbar .navbar-nav {
+            align-items: stretch;
+            flex-direction: column;
+            flex-wrap: nowrap;
+            width: 100%;
+        }
+        html.nav-device-mobile .site-navbar .navbar-nav + .navbar-nav {
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            margin-top: 0.35rem;
+            padding-top: 0.35rem;
+        }
+        html.nav-device-mobile .site-navbar .navbar-nav .nav-link,
+        html.nav-device-mobile .site-navbar .navbar-nav .btn-link.dropdown-toggle {
+            align-items: center;
+            display: flex;
+            max-width: 100%;
+            overflow: hidden;
+            text-align: left;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            width: 100%;
+        }
+        html.nav-device-mobile .site-navbar .navbar-nav .dropdown-menu {
+            left: auto;
+            max-width: 100%;
+            min-width: 0;
+            position: static;
+            right: auto;
+            transform: none;
+            width: 100%;
+        }
         /* Style des boutons dropdown dans navbar */
         .navbar-nav .btn-link.dropdown-toggle {
             color: inherit;
@@ -305,19 +437,19 @@
             display: block;
         }
 
-        /* Entre tablette paysage et grand écran, conserver la disposition
-           horizontale d'origine sans autoriser les retours à la ligne. */
-        @media (min-width: 992px) and (max-width: 1399.98px) {
+        /* Sur les ordinateurs de largeur limitée, réduire légèrement les
+           libellés tout en conservant leur alignement horizontal. */
+        @media (max-width: 1399.98px) {
             .site-navbar .navbar-collapse {
                 min-width: 0;
             }
-            .site-navbar .navbar-nav.me-auto {
+            html.nav-device-desktop .site-navbar .navbar-nav.me-auto {
                 min-width: 0;
                 overflow-x: auto;
                 overflow-y: hidden;
                 scrollbar-width: thin;
             }
-            .site-navbar .navbar-nav.me-auto .nav-link {
+            html.nav-device-desktop .site-navbar .navbar-nav.me-auto .nav-link {
                 font-size: 0.82rem;
                 padding-left: 0.45rem;
                 padding-right: 0.45rem;
