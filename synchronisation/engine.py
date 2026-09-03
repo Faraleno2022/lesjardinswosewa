@@ -4,7 +4,7 @@ from uuid import UUID
 
 from django.apps import apps
 from django.contrib.auth import get_user_model
-from django.core.exceptions import FieldDoesNotExist
+from django.core.exceptions import FieldDoesNotExist, ValidationError
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.db import models
@@ -37,6 +37,9 @@ MAX_SYNC_FILE_BYTES = 2 * 1024 * 1024
 
 def model_label_for(instance_or_model):
     model = instance_or_model if isinstance(instance_or_model, type) else instance_or_model.__class__
+    # Une action depuis un modele proxy Django Admin (par exemple la corbeille
+    # des eleves) doit etre synchronisee sous le nom du modele concret.
+    model = model._meta.concrete_model
     return f'{model._meta.app_label}.{model.__name__}'
 
 
@@ -134,8 +137,18 @@ def serialize_instance(instance, include_files=True):
         value = getattr(instance, field.name)
         if isinstance(field, models.ForeignKey) or isinstance(field, models.OneToOneField):
             related = value
-            if related is None or field.remote_field.model == get_user_model():
+            if related is None:
                 payload[field.name] = None
+            elif field.remote_field.model == get_user_model():
+                # Les utilisateurs ne sont pas synchronises comme donnees
+                # scolaires, mais leur nom permet de retrouver le meme compte
+                # sur le serveur ou le poste destinataire.
+                payload[field.name] = {
+                    'model': 'auth.User',
+                    'username': related.get_username(),
+                    'pk': related.pk,
+                    'text': str(related),
+                }
             else:
                 payload[field.name] = {
                     'model': model_label_for(related),
@@ -156,10 +169,25 @@ def serialize_instance(instance, include_files=True):
 
 
 def resolve_related(field, raw_value):
-    if not raw_value:
-        return None
     model = field.remote_field.model
     if model == get_user_model():
+        username = raw_value.get('username') if isinstance(raw_value, dict) else None
+        if username:
+            user = model.objects.filter(username=username).first()
+            if user:
+                return user
+        # Les anciens payloads mettaient toujours les User a null. Pour un
+        # champ obligatoire, rattacher l'objet au compte administrateur local
+        # permet d'appliquer la donnee sans inventer ni synchroniser un mot de
+        # passe. Les champs utilisateur facultatifs restent a null.
+        if not field.null or not field.blank:
+            return (
+                model.objects.filter(is_superuser=True).order_by('pk').first()
+                or model.objects.order_by('pk').first()
+            )
+        return None
+
+    if not raw_value:
         return None
 
     sync_uuid = raw_value.get('sync_uuid') if isinstance(raw_value, dict) else None
@@ -179,7 +207,13 @@ def deserialize_field(field, raw_value):
         return resolve_related(field, raw_value)
     if raw_value in ('', None):
         return None if field.null else raw_value
-    return raw_value
+    # JSON transforme Decimal, dates et heures en chaines. Les reconvertir
+    # avant ``save()`` est indispensable pour les modeles qui effectuent des
+    # calculs dans leur methode save (depenses, salaires, stocks...).
+    try:
+        return field.to_python(raw_value)
+    except (TypeError, ValueError, ValidationError):
+        return raw_value
 
 
 def ecole_for_instance(instance):
@@ -282,8 +316,14 @@ def queryset_for_ecole(model, ecole):
         if label == 'paiements.ConfigurationPaiement':
             return model.objects.filter(classe__ecole=ecole)
     if label.startswith('depenses.'):
+        if label in {'depenses.ProduitFourniture', 'depenses.ContributionPapierRam'}:
+            return model.objects.filter(ecole=ecole)
+        if label == 'depenses.VenteFourniture':
+            return model.objects.filter(produit__ecole=ecole)
         return model.objects.all()
     if label.startswith('bus.'):
+        return model.objects.filter(eleve__classe__ecole=ecole)
+    if label.startswith('presence.'):
         return model.objects.filter(eleve__classe__ecole=ecole)
     if label.startswith('salaires.'):
         if hasattr(model, 'enseignant'):

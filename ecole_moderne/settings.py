@@ -11,7 +11,14 @@ except ImportError:
     load_dotenv = None
 
 # =================== Base ===================
-BASE_DIR = Path(__file__).resolve().parent.parent
+# Dans l'executable PyInstaller, ``__file__`` pointe vers le dossier interne
+# temporaire de l'application. Les donnees modifiables (SQLite, medias, logs,
+# configuration) doivent au contraire rester a cote de MySchoolGN.exe afin
+# d'etre preservees par l'installateur et les sauvegardes.
+BASE_DIR = Path(
+    os.environ.get('MYSCHOOL_BASE_DIR')
+    or Path(__file__).resolve().parent.parent
+)
 
 
 def _load_plain_env(path):
@@ -171,9 +178,12 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    # Doit rester apres SessionMiddleware, AuthenticationMiddleware et
+    # MessageMiddleware pour pouvoir identifier puis deconnecter l'utilisateur.
+    'ecole_moderne.security_middleware.SessionSecurityMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    # Vérification licence : bloque l'accès web si essai/licence expiré
-    'ecole_moderne.licence_middleware.LicenceMiddleware',
+    # Contrôle d'intégrité uniquement ; aucune licence n'est requise.
+    'ecole_moderne.integrity_middleware.IntegrityMiddleware',
     # Protection anti brute-force
     'axes.middleware.AxesMiddleware',
     # Mode lecture seule : bloque toute action pour les comptes en consultation
@@ -189,7 +199,6 @@ if DEBUG:
 else:
     MIDDLEWARE.append('ecole_moderne.image_optimization_middleware.ImageOptimizationMiddleware')
     MIDDLEWARE.insert(1, 'ecole_moderne.security_middleware.SecurityMiddleware')
-    MIDDLEWARE.insert(3, 'ecole_moderne.security_middleware.SessionSecurityMiddleware')
     MIDDLEWARE.insert(5, 'ecole_moderne.security_middleware.CSRFSecurityMiddleware')
     MIDDLEWARE.append('ecole_moderne.security_middleware.CSPMiddleware')
 
@@ -237,6 +246,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'utilisateurs.context_processors.user_context',
+                'ecole_moderne.identite_site.identite_site',
             ],
         },
     },
@@ -289,10 +299,26 @@ CACHES = {
     }
 }
 
+# Protection des pages dynamiques. Les fichiers statiques, medias et API
+# techniques authentifiees sont exclus dans SecurityMiddleware.
+SECURITY_RATE_LIMIT_REQUESTS = int(
+    os.environ.get('SECURITY_RATE_LIMIT_REQUESTS', '300')
+)
+SECURITY_RATE_LIMIT_WINDOW_SECONDS = int(
+    os.environ.get('SECURITY_RATE_LIMIT_WINDOW_SECONDS', '60')
+)
+
 # Sessions stockées en DB + cache (1 requête DB au lieu de 2 par session)
 SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
 SESSION_CACHE_ALIAS = "default"
-SESSION_COOKIE_AGE = 86400 * 7   # 7 jours (évite reconnexions fréquentes)
+SESSION_IDLE_TIMEOUT_SECONDS = max(
+    60,
+    int(os.environ.get('SESSION_IDLE_TIMEOUT_SECONDS', '1800')),
+)
+# Le cookie et l'enregistrement serveur ne doivent jamais survivre au delai
+# d'inactivite. Le middleware renouvelle cette echeance lors d'une vraie action.
+SESSION_COOKIE_AGE = SESSION_IDLE_TIMEOUT_SECONDS
+SESSION_SAVE_EVERY_REQUEST = False
 
 # =================== Auth & mots de passe ===================
 AUTH_PASSWORD_VALIDATORS = [
@@ -361,10 +387,31 @@ PHONE_VERIFY_TTL_SECONDS = int(os.environ.get('PHONE_VERIFY_TTL_SECONDS', 4 * 36
 
 # =================== Synchronisation offline/online ===================
 MYSCHOOL_SYNC_SERVER_URL = os.environ.get('MYSCHOOL_SYNC_SERVER_URL', '').rstrip('/')
+# URL publique utilisee par l'administration pour fabriquer les configurations
+# des postes offline. Si elle n'est pas definie, l'URL HTTPS de la requete est
+# utilisee automatiquement.
+MYSCHOOL_SYNC_PUBLIC_URL = os.environ.get('MYSCHOOL_SYNC_PUBLIC_URL', '').rstrip('/')
 MYSCHOOL_SYNC_DEVICE_ID = os.environ.get('MYSCHOOL_SYNC_DEVICE_ID', '')
 MYSCHOOL_SYNC_TOKEN = os.environ.get('MYSCHOOL_SYNC_TOKEN', '')
 MYSCHOOL_SYNC_ADMIN_TOKEN = os.environ.get('MYSCHOOL_SYNC_ADMIN_TOKEN', '')
 MYSCHOOL_SYNC_ECOLE_ID = os.environ.get('MYSCHOOL_SYNC_ECOLE_ID', '')
+
+# =================== Mises a jour de l'application Windows ===================
+# Depot dont les publications (releases) font foi. Chaque release y porte deja
+# le numero de version, l'installateur et son empreinte SHA-256 : le serveur
+# les recopie plutot que de les faire ressaisir a la main.
+MYSCHOOL_GITHUB_REPO = os.environ.get(
+    'MYSCHOOL_GITHUB_REPO', 'Faraleno2022/lesjardinswosewa',
+).strip()
+# Facultatif. Le depot est public, donc lisible sans jeton ; en fournir un
+# releve seulement le quota de 60 appels par heure et par adresse IP, partagee
+# sur un hebergement mutualise.
+MYSCHOOL_GITHUB_TOKEN = os.environ.get('MYSCHOOL_GITHUB_TOKEN', '').strip()
+# Mettre a 0 pour ne plus importer que par la commande
+# `manage.py importer_versions_github`.
+MYSCHOOL_GITHUB_AUTO_IMPORT = os.environ.get(
+    'MYSCHOOL_GITHUB_AUTO_IMPORT', '1',
+).strip().lower() not in {'0', 'false', 'no', 'non'}
 
 # =================== Configuration IA Chatbot ===================
 # Token HuggingFace pour l'API IA (obtenir sur https://huggingface.co/settings/tokens)

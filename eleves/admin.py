@@ -1,14 +1,37 @@
-from django.contrib import admin
-from django.utils.html import format_html
-from .models import Ecole, Classe, GrilleTarifaire
+import json
+import secrets
+
+from django.conf import settings
+from django import forms
+from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
+from django.db import transaction
+from django.http import HttpResponse
+from django.shortcuts import get_object_or_404, redirect
+from django.template.response import TemplateResponse
+from django.urls import path, reverse
+from django.utils.html import format_html, format_html_join
+from .models import Ecole, Classe, Eleve, EleveCorbeille, GrilleTarifaire
+
+
+# Cadences ecrites dans la configuration hors ligne telechargee. Au repos, la
+# verification se limite a un repere minuscule : rien ne justifie d'attendre
+# plus longtemps, et c'est ce qui fait qu'un ajout apparait tout de suite sur
+# les autres postes.
+INTERVALLE_SYNC_DEFAUT = 10
+INTERVALLE_SYNC_RAPIDE = 2
 
 
 @admin.register(Ecole)
 class EcoleAdmin(admin.ModelAdmin):
-    list_display = ("nom", "etat", "code_prefixe", "telephone", "email", "directeur", "censeur", "created_by", "logo_mini")
+    list_display = (
+        "nom", "etat", "code_prefixe", "telephone", "email", "directeur",
+        "censeur", "created_by", "logo_mini", "apercu_charte",
+        "configuration_offline",
+    )
     list_filter = ("etat",)
     search_fields = ("nom", "directeur", "censeur", "telephone", "email")
-    readonly_fields = ("logo_preview", "image_preview")
+    readonly_fields = ("logo_preview", "image_preview", "configuration_offline")
     fieldsets = (
         ("Identité", {
             "fields": ("nom", "directeur", "censeur", "etat", "created_by")
@@ -24,8 +47,172 @@ class EcoleAdmin(admin.ModelAdmin):
             "fields": ("logo", "logo_preview", "image", "image_preview"),
             "description": "Logo pour filigrane et en-tetes. Photo de l'ecole pour le livret scolaire."
         }),
+        ("Charte graphique", {
+            "fields": (
+                "couleur_primaire", "couleur_secondaire", "couleur_accent",
+                "couleur_succes", "couleur_avertissement", "couleur_danger",
+                "couleur_information", "couleur_fond_documents",
+                "couleur_texte_documents", "couleur_bordure_documents",
+            ),
+            "description": (
+                "Ces couleurs personnalisent les cartes de l'application, "
+                "les bulletins et les documents PDF de l'école."
+            ),
+        }),
+        ("Version hors ligne", {
+            "fields": ("configuration_offline",),
+            "description": "Créez une connexion sécurisée propre à cette école pour chaque poste hors ligne."
+        }),
     )
     actions = ("valider_ecoles", "rejeter_ecoles")
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        formfield = super().formfield_for_dbfield(db_field, request, **kwargs)
+        if db_field.name.startswith('couleur_') and formfield is not None:
+            formfield.widget = forms.TextInput(attrs={
+                'type': 'color',
+                'style': 'width: 7rem; height: 2.5rem; padding: .2rem;',
+            })
+        return formfield
+
+    @admin.display(description="Charte")
+    def apercu_charte(self, obj):
+        couleurs = (
+            obj.couleur_primaire,
+            obj.couleur_secondaire,
+            obj.couleur_accent,
+            obj.couleur_succes,
+            obj.couleur_avertissement,
+            obj.couleur_danger,
+        )
+        return format_html_join(
+            '',
+            '<span title="{}" style="display:inline-block;width:16px;'
+            'height:16px;border-radius:50%;background:{};margin-right:3px;'
+            'border:1px solid #999"></span>',
+            ((couleur, couleur) for couleur in couleurs),
+        )
+
+    def get_urls(self):
+        custom_urls = [
+            path(
+                '<path:object_id>/version-hors-ligne/',
+                self.admin_site.admin_view(self.version_hors_ligne_view),
+                name='eleves_ecole_version_hors_ligne',
+            ),
+        ]
+        return custom_urls + super().get_urls()
+
+    @admin.display(description="Version hors ligne")
+    def configuration_offline(self, obj):
+        if not obj or not obj.pk:
+            return "Enregistrez d'abord l'école."
+        url = reverse('admin:eleves_ecole_version_hors_ligne', args=[obj.pk])
+        return format_html(
+            '<a class="button" href="{}">Configurer la version hors ligne</a>',
+            url,
+        )
+
+    def _verifier_acces_ecole(self, request, ecole):
+        if not self.has_change_permission(request, ecole):
+            raise PermissionDenied
+        if request.user.is_superuser:
+            return
+
+        from utilisateurs.utils import user_is_admin, user_school
+
+        if not user_is_admin(request.user) or user_school(request.user) != ecole:
+            raise PermissionDenied
+
+    def _url_serveur_sync(self, request):
+        public_url = getattr(settings, 'MYSCHOOL_SYNC_PUBLIC_URL', '').strip()
+        return (public_url or request.build_absolute_uri('/')).rstrip('/')
+
+    def version_hors_ligne_view(self, request, object_id):
+        """Génère ou révoque les accès offline d'une école donnée."""
+        from synchronisation.models import SyncDevice
+
+        ecole = get_object_or_404(self.get_queryset(request), pk=object_id)
+        self._verifier_acces_ecole(request, ecole)
+        page_url = reverse('admin:eleves_ecole_version_hors_ligne', args=[ecole.pk])
+
+        if request.method == 'POST':
+            action = request.POST.get('action')
+
+            if action == 'revoquer':
+                device = SyncDevice.objects.filter(
+                    pk=request.POST.get('device_id'), ecole=ecole,
+                ).first()
+                if not device:
+                    messages.error(request, "Poste introuvable pour cette école.")
+                elif not device.actif:
+                    messages.info(request, "Ce poste est déjà révoqué.")
+                else:
+                    device.actif = False
+                    device.save(update_fields=['actif', 'date_modification'])
+                    messages.success(request, f"L'accès du poste « {device.nom} » a été révoqué.")
+                return redirect(page_url)
+
+            if action == 'creer':
+                nom = (request.POST.get('nom') or 'Poste local').strip()[:120]
+                try:
+                    intervalle = int(request.POST.get('intervalle') or INTERVALLE_SYNC_DEFAUT)
+                except (TypeError, ValueError):
+                    intervalle = 0
+
+                if not nom:
+                    messages.error(request, "Indiquez le nom du poste.")
+                    return redirect(page_url)
+                if intervalle < 2 or intervalle > 3600:
+                    messages.error(request, "L'intervalle doit être compris entre 2 et 3 600 secondes.")
+                    return redirect(page_url)
+
+                token = secrets.token_urlsafe(32)
+                with transaction.atomic():
+                    device = SyncDevice(ecole=ecole, nom=nom)
+                    device.definir_token(token)
+                    device.save()
+
+                configuration = {
+                    'MYSCHOOL_SYNC_SERVER_URL': self._url_serveur_sync(request),
+                    'MYSCHOOL_SYNC_ECOLE_ID': ecole.pk,
+                    'MYSCHOOL_SYNC_DEVICE_ID': str(device.device_id),
+                    'MYSCHOOL_SYNC_TOKEN': token,
+                    # Cadence au repos, puis cadence rapide des qu'une donnee
+                    # circule. Un ajout part de toute facon immediatement : ces
+                    # deux valeurs ne reglent que la detection de ce qui vient
+                    # des autres postes.
+                    'MYSCHOOL_SYNC_INTERVAL': intervalle,
+                    'MYSCHOOL_SYNC_FAST_INTERVAL': INTERVALLE_SYNC_RAPIDE,
+                }
+                response = HttpResponse(
+                    json.dumps(configuration, ensure_ascii=False, indent=2),
+                    content_type='application/json; charset=utf-8',
+                )
+                response['Content-Disposition'] = 'attachment; filename="sync_config.json"'
+                response['Cache-Control'] = 'no-store, private, max-age=0'
+                response['Pragma'] = 'no-cache'
+                response['X-Content-Type-Options'] = 'nosniff'
+                return response
+
+            messages.error(request, "Action de configuration inconnue.")
+            return redirect(page_url)
+
+        context = {
+            **self.admin_site.each_context(request),
+            'title': f'Version hors ligne — {ecole.nom}',
+            'opts': self.model._meta,
+            'original': ecole,
+            'ecole': ecole,
+            'devices': SyncDevice.objects.filter(ecole=ecole).order_by('-date_creation'),
+            'change_url': reverse('admin:eleves_ecole_change', args=[ecole.pk]),
+            'server_url': self._url_serveur_sync(request),
+        }
+        return TemplateResponse(
+            request,
+            'admin/eleves/ecole/version_hors_ligne.html',
+            context,
+        )
 
     def valider_ecoles(self, request, queryset):
         updated = queryset.update(etat="VALIDE")
@@ -95,3 +282,103 @@ class GrilleTarifaireAdmin(admin.ModelAdmin):
             "description": "Si ces dates sont renseignées, elles seront utilisées pour initialiser les échéanciers des élèves de cette école/niveau/année."
         }),
     )
+
+
+@admin.register(Eleve)
+class EleveAdmin(admin.ModelAdmin):
+    list_display = (
+        'matricule', 'nom', 'prenom', 'classe', 'statut',
+        'date_inscription',
+    )
+    list_filter = ('statut', 'classe__ecole', 'classe')
+    search_fields = ('matricule', 'nom', 'prenom')
+    list_select_related = ('classe', 'classe__ecole')
+    actions = ('placer_dans_corbeille',)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(est_dans_corbeille=False)
+
+    @admin.action(description="Placer les élèves sélectionnés dans la corbeille")
+    def placer_dans_corbeille(self, request, queryset):
+        count = 0
+        for eleve in queryset:
+            count += int(eleve.placer_dans_corbeille(request.user))
+        self.message_user(request, f"{count} élève(s) placé(s) dans la corbeille.")
+
+    def delete_model(self, request, obj):
+        obj.placer_dans_corbeille(request.user)
+
+    def delete_queryset(self, request, queryset):
+        for eleve in queryset:
+            eleve.placer_dans_corbeille(request.user)
+
+
+@admin.register(EleveCorbeille)
+class EleveCorbeilleAdmin(admin.ModelAdmin):
+    list_display = (
+        'matricule', 'nom', 'prenom', 'classe', 'supprime_le', 'supprime_par',
+    )
+    list_filter = ('classe__ecole', 'classe', 'supprime_le')
+    search_fields = ('matricule', 'nom', 'prenom')
+    readonly_fields = (
+        'matricule', 'nom', 'prenom', 'classe', 'statut',
+        'supprime_le', 'supprime_par', 'statut_avant_suppression',
+    )
+    actions = ('restaurer_eleves',)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).filter(est_dans_corbeille=True)
+
+    def has_add_permission(self, request):
+        return False
+
+    @staticmethod
+    def _peut_supprimer_definitivement(request):
+        user = request.user
+        profil = getattr(user, 'profil', None)
+        return bool(
+            user.is_active
+            and user.is_staff
+            and (
+                user.is_superuser
+                or getattr(profil, 'peut_supprimer_eleves_definitivement', False)
+            )
+        )
+
+    def has_delete_permission(self, request, obj=None):
+        if not self._peut_supprimer_definitivement(request):
+            return False
+        return obj is None or obj.est_dans_corbeille
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        if not self._peut_supprimer_definitivement(request):
+            actions.pop('delete_selected', None)
+        elif 'delete_selected' in actions:
+            fonction, nom, _ = actions['delete_selected']
+            actions['delete_selected'] = (
+                fonction,
+                nom,
+                "Supprimer définitivement les élèves sélectionnés "
+                "(action irréversible)",
+            )
+        return actions
+
+    def delete_model(self, request, obj):
+        if not self.has_delete_permission(request, obj):
+            raise PermissionDenied
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        if not self._peut_supprimer_definitivement(request):
+            raise PermissionDenied
+        if queryset.exclude(est_dans_corbeille=True).exists():
+            raise PermissionDenied
+        super().delete_queryset(request, queryset)
+
+    @admin.action(description="Restaurer les élèves sélectionnés")
+    def restaurer_eleves(self, request, queryset):
+        count = 0
+        for eleve in queryset:
+            count += int(eleve.restaurer_depuis_corbeille())
+        self.message_user(request, f"{count} élève(s) restauré(s).")

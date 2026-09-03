@@ -5,30 +5,64 @@
     {% load static_versioned %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}G.S HKD{% endblock %}</title>
+    <script>
+    (function () {
+      var agent = navigator.userAgent || '';
+      var pointsTactiles = navigator.maxTouchPoints || 0;
+      var appareilMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(agent);
+      var ipadModeOrdinateur = /Macintosh/i.test(agent) && pointsTactiles > 1;
+      var tabletteTactile = pointsTactiles > 1
+        && window.matchMedia
+        && window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+
+      document.documentElement.classList.add(
+        appareilMobile || ipadModeOrdinateur || tabletteTactile
+          ? 'nav-device-mobile'
+          : 'nav-device-desktop'
+      );
+    })();
+    </script>
+    {% comment %}Titre et description suivent le domaine servi (voir ecole_moderne/identite_site.py) :
+       sur lesjardinswosewa.com, aucune page ne doit annoncer le logiciel hôte.{% endcomment %}
+    <title>{% block title %}{{ site.titre }}{% endblock %}</title>
 
     {# SEO : description par défaut, écrasable par les pages via le bloc meta_description #}
-    <meta name="description" content="{% block meta_description %}Myschool — système de gestion scolaire moderne : élèves, paiements, salaires, transport, notes et statistiques pour les établissements en Guinée.{% endblock %}">
+    <meta name="description" content="{% block meta_description %}{{ site.description }}{% endblock %}">
     <meta name="robots" content="{% block meta_robots %}index,follow{% endblock %}">
-    <meta name="theme-color" content="#0d6efd">
+    <meta name="theme-color" content="{{ school_branding.primary }}">
     <link rel="canonical" href="{% block canonical_url %}{{ request.build_absolute_uri }}{% endblock %}">
 
     {# Open Graph (Facebook, WhatsApp, LinkedIn, etc.) #}
+    {% comment %}Le nom du site suit le domaine servi : un lien de lesjardinswosewa.com
+       partagé sur WhatsApp ou Facebook doit annoncer l'école, pas le logiciel.{% endcomment %}
     <meta property="og:type" content="website">
-    <meta property="og:site_name" content="Myschool">
-    <meta property="og:title" content="{% block og_title %}{{ self.title|default:'Myschool' }}{% endblock %}">
-    <meta property="og:description" content="{% block og_description %}Gestion scolaire moderne — automatisation des inscriptions, paiements, notes et bulletins.{% endblock %}">
+    <meta property="og:site_name" content="{% block og_site_name %}{{ site.nom }}{% endblock %}">
+    <meta property="og:title" content="{% block og_title %}{{ site.titre }}{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}{{ site.description_partage }}{% endblock %}">
     <meta property="og:url" content="{% block og_url %}{{ request.build_absolute_uri }}{% endblock %}">
-    <meta property="og:image" content="{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/optimized/ecole.webp' %}{% endblock %}">
+    <meta property="og:image" content="{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{% static_versioned 'images/Ecole.png' %}{% endblock %}">
     <meta property="og:locale" content="fr_FR">
 
     {# Twitter Card #}
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="{% block twitter_title %}{{ self.title|default:'Myschool' }}{% endblock %}">
-    <meta name="twitter:description" content="{% block twitter_description %}Gestion scolaire moderne, automatisée et fiable pour les établissements scolaires.{% endblock %}">
-    <meta name="twitter:image" content="{% block twitter_image %}{{ request.scheme }}://{{ request.get_host }}{% static 'images/optimized/ecole.webp' %}{% endblock %}">
+    <meta name="twitter:title" content="{% block twitter_title %}{{ site.titre }}{% endblock %}">
+    <meta name="twitter:description" content="{% block twitter_description %}{{ site.description_partage }}{% endblock %}">
+    <meta name="twitter:image" content="{% block twitter_image %}{{ request.scheme }}://{{ request.get_host }}{% static_versioned 'images/Ecole.png' %}{% endblock %}">
 
     {% block structured_data %}
+    {% comment %}Sur le domaine de l'école, annoncer un SoftwareApplication hébergé
+       sur un autre domaine désindexe la page : le type suit donc le site servi.{% endcomment %}
+    {% if site.est_ecole %}
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "{{ site.schema_type|escapejs }}",
+      "name": "{{ site.nom|escapejs }}",
+      "url": "{{ request.scheme }}://{{ request.get_host }}/",
+      "description": "{{ site.description|escapejs }}"
+    }
+    </script>
+    {% else %}
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -46,31 +80,114 @@
       }
     }
     </script>
+    {% endif %}
     {% endblock %}
 
-    {% if is_offline %}
-    <!-- Mode offline : fichiers locaux -->
-    <link href="{% static 'vendor/bootstrap/bootstrap.min.css' %}" rel="stylesheet">
-    <link href="{% static 'vendor/fontawesome/all.min.css' %}" rel="stylesheet">
-    {% else %}
-    <!-- Resource Hints for faster connections -->
-    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-    <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
-    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-    <link rel="dns-prefetch" href="//cdnjs.cloudflare.com">
-
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font Awesome -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    {% endif %}
+    <!-- Ressources locales : la navigation reste fonctionnelle même si un CDN
+         est indisponible ou filtré sur une tablette. -->
+    <link href="{% static_versioned 'vendor/bootstrap/bootstrap.min.css' %}" rel="stylesheet">
+    <link href="{% static_versioned 'vendor/fontawesome/all.min.css' %}" rel="stylesheet">
 
     <style>
+        :root {
+            --school-primary: {{ school_branding.primary }};
+            --school-primary-dark: {{ school_branding.primary_dark }};
+            --school-primary-light: {{ school_branding.primary_light }};
+            --school-primary-text: {{ school_branding.primary_text }};
+            --school-primary-rgb: {{ school_branding.primary_rgb }};
+            --school-secondary: {{ school_branding.secondary }};
+            --school-secondary-light: {{ school_branding.secondary_light }};
+            --school-secondary-text: {{ school_branding.secondary_text }};
+            --school-accent: {{ school_branding.accent }};
+            --school-accent-light: {{ school_branding.accent_light }};
+            --school-success: {{ school_branding.success }};
+            --school-success-light: {{ school_branding.success_light }};
+            --school-success-text: {{ school_branding.success_text }};
+            --school-warning: {{ school_branding.warning }};
+            --school-warning-light: {{ school_branding.warning_light }};
+            --school-warning-text: {{ school_branding.warning_text }};
+            --school-danger: {{ school_branding.danger }};
+            --school-danger-light: {{ school_branding.danger_light }};
+            --school-danger-text: {{ school_branding.danger_text }};
+            --school-info: {{ school_branding.info }};
+            --school-info-light: {{ school_branding.info_light }};
+            --school-info-text: {{ school_branding.info_text }};
+            --school-surface: {{ school_branding.surface }};
+            --school-text: {{ school_branding.text }};
+            --school-border: {{ school_branding.border }};
+        }
         body { padding-top: 70px; }
+        .site-navbar.bg-primary {
+            --bs-navbar-color: var(--school-primary-text);
+            --bs-navbar-hover-color: var(--school-primary-text);
+            --bs-navbar-brand-color: var(--school-primary-text);
+            --bs-navbar-brand-hover-color: var(--school-primary-text);
+            background-color: var(--school-primary) !important;
+            color: var(--school-primary-text);
+        }
+        .btn-primary {
+            --bs-btn-bg: var(--school-primary);
+            --bs-btn-border-color: var(--school-primary);
+            --bs-btn-color: var(--school-primary-text);
+            --bs-btn-hover-bg: var(--school-primary-dark);
+            --bs-btn-hover-border-color: var(--school-primary-dark);
+            --bs-btn-hover-color: var(--school-primary-text);
+            --bs-btn-active-bg: var(--school-primary-dark);
+            --bs-btn-active-border-color: var(--school-primary-dark);
+            --bs-btn-active-color: var(--school-primary-text);
+        }
+        .btn-outline-primary {
+            --bs-btn-color: var(--school-primary);
+            --bs-btn-border-color: var(--school-primary);
+            --bs-btn-hover-bg: var(--school-primary);
+            --bs-btn-hover-border-color: var(--school-primary);
+            --bs-btn-hover-color: var(--school-primary-text);
+        }
+        .bg-primary { background-color: var(--school-primary) !important; }
+        .text-primary { color: var(--school-primary) !important; }
+        .border-primary { border-color: var(--school-primary) !important; }
+        .card-stats { border-left-color: var(--school-primary) !important; }
+        .card-stats.success { border-left-color: var(--school-success) !important; }
+        .card-stats.warning { border-left-color: var(--school-warning) !important; }
+        .card-stats.danger { border-left-color: var(--school-danger) !important; }
+        :is(.notes-card, .transport-card, .depenses-card, .stats-card, .stat-card).primary {
+            border-color: var(--school-primary) !important;
+        }
+        :is(.notes-card, .transport-card, .depenses-card, .stats-card, .stat-card).success {
+            border-color: var(--school-success) !important;
+        }
+        :is(.notes-card, .transport-card, .depenses-card, .stats-card, .stat-card).info {
+            border-color: var(--school-info) !important;
+        }
+        :is(.notes-card, .transport-card, .depenses-card, .stats-card, .stat-card).warning {
+            border-color: var(--school-warning) !important;
+        }
+        :is(.notes-card, .transport-card, .depenses-card, .stats-card, .stat-card).danger {
+            border-color: var(--school-danger) !important;
+        }
+        :is(.notes-card, .transport-card, .depenses-card).primary [class*="card-icon"] { color: var(--school-primary) !important; }
+        :is(.notes-card, .transport-card, .depenses-card).success [class*="card-icon"] { color: var(--school-success) !important; }
+        :is(.notes-card, .transport-card, .depenses-card).info [class*="card-icon"] { color: var(--school-info) !important; }
+        :is(.notes-card, .transport-card, .depenses-card).warning [class*="card-icon"] { color: var(--school-warning) !important; }
+        :is(.notes-card, .transport-card, .depenses-card).danger [class*="card-icon"] { color: var(--school-danger) !important; }
+        .rec-kpi--primary, .sal-kpi--primary { border-top-color: var(--school-primary) !important; }
+        .rec-kpi--success, .sal-kpi--success { border-top-color: var(--school-success) !important; }
+        .rec-kpi--warning, .sal-kpi--warning { border-top-color: var(--school-warning) !important; }
+        .rec-kpi--danger, .sal-kpi--danger { border-top-color: var(--school-danger) !important; }
+        .rec-kpi--info, .sal-kpi--info { border-top-color: var(--school-info) !important; }
         .navbar-brand {
             font-weight: bold;
+            min-width: 0;
+            white-space: nowrap;
+        }
+        .navbar-brand span {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         .navbar-brand img {
+            flex: 0 0 auto;
             height: 36px;
             width: auto;
             margin-right: 8px;
@@ -83,6 +200,136 @@
         .navbar-nav .nav-link {
             font-size: 0.9rem;
             padding: 0.5rem 0.7rem;
+            white-space: nowrap;
+        }
+        .site-navbar .navbar-nav {
+            flex-wrap: nowrap;
+        }
+        .site-navbar .navbar-nav .nav-item {
+            flex: 0 0 auto;
+        }
+        .site-navbar .navbar-toggler {
+            flex: 0 0 auto;
+            min-height: 44px;
+            min-width: 44px;
+            position: relative;
+            touch-action: manipulation;
+            z-index: 2;
+        }
+
+        /* Sur ordinateur, tous les boutons restent sur une seule ligne. La
+           zone centrale défile horizontalement uniquement si la fenêtre est
+           exceptionnellement étroite. */
+        html.nav-device-desktop .site-navbar > .container-fluid {
+            align-items: center;
+            flex-wrap: nowrap;
+        }
+        html.nav-device-desktop .site-navbar .navbar-toggler {
+            display: none !important;
+        }
+        html.nav-device-desktop .site-navbar .navbar-collapse {
+            align-items: center;
+            display: flex !important;
+            flex-basis: auto !important;
+            height: auto !important;
+            max-height: none;
+            min-width: 0;
+            overflow: visible;
+            padding: 0;
+            width: auto;
+        }
+        html.nav-device-desktop .site-navbar .navbar-nav {
+            align-items: center;
+            flex-direction: row;
+            flex-wrap: nowrap;
+        }
+        html.nav-device-desktop .site-navbar .navbar-nav.me-auto {
+            min-width: 0;
+            overflow-x: auto;
+            overflow-y: hidden;
+            scrollbar-width: thin;
+        }
+        html.nav-device-desktop .site-navbar .navbar-nav .nav-link,
+        html.nav-device-desktop .site-navbar .navbar-nav .btn-link.dropdown-toggle {
+            align-items: center;
+            display: flex;
+            max-width: none;
+            overflow: visible;
+            text-align: inherit;
+            text-overflow: clip;
+            white-space: nowrap;
+            width: auto;
+        }
+        html.nav-device-desktop .site-navbar .navbar-nav + .navbar-nav {
+            border-top: 0;
+            margin-top: 0;
+            padding-top: 0;
+        }
+        html.nav-device-desktop .site-navbar .navbar-nav .dropdown-menu {
+            left: auto;
+            min-width: 250px;
+            position: absolute;
+            right: 0;
+            transform: translateX(-20px);
+            width: auto;
+        }
+
+        /* iOS, Android et les tablettes tactiles conservent toujours le menu
+           hamburger, y compris en paysage sur les écrans de plus de 992 px. */
+        html.nav-device-mobile .navbar-expand-lg .navbar-toggler {
+            display: block !important;
+        }
+        html.nav-device-mobile .navbar-expand-lg .navbar-collapse.collapse:not(.show) {
+            display: none !important;
+        }
+        html.nav-device-mobile .navbar-expand-lg .navbar-collapse.collapse.show,
+        html.nav-device-mobile .navbar-expand-lg .navbar-collapse.collapsing {
+            display: block !important;
+        }
+        html.nav-device-mobile .site-navbar > .container-fluid {
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        html.nav-device-mobile .site-navbar .navbar-collapse {
+            flex-basis: 100% !important;
+            max-height: calc(100vh - 70px);
+            max-height: calc(100dvh - 70px);
+            overflow-x: hidden;
+            overflow-y: auto;
+            padding: 0.5rem 0 0.85rem;
+            scrollbar-gutter: stable;
+            width: 100%;
+        }
+        html.nav-device-mobile .site-navbar .navbar-nav {
+            align-items: stretch;
+            flex-direction: column;
+            flex-wrap: nowrap;
+            width: 100%;
+        }
+        html.nav-device-mobile .site-navbar .navbar-nav + .navbar-nav {
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            margin-top: 0.35rem;
+            padding-top: 0.35rem;
+        }
+        html.nav-device-mobile .site-navbar .navbar-nav .nav-link,
+        html.nav-device-mobile .site-navbar .navbar-nav .btn-link.dropdown-toggle {
+            align-items: center;
+            display: flex;
+            max-width: 100%;
+            overflow: hidden;
+            text-align: left;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            width: 100%;
+        }
+        html.nav-device-mobile .site-navbar .navbar-nav .dropdown-menu {
+            left: auto;
+            max-width: 100%;
+            min-width: 0;
+            position: static;
+            right: auto;
+            transform: none;
+            width: 100%;
         }
         /* Style des boutons dropdown dans navbar */
         .navbar-nav .btn-link.dropdown-toggle {
@@ -93,6 +340,7 @@
             padding: 0.5rem 0.7rem;
             font-size: 0.9rem;
             cursor: pointer;
+            white-space: nowrap;
         }
         .navbar-nav .btn-link.dropdown-toggle:hover {
             color: inherit;
@@ -189,6 +437,99 @@
             display: block;
         }
 
+        /* Sur les ordinateurs de largeur limitée, réduire légèrement les
+           libellés tout en conservant leur alignement horizontal. */
+        @media (max-width: 1399.98px) {
+            .site-navbar .navbar-collapse {
+                min-width: 0;
+            }
+            html.nav-device-desktop .site-navbar .navbar-nav.me-auto {
+                min-width: 0;
+                overflow-x: auto;
+                overflow-y: hidden;
+                scrollbar-width: thin;
+            }
+            html.nav-device-desktop .site-navbar .navbar-nav.me-auto .nav-link {
+                font-size: 0.82rem;
+                padding-left: 0.45rem;
+                padding-right: 0.45rem;
+            }
+        }
+
+        /* Le panneau repliable reste limité aux mêmes largeurs que dans la
+           disposition Bootstrap initiale. */
+        @media (max-width: 991.98px) {
+            .site-navbar > .container-fluid {
+                align-items: center;
+                flex-wrap: wrap;
+            }
+            .site-navbar .navbar-collapse {
+                flex-basis: 100%;
+                max-height: calc(100vh - 70px);
+                max-height: calc(100dvh - 70px);
+                overflow-x: hidden;
+                overflow-y: auto;
+                padding: 0.5rem 0 0.85rem;
+                scrollbar-gutter: stable;
+                width: 100%;
+            }
+            .site-navbar .navbar-nav {
+                flex-wrap: nowrap;
+                width: 100%;
+            }
+            .site-navbar .navbar-nav + .navbar-nav {
+                border-top: 1px solid rgba(255, 255, 255, 0.2);
+                margin-top: 0.35rem;
+                padding-top: 0.35rem;
+            }
+            .site-navbar .navbar-nav .nav-link,
+            .site-navbar .navbar-nav .btn-link.dropdown-toggle {
+                align-items: center;
+                display: flex;
+                max-width: 100%;
+                overflow: hidden;
+                text-align: left;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                width: 100%;
+            }
+            .site-navbar .navbar-nav .nav-link > .badge {
+                flex: 0 0 auto;
+            }
+            .site-navbar .navbar-nav .dropdown-menu {
+                left: auto;
+                max-width: 100%;
+                min-width: 0;
+                position: static;
+                right: auto;
+                transform: none;
+                width: 100%;
+            }
+            .site-navbar .navbar-nav .dropdown-item {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+        }
+
+        @media (max-width: 575.98px) {
+            body { padding-top: 62px; }
+            .site-navbar .navbar-brand {
+                max-width: calc(100% - 62px);
+            }
+            .site-navbar .navbar-brand img {
+                height: 32px;
+                width: 32px;
+            }
+            .site-navbar .navbar-brand span {
+                font-size: 0.95rem;
+            }
+            .site-navbar .navbar-collapse {
+                max-height: calc(100vh - 62px);
+                max-height: calc(100dvh - 62px);
+            }
+        }
+
         /* Footer */
         .site-footer {
             border-top: 1px solid #e9ecef;
@@ -201,14 +542,15 @@
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary fixed-top">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary fixed-top site-navbar">
         <div class="container-fluid">
             <a class="navbar-brand d-flex align-items-center" href="{% url 'home' %}">
-                <img src="{% static_versioned 'logos/logo.png' %}" alt="Logo Myschool" width="36" height="36" loading="eager" decoding="async" fetchpriority="high">
-                <span>Myschool</span>
+                <img src="{% static_versioned 'logos/logo.png' %}" alt="Logo {{ site.nom }}" width="36" height="36" loading="eager" decoding="async" fetchpriority="high">
+                <span>{{ site.nom }}</span>
             </a>
 
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <button class="navbar-toggler" id="siteNavbarToggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                    aria-controls="navbarNav" aria-expanded="false" aria-label="Afficher ou masquer la navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
 
@@ -421,8 +763,9 @@
                                 {% endif %}
                                 <li><hr class="dropdown-divider"></li>
                                 <li>
-                                    <form method="post" action="{% url 'utilisateurs:logout' %}" class="px-3 py-1">
+                                    <form method="post" action="{% url 'utilisateurs:logout' %}" class="px-3 py-1" id="session-logout-form">
                                         {% csrf_token %}
+                                        <input type="hidden" name="reason" id="session-logout-reason" value="">
                                         <button type="submit" class="dropdown-item px-0">
                                             <i class="fas fa-sign-out-alt me-1"></i>Déconnexion
                                         </button>
@@ -556,16 +899,20 @@
             <div class="row align-items-center">
                 <div class="col-md-6">
                     <small>
-                        &copy; {% now "Y" %} Myschool. Tous droits réservés.
+                        &copy; {% now "Y" %} {{ site.nom }}. Tous droits réservés.
                     </small>
                 </div>
                 <div class="col-md-6 text-md-end mt-2 mt-md-0">
                     <a href="{% url 'home' %}" class="text-light text-decoration-none me-3">
                         <i class="fas fa-home me-1"></i>Accueil
                     </a>
-                    <span class="me-3"><i class="fas fa-phone me-1"></i> +224 622613559</span>
-                    <a href="mailto:contact@myschoolgn.space" class="text-light text-decoration-none">
-                        <i class="fas fa-envelope me-1"></i> contact@myschoolgn.space
+                    {% comment %}Coordonnées du site servi : sur lesjardinswosewa.com, un parent
+                       doit joindre l'école, pas l'éditeur du logiciel.{% endcomment %}
+                    <a href="tel:{{ site.telephone }}" class="text-light text-decoration-none me-3">
+                        <i class="fas fa-phone me-1"></i> {{ site.telephone_affiche }}
+                    </a>
+                    <a href="mailto:{{ site.email_contact }}" class="text-light text-decoration-none">
+                        <i class="fas fa-envelope me-1"></i> {{ site.email_contact }}
                     </a>
                 </div>
             </div>
@@ -573,12 +920,31 @@
         </div>
     </footer>
 
-    <!-- Bootstrap JS -->
-    {% if is_offline %}
-    <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
-    {% else %}
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    {% endif %}
+    <!-- Bootstrap local : évite un bouton hamburger inactif quand le CDN ne répond pas. -->
+    <script src="{% static_versioned 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
+    <script>
+    (function () {
+      const bouton = document.getElementById('siteNavbarToggler');
+      const menu = document.getElementById('navbarNav');
+      if (!bouton || !menu || (window.bootstrap && window.bootstrap.Collapse)) {
+        return;
+      }
+
+      function fermerMenu() {
+        menu.classList.remove('show');
+        bouton.setAttribute('aria-expanded', 'false');
+      }
+
+      bouton.addEventListener('click', function () {
+        const ouvert = menu.classList.toggle('show');
+        bouton.setAttribute('aria-expanded', ouvert ? 'true' : 'false');
+      });
+
+      menu.querySelectorAll('a.nav-link:not(.dropdown-toggle)').forEach(function (lien) {
+        lien.addEventListener('click', fermerMenu);
+      });
+    })();
+    </script>
 
     <!-- Global phone normalization (+224) -->
     <script>
@@ -739,5 +1105,180 @@
       });
     })();
     </script>
+    {% if user.is_authenticated %}
+    <script>
+    // Deconnexion automatique apres une periode sans activite humaine.
+    // Les requetes de synchronisation en arriere-plan ne reinitialisent jamais
+    // ce compteur : un poste abandonne ne reste donc pas connecte.
+    (function(){
+      var DELAI_MS = Number("{{ session_idle_timeout_seconds|default:1800 }}") * 1000;
+      var derniereActivite = Date.now();
+      var minuteur = null;
+      var dernierSignal = 0;
+
+      function fermerSession(){
+        var formulaire = document.getElementById('session-logout-form');
+        var raison = document.getElementById('session-logout-reason');
+        if (!formulaire) {
+          window.location.replace("{% url 'utilisateurs:login' %}");
+          return;
+        }
+        if (raison) raison.value = 'inactivity';
+        HTMLFormElement.prototype.submit.call(formulaire);
+      }
+
+      function verifierInactivite(){
+        var restant = DELAI_MS - (Date.now() - derniereActivite);
+        if (restant <= 0) {
+          fermerSession();
+          return;
+        }
+        clearTimeout(minuteur);
+        minuteur = setTimeout(verifierInactivite, Math.min(restant, 60000));
+      }
+
+      function signalerActivite(){
+        var maintenant = Date.now();
+        // Eviter des centaines de reprogrammations pendant un mouvement souris.
+        if (maintenant - dernierSignal < 1000) return;
+        dernierSignal = maintenant;
+        derniereActivite = maintenant;
+        verifierInactivite();
+      }
+
+      ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll'].forEach(function(evenement){
+        document.addEventListener(evenement, signalerActivite, {passive: true, capture: true});
+      });
+      document.addEventListener('visibilitychange', verifierInactivite);
+      verifierInactivite();
+    })();
+    </script>
+
+    <script>
+    // Rafraichissement automatique des pages ouvertes.
+    //
+    // La synchronisation met a jour la base du poste en arriere-plan ; sans ce
+    // guetteur, l'ecran continuerait d'afficher l'etat d'avant l'ajout jusqu'a
+    // ce que quelqu'un actualise. Il interroge un repere minuscule (identifiant
+    // du dernier changement) et recharge des qu'il bouge.
+    (function(){
+      var URL_ETAT = "{% url 'synchronisation:state' %}";
+      // Le guetteur ne demande qu'un numero, jamais les donnees, et se tait
+      // quand l'onglet est en arriere-plan : une cadence courte reste sans
+      // effet sensible sur le serveur.
+      var INTERVALLE_MS = 3000;
+      var dernierRepere = null;
+      var requeteEnCours = false;
+
+      // Une saisie non enregistree ne doit jamais etre perdue par un
+      // rechargement automatique : dans ce cas on propose, on n'impose pas.
+      var saisieEnCours = false;
+      ['input', 'change'].forEach(function(evenement){
+        document.addEventListener(evenement, function(e){
+          var cible = e.target;
+          if (cible && /^(INPUT|SELECT|TEXTAREA)$/.test(cible.tagName)) { saisieEnCours = true; }
+        }, true);
+      });
+
+      function rechargementRisque(){
+        if (saisieEnCours) return true;
+        return !!document.querySelector('.modal.show, dialog[open]');
+      }
+
+      function recharger(){
+        // `replace` plutot que `reload` : sur une page arrivee par POST,
+        // recharger redemanderait l'envoi du formulaire.
+        window.location.replace(window.location.href);
+      }
+
+      function proposerRechargement(){
+        if (document.getElementById('sync-bandeau-maj')) return;
+        var bandeau = document.createElement('div');
+        bandeau.id = 'sync-bandeau-maj';
+        bandeau.className = 'position-fixed bottom-0 end-0 m-3 p-3 bg-primary text-white rounded shadow';
+        bandeau.style.zIndex = '1080';
+        bandeau.innerHTML = '<span class="me-3"><i class="fas fa-sync-alt me-2"></i>Nouvelles donnees synchronisees</span>'
+          + '<button type="button" class="btn btn-sm btn-light">Actualiser</button>';
+        bandeau.querySelector('button').addEventListener('click', recharger);
+        document.body.appendChild(bandeau);
+      }
+
+      function verifier(){
+        if (requeteEnCours || document.hidden) return;
+        requeteEnCours = true;
+        fetch(URL_ETAT, {
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: {'X-Session-Background': '1'}
+        })
+          .then(function(reponse){ return reponse.ok ? reponse.json() : null; })
+          .then(function(donnees){
+            if (!donnees || !donnees.ok) return;
+            var repere = donnees.last_change_id || 0;
+            if (dernierRepere === null) { dernierRepere = repere; return; }
+            if (repere > dernierRepere) {
+              dernierRepere = repere;
+              if (rechargementRisque()) { proposerRechargement(); } else { recharger(); }
+            }
+          })
+          .catch(function(){})
+          .then(function(){ requeteEnCours = false; });
+      }
+
+      document.addEventListener('visibilitychange', function(){ if (!document.hidden) verifier(); });
+      document.addEventListener('DOMContentLoaded', function(){
+        verifier();
+        setInterval(verifier, INTERVALLE_MS);
+      });
+    })();
+    </script>
+
+    <script>
+    // Mise a jour de l'application telechargee et prete.
+    //
+    // Elle s'installe d'elle-meme au prochain demarrage, ce qui suffit pour un
+    // poste qu'on eteint le soir. Un poste laisse allume des semaines resterait
+    // sinon sur une version ancienne sans que personne ne le sache : ce bandeau
+    // le dit, et laisse l'utilisateur choisir son moment.
+    (function(){
+      var URL_MAJ = "{% url 'mises_a_jour:mise_a_jour_prete' %}";
+
+      function annoncer(donnees){
+        if (document.getElementById('maj-bandeau')) return;
+        var bandeau = document.createElement('div');
+        bandeau.id = 'maj-bandeau';
+        bandeau.className = 'position-fixed bottom-0 start-0 m-3 p-3 bg-success text-white rounded shadow';
+        bandeau.style.zIndex = '1080';
+        bandeau.style.maxWidth = '22rem';
+        bandeau.innerHTML =
+          '<div class="d-flex align-items-start gap-2">'
+          + '<i class="fas fa-download mt-1"></i>'
+          + '<div>'
+          + '<div class="fw-bold">Version ' + (donnees.version || '') + ' prête</div>'
+          + '<div class="small">Elle s\'installera au prochain démarrage de MySchoolGN.</div>'
+          + '</div>'
+          + '<button type="button" class="btn-close btn-close-white ms-auto" aria-label="Fermer"></button>'
+          + '</div>';
+        bandeau.querySelector('button').addEventListener('click', function(){
+          bandeau.remove();
+        });
+        document.body.appendChild(bandeau);
+      }
+
+      document.addEventListener('DOMContentLoaded', function(){
+        fetch(URL_MAJ, {
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: {'X-Session-Background': '1'}
+        })
+          .then(function(reponse){ return reponse.ok ? reponse.json() : null; })
+          .then(function(donnees){
+            if (donnees && donnees.ok && donnees.prete) { annoncer(donnees); }
+          })
+          .catch(function(){});
+      });
+    })();
+    </script>
+    {% endif %}
 </body>
 </html>

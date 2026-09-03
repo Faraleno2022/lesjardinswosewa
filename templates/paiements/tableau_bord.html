@@ -16,11 +16,23 @@
         <a href="{% url 'paiements:liste_paiements' %}" class="btn btn-outline-info">
             <i class="fas fa-list me-1"></i>Tous les Paiements
         </a>
+        <a href="{% url 'paiements:historique_operations' %}" class="btn btn-outline-dark">
+            <i class="fas fa-history me-1"></i>Modifications / suppressions
+        </a>
         <a href="{% url 'paiements:liste_eleves_soldes' %}" class="btn btn-outline-success">
             <i class="fas fa-check-circle me-1"></i>Élèves soldés
         </a>
         <a href="{% url 'paiements:liste_eleves_impayes' %}" class="btn btn-outline-danger">
             <i class="fas fa-exclamation-triangle me-1"></i>Élèves impayés
+        </a>
+        <a href="{% url 'paiements:liste_admissions' 'inscription' %}" class="btn btn-outline-success">
+            <i class="fas fa-user-plus me-1"></i>Élèves inscrits
+        </a>
+        <a href="{% url 'paiements:liste_admissions' 'reinscription' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-user-check me-1"></i>Élèves réinscrits
+        </a>
+        <a href="{% url 'paiements:garde_prolongee_report' %}" class="btn btn-outline-primary">
+            <i class="fas fa-clock me-1"></i>Garde prolongée
         </a>
         <a href="{% url 'paiements:liste_relances' %}" class="btn btn-outline-warning">
             <i class="fas fa-bell me-1"></i>Relances
@@ -44,7 +56,7 @@
         padding: 25px;
         text-align: center;
         box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        border-top: 4px solid #007bff;
+        border-top: 4px solid var(--school-primary);
         margin-bottom: 20px;
         transition: transform 0.2s;
     }
@@ -54,7 +66,7 @@
     .stat-number {
         font-size: 1.8rem;
         font-weight: bold;
-        color: #007bff;
+        color: var(--school-primary);
         margin-bottom: 10px;
         line-height: 1.2;
     }
@@ -64,12 +76,12 @@
         text-transform: uppercase;
         letter-spacing: 1px;
     }
-    .stat-card.success { border-top-color: #28a745; }
-    .stat-card.success .stat-number { color: #28a745; }
-    .stat-card.warning { border-top-color: #ffc107; }
-    .stat-card.warning .stat-number { color: #ffc107; }
-    .stat-card.danger { border-top-color: #dc3545; }
-    .stat-card.danger .stat-number { color: #dc3545; }
+    .stat-card.success { border-top-color: var(--school-success); }
+    .stat-card.success .stat-number { color: var(--school-success); }
+    .stat-card.warning { border-top-color: var(--school-warning); }
+    .stat-card.warning .stat-number { color: var(--school-warning); }
+    .stat-card.danger { border-top-color: var(--school-danger); }
+    .stat-card.danger .stat-number { color: var(--school-danger); }
     
     .recent-payments {
         max-height: 400px;
@@ -77,16 +89,16 @@
     }
     
     .payment-item {
-        border-left: 4px solid #007bff;
+        border-left: 4px solid var(--school-primary);
         padding: 15px;
         margin-bottom: 10px;
         background: #f8f9fa;
         border-radius: 0 8px 8px 0;
     }
     
-    .payment-item.validated { border-left-color: #28a745; }
-    .payment-item.pending { border-left-color: #ffc107; }
-    .payment-item.rejected { border-left-color: #dc3545; }
+    .payment-item.validated { border-left-color: var(--school-success); }
+    .payment-item.pending { border-left-color: var(--school-warning); }
+    .payment-item.rejected { border-left-color: var(--school-danger); }
 
     .director-card {
         background: #ffffff;
@@ -111,6 +123,62 @@
     .risk-table td,
     .risk-table th {
         vertical-align: middle;
+    }
+
+    .category-payment-card {
+        background: #fff;
+        border: 1px solid #e8edf3;
+        border-radius: 12px;
+        box-shadow: 0 3px 14px rgba(25, 42, 70, 0.07);
+        height: 100%;
+        overflow: hidden;
+    }
+    .category-card-header {
+        align-items: center;
+        background: var(--school-primary);
+        color: var(--school-primary-text);
+        display: flex;
+        gap: 12px;
+        padding: 16px 18px;
+    }
+    .category-card-header .category-icon {
+        align-items: center;
+        background: rgba(255, 255, 255, 0.18);
+        border-radius: 50%;
+        display: inline-flex;
+        height: 38px;
+        justify-content: center;
+        width: 38px;
+    }
+    .category-card--info .category-card-header { background: var(--school-info); color: var(--school-info-text); }
+    .category-card--warning .category-card-header { background: var(--school-warning); color: var(--school-warning-text); }
+    .category-card--success .category-card-header { background: var(--school-success); color: var(--school-success-text); }
+    .category-card--secondary .category-card-header { background: var(--school-secondary); color: var(--school-secondary-text); }
+    .category-period {
+        background: var(--school-surface);
+        border: 1px solid #edf1f5;
+        border-radius: 9px;
+        height: 100%;
+        padding: 12px;
+    }
+    .category-period-label {
+        color: #6c757d;
+        font-size: .76rem;
+        letter-spacing: .035rem;
+        text-transform: uppercase;
+    }
+    .category-period-value {
+        color: #172033;
+        font-size: 1.05rem;
+        font-weight: 700;
+        line-height: 1.25;
+        margin-top: 4px;
+    }
+    .category-overdue {
+        background: var(--school-danger-light);
+        border-top: 1px solid #f5d7d7;
+        color: var(--school-danger);
+        padding: 13px 18px;
     }
 </style>
 {% endblock %}
@@ -147,6 +215,128 @@
             </div>
         </div>
     </div>
+
+    <!-- Encaissements validés par catégorie et par période -->
+    {% if indicateurs_categories %}
+    <section class="mb-4" aria-labelledby="encaissements-categories-title">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end mb-3">
+            <div>
+                <h4 id="encaissements-categories-title" class="mb-1">
+                    <i class="fas fa-wallet text-primary me-2"></i>Encaissements par catégorie
+                </h4>
+                <p class="text-muted mb-0">
+                    Montants des paiements validés. La semaine commence le lundi.
+                </p>
+            </div>
+            <span class="badge bg-success mt-2 mt-md-0">Données validées uniquement</span>
+        </div>
+
+        <div class="row g-3">
+            {% for categorie in indicateurs_categories %}
+            <div class="col-12 col-lg-6 col-xxl-4">
+                <article class="category-payment-card category-card--{{ categorie.theme }}">
+                    <header class="category-card-header">
+                        <span class="category-icon" aria-hidden="true">
+                            <i class="fas {{ categorie.icon }}"></i>
+                        </span>
+                        <div>
+                            <h5 class="mb-0">{{ categorie.label }}</h5>
+                            <small class="opacity-75">Paiements encaissés</small>
+                        </div>
+                    </header>
+
+                    <div class="p-3">
+                        <div class="row g-2">
+                            {% for periode in categorie.periodes %}
+                            <div class="col-6">
+                                <div class="category-period">
+                                    <div class="category-period-label">{{ periode.label }}</div>
+                                    <div class="category-period-value">
+                                        {{ periode.montant|floatformat:0|intcomma }} GNF
+                                    </div>
+                                    <small class="text-muted">
+                                        {{ periode.nombre|intcomma }} paiement{{ periode.nombre|pluralize }}
+                                    </small>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    {% if categorie.key == 'inscription' or categorie.key == 'reinscription' %}
+                    <footer class="border-top bg-light p-3">
+                        <div class="btn-group btn-group-sm w-100" role="group" aria-label="Liste et exports {{ categorie.label }}">
+                            <a class="btn btn-outline-primary" href="{% url 'paiements:liste_admissions' categorie.key %}">
+                                <i class="fas fa-list me-1"></i>Liste
+                            </a>
+                            <a class="btn btn-outline-danger" href="{% url 'paiements:export_admissions_pdf' categorie.key %}">
+                                <i class="fas fa-file-pdf me-1"></i>PDF
+                            </a>
+                            <a class="btn btn-outline-success" href="{% url 'paiements:export_admissions_excel' categorie.key %}">
+                                <i class="fas fa-file-excel me-1"></i>Excel
+                            </a>
+                        </div>
+                    </footer>
+                    {% endif %}
+
+                    {% if categorie.retard %}
+                    <footer class="category-overdue">
+                        <div class="d-flex justify-content-between align-items-start gap-3">
+                            <div>
+                                <strong><i class="fas fa-exclamation-circle me-1"></i>Retard de paiement</strong>
+                                <div class="small">{{ categorie.retard.nombre|intcomma }} {{ categorie.retard.libelle }}</div>
+                            </div>
+                            <strong class="text-nowrap">{{ categorie.retard.montant|floatformat:0|intcomma }} GNF</strong>
+                        </div>
+                        <small class="d-block mt-1 opacity-75">{{ categorie.retard.aide }}</small>
+                    </footer>
+                    {% endif %}
+                </article>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if audit_paiements %}
+    <section class="mb-4" aria-labelledby="audit-paiements-title">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-end mb-3">
+            <div>
+                <h4 id="audit-paiements-title" class="mb-1">
+                    <i class="fas fa-exchange-alt text-danger me-2"></i>Montants modifiés et supprimés
+                </h4>
+                <p class="text-muted mb-0">Impact des corrections et annulations enregistré avec leurs motifs.</p>
+            </div>
+            <a href="{% url 'paiements:historique_operations' %}" class="btn btn-outline-dark btn-sm mt-2 mt-md-0">
+                <i class="fas fa-list me-1"></i>Afficher la liste détaillée
+            </a>
+        </div>
+        <div class="card border-danger shadow-sm">
+            <div class="card-body">
+                <div class="row g-3">
+                    {% for periode in audit_paiements %}
+                    <div class="col-md-6 col-xl-3">
+                        <div class="category-period h-100">
+                            <div class="category-period-label mb-2">{{ periode.label }}</div>
+                            <div class="small text-muted">Montants modifiés</div>
+                            <div class="fw-bold text-warning-emphasis">
+                                {{ periode.montant_avant|floatformat:0|intcomma }} → {{ periode.montant_apres|floatformat:0|intcomma }} GNF
+                            </div>
+                            <div class="small {% if periode.variation_nette < 0 %}text-danger{% elif periode.variation_nette > 0 %}text-success{% else %}text-muted{% endif %}">
+                                Variation nette : {{ periode.variation_nette|floatformat:0|intcomma }} GNF · {{ periode.modifications }} opération(s)
+                            </div>
+                            <hr class="my-2">
+                            <div class="small text-muted">Montants supprimés</div>
+                            <div class="fw-bold text-danger">{{ periode.montant_supprime|floatformat:0|intcomma }} GNF</div>
+                            <div class="small text-muted">{{ periode.suppressions }} suppression(s) douce(s)</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </section>
+    {% endif %}
 
     <!-- Vue directeur : recouvrement et prévisions -->
     <div class="card mb-4 border-0 shadow-sm">
@@ -245,7 +435,23 @@
                     {% endif %}
                 </div>
                 <div class="col-lg-4">
-                    <h6 class="text-uppercase text-muted mb-3">Modes d'encaissement du mois</h6>
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                        <h6 class="text-uppercase text-muted mb-0">Modes d'encaissement du mois</h6>
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Actions par mode d'encaissement">
+                            <a class="btn btn-outline-primary"
+                               href="{% url 'paiements:modes_encaissement_eleves' %}?date_debut={{ modes_date_debut|date:'Y-m-d' }}&date_fin={{ modes_date_fin|date:'Y-m-d' }}&statut=VALIDE">
+                                <i class="fas fa-users me-1"></i>Élèves et soldes
+                            </a>
+                            <a class="btn btn-outline-danger"
+                               href="{% url 'paiements:export_modes_encaissement_pdf' %}?du={{ modes_date_debut|date:'Y-m-d' }}&au={{ modes_date_fin|date:'Y-m-d' }}&statut=VALIDE">
+                                <i class="fas fa-file-pdf me-1"></i>PDF
+                            </a>
+                            <a class="btn btn-outline-success"
+                               href="{% url 'paiements:export_modes_encaissement_excel' %}?du={{ modes_date_debut|date:'Y-m-d' }}&au={{ modes_date_fin|date:'Y-m-d' }}&statut=VALIDE">
+                                <i class="fas fa-file-excel me-1"></i>Excel
+                            </a>
+                        </div>
+                    </div>
                     {% if modes_encaissement %}
                         <div class="list-group">
                             {% for mode in modes_encaissement %}

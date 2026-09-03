@@ -10,6 +10,8 @@ import io
 import os
 import re
 import logging
+from contextvars import ContextVar
+from functools import wraps
 from decimal import Decimal
 
 from django.contrib.auth.decorators import login_required
@@ -21,7 +23,7 @@ from django.db.models import Q
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import cm, mm
-from reportlab.lib import colors
+from reportlab.lib import colors as reportlab_colors
 from reportlab.platypus import Table, TableStyle
 from reportlab.lib.utils import ImageReader
 
@@ -39,8 +41,57 @@ from .calculs_moyennes import (
     detecter_niveau_scolaire,
 )
 from utilisateurs.utils import filter_by_user_school, user_school
+from ecole_moderne.branding import get_pdf_palette
 
 logger = logging.getLogger(__name__)
+
+_LIVRET_PALETTE = ContextVar(
+    'livret_palette', default=get_pdf_palette(None, bulletin=True)
+)
+
+
+class _CouleursLivret:
+    _remplacements = {
+        '#003D82': 'primary',
+        '#F0F0F0': 'table_light',
+        '#E8EEF5': 'primary_light',
+        '#F0F7FF': 'primary_light',
+        '#F5F9FF': 'primary_light',
+    }
+
+    def __getattr__(self, name):
+        return getattr(reportlab_colors, name)
+
+    def HexColor(self, value):
+        cle = self._remplacements.get(str(value).upper())
+        return _LIVRET_PALETTE.get()[cle] if cle else reportlab_colors.HexColor(value)
+
+
+colors = _CouleursLivret()
+
+
+def _avec_charte_livret(fonction):
+    @wraps(fonction)
+    def enveloppe(eleve, ecole, *args, **kwargs):
+        jeton = _LIVRET_PALETTE.set(get_pdf_palette(ecole, bulletin=True))
+        try:
+            return fonction(eleve, ecole, *args, **kwargs)
+        finally:
+            _LIVRET_PALETTE.reset(jeton)
+    return enveloppe
+
+
+def _avec_charte_livret_requete(fonction):
+    """Applique la charte au PDF groupe genere directement par une vue."""
+    @wraps(fonction)
+    def enveloppe(request, *args, **kwargs):
+        ecole = user_school(request.user)
+        jeton = _LIVRET_PALETTE.set(get_pdf_palette(ecole, bulletin=True))
+        try:
+            return fonction(request, *args, **kwargs)
+        finally:
+            _LIVRET_PALETTE.reset(jeton)
+    return enveloppe
 
 # ==============================================================================
 #  CONSTANTES
@@ -3123,6 +3174,7 @@ def _draw_analyse_annuelle_half(c, x, y, w, h, ecole, eleve, entry, page_number)
     c.drawCentredString(cx, y + 5, f"-{page_number}-")
 
 
+@_avec_charte_livret
 def _generer_livret_pdf(eleve, ecole, parcours):
     """Genere le PDF du livret scolaire en pages sequentielles.
 
@@ -3215,6 +3267,7 @@ def _generer_livret_pdf(eleve, ecole, parcours):
     return buffer
 
 
+@_avec_charte_livret
 def _generer_livret_annuel_pdf(eleve, ecole, parcours, annee_scolaire):
     """Genere le livret scolaire pour une seule annee.
 
@@ -3725,6 +3778,7 @@ def livret_scolaire_annuel_pdf(request, eleve_id):
 
 
 @login_required
+@_avec_charte_livret_requete
 def livret_scolaire_classe_pdf(request, classe_id):
     """Genere les livrets scolaires de tous les eleves d'une classe en un seul PDF."""
     ecole = user_school(request.user)

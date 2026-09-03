@@ -1,0 +1,142 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .offline-grid { display: grid; grid-template-columns: minmax(320px, 1fr) minmax(420px, 1.5fr); gap: 24px; }
+  .offline-card { background: var(--body-bg); border: 1px solid var(--hairline-color); border-radius: 6px; padding: 20px; }
+  .offline-card h2 { margin-top: 0; }
+  .offline-card label { display: block; font-weight: 600; margin: 14px 0 6px; }
+  .offline-card input { box-sizing: border-box; width: 100%; max-width: 520px; padding: 9px; }
+  .offline-help { color: var(--body-quiet-color); line-height: 1.5; }
+  .offline-warning { background: #fff4cc; border-left: 4px solid #f0b429; color: #523f00; margin: 16px 0; padding: 12px; }
+  .offline-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+  .offline-table { width: 100%; }
+  .offline-table th, .offline-table td { padding: 10px 8px; text-align: left; vertical-align: middle; }
+  .offline-table form { margin: 0; }
+  .offline-active { color: #198754; font-weight: 700; }
+  .offline-revoked { color: #8a8a8a; }
+  @media (max-width: 900px) { .offline-grid { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; <a href="{% url 'admin:eleves_ecole_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; <a href="{{ change_url }}">{{ ecole }}</a>
+  &rsaquo; Version hors ligne
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <p class="offline-help">
+    Serveur de synchronisation : <strong>{{ server_url }}</strong><br>
+    École autorisée : <strong>{{ ecole.nom }}</strong> — ID {{ ecole.pk }}
+  </p>
+
+  <div class="offline-grid">
+    <section class="offline-card">
+      <h2>Préparer un nouveau poste</h2>
+      <p class="offline-help">
+        Un accès distinct est créé pour ce poste. Le téléchargement contient le
+        jeton secret et ne sera proposé qu'une seule fois.
+      </p>
+
+      <form method="post" autocomplete="off">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="creer">
+
+        <label for="id_nom">Nom du poste</label>
+        <input id="id_nom" name="nom" type="text" maxlength="120"
+               value="Poste direction" required>
+
+        <label for="id_intervalle">Vérification au repos toutes les</label>
+        <div>
+          <input id="id_intervalle" name="intervalle" type="number"
+                 value="10" min="2" max="3600" required style="width: 110px;">
+          secondes
+        </div>
+        <p class="help" style="margin-top:4px;">
+          Un ajout fait sur ce poste part <strong>immédiatement</strong> ; dès que
+          des données circulent, le poste passe de lui-même à 2 secondes. Cette
+          valeur ne règle que le rythme des vérifications quand tout est calme.
+        </p>
+
+        <div class="offline-warning">
+          Conservez le fichier <strong>sync_config.json</strong> en lieu sûr.
+          Toute personne qui le possède peut synchroniser les données de cette école.
+        </div>
+
+        <div class="offline-actions">
+          <button type="submit" class="button default">Créer et télécharger la configuration</button>
+          <a class="button" href="{{ change_url }}">Retour à l'école</a>
+        </div>
+      </form>
+
+      <h3>Installation sur le poste</h3>
+      <ol class="offline-help">
+        <li>Placez <strong>sync_config.json</strong> à côté de l'installateur MySchoolGN.</li>
+        <li>Lancez l'installateur puis ouvrez MySchoolGN.</li>
+        <li>Avec Internet, les données de cette école sont récupérées automatiquement.</li>
+        <li>Hors connexion, les changements restent locaux puis sont envoyés au retour d'Internet.</li>
+      </ol>
+    </section>
+
+    <section class="offline-card">
+      <h2>Postes déjà configurés</h2>
+      {% if devices %}
+      <div class="table-responsive">
+        <table class="offline-table">
+          <thead>
+            <tr>
+              <th>Poste</th>
+              <th>État</th>
+              <th>Dernière connexion</th>
+              <th>Créé le</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for device in devices %}
+            <tr>
+              <td>
+                <strong>{{ device.nom }}</strong><br>
+                <small class="offline-help">{{ device.device_id }}</small>
+              </td>
+              <td>
+                {% if device.actif %}
+                  <span class="offline-active">Actif</span>
+                {% else %}
+                  <span class="offline-revoked">Révoqué</span>
+                {% endif %}
+              </td>
+              <td>{{ device.derniere_connexion|date:"d/m/Y H:i"|default:"Jamais" }}</td>
+              <td>{{ device.date_creation|date:"d/m/Y H:i" }}</td>
+              <td>
+                {% if device.actif %}
+                <form method="post" onsubmit="return confirm('Révoquer ce poste ? Il ne pourra plus synchroniser.');">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="revoquer">
+                  <input type="hidden" name="device_id" value="{{ device.pk }}">
+                  <button type="submit" class="button deletelink">Révoquer</button>
+                </form>
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="offline-help">Aucun poste hors ligne n'a encore été configuré pour cette école.</p>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

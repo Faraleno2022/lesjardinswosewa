@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Ajuster le salaire{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-7">
+            <div class="card shadow-sm">
+                <div class="card-header bg-warning-subtle">
+                    <h4 class="mb-1"><i class="fas fa-sliders-h me-2"></i>Modifier l'état de salaire</h4>
+                    <div class="text-muted">
+                        {{ etat.enseignant.nom_complet }} — {{ etat.periode.nom_periode }}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        Les modifications restent possibles uniquement avant la validation finale.
+                        {% if etat.enseignant.est_taux_horaire and heures_pointage > 0 %}
+                        Les <strong>{{ heures_pointage|floatformat:2 }} heures pointées</strong>
+                        sont prioritaires et ne peuvent pas être remplacées manuellement.
+                        {% endif %}
+                    </div>
+                    {% if etat.avances %}
+                    <div class="alert alert-warning d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-hand-holding-usd me-1"></i>Avances déjà rattachées à cette période</span>
+                        <strong>-{{ etat.avances|intcomma }} GNF</strong>
+                    </div>
+                    {% endif %}
+
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        {% if form.non_field_errors %}
+                        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                        {% endif %}
+
+                        {% if etat.enseignant.est_taux_horaire %}
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.total_heures.id_for_label }}">Nombre d'heures travaillées</label>
+                                {{ form.total_heures }}
+                                {% if form.total_heures.help_text %}<div class="form-text">{{ form.total_heures.help_text }}</div>{% endif %}
+                                {% for error in form.total_heures.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="{{ form.taux_horaire_applique.id_for_label }}">Taux horaire appliqué (GNF)</label>
+                                {{ form.taux_horaire_applique }}
+                                {% for error in form.taux_horaire_applique.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                            </div>
+                        </div>
+                        <div class="alert alert-light border d-flex justify-content-between">
+                            <span>Salaire de base actuel</span>
+                            <strong>{{ etat.salaire_base|intcomma }} GNF</strong>
+                        </div>
+                        {% else %}
+                        <div class="mb-3">
+                            <label class="form-label" for="{{ form.salaire_base.id_for_label }}">Salaire de base (GNF)</label>
+                            {{ form.salaire_base }}
+                            {% for error in form.salaire_base.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                        </div>
+                        {% endif %}
+
+                        <div class="mb-3">
+                            <label class="form-label" for="{{ form.primes.id_for_label }}">Primes (GNF)</label>
+                            {{ form.primes }}
+                            {% for error in form.primes.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="{{ form.deductions.id_for_label }}">Retenues (GNF)</label>
+                            {{ form.deductions }}
+                            {% for error in form.deductions.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="{{ form.observations.id_for_label }}">Observations</label>
+                            {{ form.observations }}
+                            {% for error in form.observations.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="{% url 'salaires:etats_salaire' %}" class="btn btn-outline-secondary">Annuler</a>
+                            <button type="submit" class="btn btn-warning">
+                                <i class="fas fa-save me-1"></i>Enregistrer les modifications
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

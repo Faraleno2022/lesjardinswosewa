@@ -5829,6 +5829,8 @@ def liste_saisie_pdf(request):
         matiere = get_object_or_404(MatiereNote, pk=matiere_id)
     except Exception as e:
         return HttpResponse(f"Erreur lors de la récupération des données: {str(e)}", status=400)
+    from ecole_moderne.branding import get_pdf_palette
+    palette = get_pdf_palette(classe.ecole, bulletin=True)
     
     # Déterminer le type de notation selon le niveau
     niveau_enseignement = classe.niveau_enseignement or 'SECONDAIRE'
@@ -5876,7 +5878,7 @@ def liste_saisie_pdf(request):
         'CustomTitle',
         parent=styles['Heading1'],
         fontSize=16,
-        textColor=colors.HexColor('#007bff'),
+        textColor=palette['primary'],
         spaceAfter=12,
         alignment=TA_CENTER
     )
@@ -5921,8 +5923,8 @@ def liste_saisie_pdf(request):
     # Style du tableau
     table = Table(data, colWidths=col_widths)
     table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#007bff')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('BACKGROUND', (0, 0), (-1, 0), palette['header']),
+        ('TEXTCOLOR', (0, 0), (-1, 0), palette['header_text']),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 10),

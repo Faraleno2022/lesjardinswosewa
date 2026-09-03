@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="{% url 'paiements:tableau_bord' %}">Paiements</a></li>
+<li class="breadcrumb-item"><a href="{% url 'paiements:detail_paiement' paiement.id %}">{{ paiement.numero_recu }}</a></li>
+<li class="breadcrumb-item active">Annulation</li>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="card border-danger shadow-sm">
+      <div class="card-header bg-danger text-white">
+        <h5 class="mb-0"><i class="fas fa-ban me-2"></i>Annuler ce paiement</h5>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-warning">
+          Cette opération retire immédiatement le montant de tous les calculs et recalcule l’échéancier. Le paiement ne sera pas effacé définitivement.
+        </div>
+        <dl class="row">
+          <dt class="col-sm-4">Reçu</dt><dd class="col-sm-8">{{ paiement.numero_recu }}</dd>
+          <dt class="col-sm-4">Élève</dt><dd class="col-sm-8">{{ paiement.eleve.nom_complet }}</dd>
+          <dt class="col-sm-4">Type</dt><dd class="col-sm-8">{{ paiement.type_paiement.nom }}</dd>
+          <dt class="col-sm-4">Montant retiré</dt><dd class="col-sm-8 fw-bold text-danger">{{ paiement.montant|floatformat:0|intcomma }} GNF</dd>
+        </dl>
+        <form method="post">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label" for="{{ form.motif_suppression.id_for_label }}">{{ form.motif_suppression.label }} <span class="text-danger">*</span></label>
+            {{ form.motif_suppression }}
+            <div class="form-text">{{ form.motif_suppression.help_text }}</div>
+            {% if form.motif_suppression.errors %}<div class="text-danger mt-1">{{ form.motif_suppression.errors.0 }}</div>{% endif %}
+          </div>
+          <div class="d-flex flex-wrap justify-content-end gap-2">
+            <a href="{% url 'paiements:detail_paiement' paiement.id %}" class="btn btn-outline-secondary">Retour</a>
+            <button class="btn btn-danger" type="submit" onclick="return confirm('Confirmer l’annulation de ce paiement ?');">
+              <i class="fas fa-ban me-1"></i>Annuler et recalculer
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

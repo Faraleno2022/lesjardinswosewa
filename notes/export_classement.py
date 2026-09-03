@@ -20,6 +20,7 @@ from reportlab.pdfbase import pdfmetrics
 from .models import ClasseNote, MatiereNote, NoteMensuelle, CompositionNote
 from eleves.models import Eleve, Classe as ClasseEleve
 from .calculs_moyennes import calculer_moyenne_generale_eleve, calculer_classement_classe, detecter_niveau_scolaire
+from ecole_moderne.branding import get_pdf_palette
 
 
 def formater_rang(rang, sexe=None):
@@ -829,6 +830,7 @@ def exporter_classement_classe_pdf(request):
     c = canvas.Canvas(buffer, pagesize=A4)
     page_width, page_height = A4
     margin = 2*cm
+    palette = get_pdf_palette(classe_note.ecole, bulletin=True)
     
     # Filigrane
     _draw_watermark(c, classe_note.ecole, page_width, page_height)
@@ -879,7 +881,7 @@ def exporter_classement_classe_pdf(request):
         col_x.append(col_x[-1] + w)
 
     # Fond gris pour les en-têtes
-    c.setFillColorRGB(0.2, 0.3, 0.4)
+    c.setFillColor(palette['header'])
     c.rect(margin, y-15, sum(col_widths), 15, fill=1, stroke=0)
 
     # Texte des en-têtes (adapter selon le niveau)
@@ -911,7 +913,7 @@ def exporter_classement_classe_pdf(request):
             y -= 20
             
             # Redessiner les en-têtes
-            c.setFillColorRGB(0.2, 0.3, 0.4)
+            c.setFillColor(palette['header'])
             c.rect(margin, y-15, sum(col_widths), 15, fill=1, stroke=0)
             c.setFillColorRGB(1, 1, 1)
             c.setFont('Helvetica-Bold', 10)
@@ -924,7 +926,7 @@ def exporter_classement_classe_pdf(request):
         
         # Fond alterné pour faciliter la lecture
         if line_count % 2 == 0:
-            c.setFillColorRGB(0.95, 0.95, 0.95)
+            c.setFillColor(palette['table_light'])
             c.rect(margin, y - line_height + 2, sum(col_widths), line_height, fill=1, stroke=0)
             c.setFillColorRGB(0, 0, 0)
         

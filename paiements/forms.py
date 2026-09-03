@@ -3,6 +3,7 @@ from django.core.validators import MinValueValidator
 from decimal import Decimal
 from datetime import date, datetime
 from django.utils import timezone
+from django.db.models import Q
 
 from .models import Paiement, EcheancierPaiement, TypePaiement, ModePaiement, RemiseReduction, PaiementRemise
 from eleves.models import Eleve, Ecole
@@ -42,11 +43,16 @@ class PaiementForm(forms.ModelForm):
             'mode_paiement': forms.Select(attrs={
                 'class': 'form-select'
             }),
+            # `step` reste à 1 : le montant proposé par le moteur est le reste
+            # exact de l'échéancier, qui n'est pas toujours un multiple de
+            # 1 000 (forfaits, remises, soldes partiels). Un pas de 1 000 ferait
+            # refuser par le navigateur le montant que le serveur vient de
+            # calculer.
             'montant': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'Montant en GNF',
-                'min': '0',
-                'step': '1000'
+                'min': '1',
+                'step': '1'
             }),
             'date_paiement': forms.DateInput(attrs={
                 'class': 'form-control',
@@ -96,6 +102,78 @@ class PaiementForm(forms.ModelForm):
             except Exception:
                 self.add_error('remise_pourcentage', "Valeur de remise invalide.")
         return cleaned
+
+
+class ModificationPaiementForm(forms.ModelForm):
+    """Correction contrôlée d'un paiement existant."""
+
+    motif_modification = forms.CharField(
+        required=True,
+        min_length=5,
+        label="Motif de la modification",
+        help_text="Ce motif sera conservé dans l'historique.",
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 3,
+            'placeholder': "Ex. : montant saisi incomplet lors de l'encaissement",
+        }),
+    )
+
+    class Meta:
+        model = Paiement
+        fields = (
+            'type_paiement', 'mode_paiement', 'montant', 'date_paiement',
+            'reference_externe', 'observations',
+        )
+        widgets = {
+            'type_paiement': forms.Select(attrs={'class': 'form-select'}),
+            'mode_paiement': forms.Select(attrs={'class': 'form-select'}),
+            # `step` doit rester à 1 : avec min=1, un pas de 1000 ne rendrait
+            # valides que 1, 1001, 2001... Le navigateur refusait alors tout
+            # montant rond (250000) — y compris celui déjà enregistré.
+            'montant': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '1', 'step': '1',
+            }),
+            'date_paiement': forms.DateInput(attrs={
+                'class': 'form-control', 'type': 'date',
+            }),
+            'reference_externe': forms.TextInput(attrs={'class': 'form-control'}),
+            'observations': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['type_paiement'].queryset = TypePaiement.objects.filter(
+            Q(actif=True) | Q(pk=getattr(self.instance, 'type_paiement_id', None))
+        ).distinct()
+        self.fields['mode_paiement'].queryset = ModePaiement.objects.filter(
+            Q(actif=True) | Q(pk=getattr(self.instance, 'mode_paiement_id', None))
+        ).distinct()
+
+    def clean_montant(self):
+        montant = self.cleaned_data.get('montant')
+        if montant is None or montant <= 0:
+            raise forms.ValidationError("Le montant doit être supérieur à zéro.")
+        return montant
+
+
+class SuppressionPaiementForm(forms.Form):
+    """Motif obligatoire d'une annulation conservée dans l'audit."""
+
+    motif_suppression = forms.CharField(
+        required=True,
+        min_length=5,
+        label="Motif de la suppression",
+        help_text=(
+            "Le paiement sera annulé et retiré de tous les calculs, mais il "
+            "restera conservé avec ce motif."
+        ),
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 4,
+            'placeholder': "Ex. : reçu créé en double ou montant attribué au mauvais élève",
+        }),
+    )
 
 class EcheancierForm(forms.ModelForm):
     """Formulaire pour créer/modifier un échéancier"""

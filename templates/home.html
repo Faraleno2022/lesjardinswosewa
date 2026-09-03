@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static static_versioned %}
 
 {% block title %}Les Jardins Wosewa — Groupe Scolaire Privé à Conakry et Siguiri (Maternelle, Primaire, Collège, Lycée){% endblock %}
 {% block meta_description %}Les Jardins Wosewa est une institution privée d'enseignement général présente à Kipé T2 (Conakry) et à Siguiri. Programme franco-guinéen de la maternelle au lycée, dans un cadre d'apprentissage, de créativité et d'excellence.{% endblock %}
@@ -37,7 +37,7 @@
     "telephone": ["+224627074644", "+224622751518"],
     "email": "lesjardinswosewa.gui23@gmail.com"
   },
-  "image": "{{ request.scheme }}://{{ request.get_host }}{% static 'images/optimized/ecole.webp' %}",
+  "image": "{{ request.scheme }}://{{ request.get_host }}{% static_versioned 'images/Ecole.png' %}",
   "url": "{{ request.scheme }}://{{ request.get_host }}/"
 }
 </script>
@@ -473,7 +473,7 @@
     #wGalleryModal .w-viewer-next { right: 4px; }
   }
 </style>
-<link rel="preload" as="image" href="{% static 'images/optimized/ecole.webp' %}" type="image/webp" imagesizes="100vw">
+<link rel="preload" as="image" href="{% static_versioned 'images/Ecole.png' %}" type="image/png" imagesizes="100vw">
 {% endblock %}
 
 {% block breadcrumb %}{% endblock %}
@@ -483,13 +483,10 @@
 
   <!-- ===================== BANNIÈRE ===================== -->
   <section class="w-hero w-bleed">
-    <picture>
-      <source type="image/webp" srcset="{% static 'images/optimized/ecole.webp' %}">
-      <img src="{% static 'images/optimized/ecole_optimized.jpg' %}"
-           alt="Groupe Scolaire Privé Les Jardins Wosewa — Maternelle, Primaire, Collège, Lycée. Un cadre d'apprentissage, de créativité et d'excellence."
-           width="1916" height="821"
-           loading="eager" decoding="sync" fetchpriority="high">
-    </picture>
+    <img src="{% static_versioned 'images/Ecole.png' %}"
+         alt="Groupe Scolaire Privé Les Jardins Wosewa — Maternelle, Primaire, Collège, Lycée. Un cadre d'apprentissage, de créativité et d'excellence."
+         width="1916" height="821"
+         loading="eager" decoding="sync" fetchpriority="high">
   </section>
 
   <div class="w-hero-actions w-bleed">
@@ -510,7 +507,7 @@
       <div class="row g-5 align-items-start">
         <div class="col-lg-7">
           <span class="w-eyebrow">Présentation de l'école</span>
-          <h1 class="w-title w-title--rule h2">Les Jardins Wosewa, une école qui place l'enfant au centre</h1>
+          <h1 class="w-title w-title--rule h2">Les Jardins Wosewa — école privée à Conakry et Siguiri, de la maternelle au lycée</h1>
           <p class="w-lead">
             <strong>Les Jardins Wosewa</strong> est une institution privée d'enseignement général située à
             Carrefour Métal Guinée, Kipé T2, Conakry. L'établissement accueille les élèves de la maternelle
@@ -941,9 +938,14 @@
                   <span class="opacity-50 mx-1">·</span>
                   <a href="tel:+224660199851" class="text-white text-decoration-none">660 19 98 51</a>
                 </li>
-                <li>
+                <li class="mb-2">
                   <i class="fas fa-envelope fa-fw me-2"></i>
                   <a href="mailto:lesjardinswosewa.gui23@gmail.com" class="text-white text-decoration-none">lesjardinswosewa.gui23@gmail.com</a>
+                </li>
+                <li>
+                  <a href="{% url 'campus_conakry' %}" class="btn btn-sm btn-light fw-semibold">
+                    <i class="fas fa-circle-info me-1"></i>En savoir plus sur ce campus
+                  </a>
                 </li>
               </ul>
             </div>
@@ -963,9 +965,14 @@
                   <i class="fas fa-envelope fa-fw me-2"></i>
                   <a href="mailto:lesjardinswosewa.gui23@gmail.com" class="text-white text-decoration-none">lesjardinswosewa.gui23@gmail.com</a>
                 </li>
-                <li>
+                <li class="mb-2">
                   <i class="fas fa-certificate fa-fw me-2"></i>
                   <span class="opacity-75">Agrément n° 0096</span>
+                </li>
+                <li>
+                  <a href="{% url 'campus_siguiri' %}" class="btn btn-sm btn-light fw-semibold">
+                    <i class="fas fa-circle-info me-1"></i>En savoir plus sur ce campus
+                  </a>
                 </li>
               </ul>
             </div>

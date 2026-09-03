@@ -8,6 +8,7 @@ from django.template import loader
 from django.core.cache import cache
 from django.conf import settings
 from django.utils.deprecation import MiddlewareMixin
+from django.contrib import messages
 from django.contrib.auth import logout
 from django.shortcuts import redirect
 from django.core.exceptions import TooManyFieldsSent
@@ -78,6 +79,14 @@ class SecurityMiddleware(MiddlewareMixin):
         'new_password1', 'new_password2', 'mot_de_passe', 'motdepasse',
         'csrfmiddlewaretoken',
     }
+
+    # Ces ressources sont nombreuses sur la page d'accueil et ne doivent pas
+    # consommer le quota des pages dynamiques. Les API de synchronisation et de
+    # mise a jour ont deja leur authentification propre par appareil.
+    RATE_LIMIT_EXEMPT_PREFIXES = (
+        '/static/', '/media/', '/favicon', '/robots.txt', '/sitemap.xml',
+        '/api/v1/sync/', '/api/v1/updates/',
+    )
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -164,10 +173,13 @@ class SecurityMiddleware(MiddlewareMixin):
             # En cas d'erreur inattendue, ne pas bloquer l'admin
             pass
 
-        # 1. Vérifier le rate limiting
-        if self.is_rate_limited(client_ip):
+        # 1. Verifier le rate limiting uniquement pour les pages dynamiques.
+        # Compter les images/CSS faisait depasser 100 requetes au simple
+        # chargement de la page d'accueil.
+        rate_limit_exempt = self.is_rate_limit_exempt(request)
+        if not rate_limit_exempt and self.is_rate_limited(client_ip):
             logger.warning(f"Rate limit dépassé pour IP: {client_ip}")
-            return self._refus(request, "Trop de requêtes. Veuillez patienter.")
+            return self._rate_limit_response(request)
         
         # 2. Vérifier les User Agents suspects
         if self.is_suspicious_user_agent(user_agent):
@@ -198,31 +210,73 @@ class SecurityMiddleware(MiddlewareMixin):
             logger.info(f"Accès refusé pour IP bloquée: {client_ip}")
             return self._refus(request, "Votre adresse IP a été bloquée.")
         
-        # 7. Incrémenter le compteur de requêtes
-        self.increment_request_count(client_ip)
+        # 7. Incrementer uniquement le compteur des pages dynamiques.
+        if not rate_limit_exempt:
+            self.increment_request_count(client_ip)
         
         return None
     
     def get_client_ip(self, request):
         """Obtient l'adresse IP réelle du client"""
+        # PythonAnywhere place l'adresse recue par son load-balancer dans cet
+        # en-tete. REMOTE_ADDR correspond sinon au load-balancer interne et
+        # ferait partager le meme quota a plusieurs visiteurs.
+        real_ip = request.META.get('HTTP_X_REAL_IP')
+        if real_ip:
+            return real_ip.strip()
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
         if x_forwarded_for:
             ip = x_forwarded_for.split(',')[0]
         else:
             ip = request.META.get('REMOTE_ADDR')
-        return ip
+        return (ip or 'unknown').strip()
+
+    def is_rate_limit_exempt(self, request):
+        """Ignore les ressources publiques et les appels techniques authentifies."""
+        if request.method == 'OPTIONS':
+            return True
+        path = request.path or '/'
+        return any(path.startswith(prefix) for prefix in self.RATE_LIMIT_EXEMPT_PREFIXES)
+
+    @staticmethod
+    def _rate_limit_values():
+        maximum = max(1, int(getattr(settings, 'SECURITY_RATE_LIMIT_REQUESTS', 300)))
+        window = max(1, int(getattr(settings, 'SECURITY_RATE_LIMIT_WINDOW_SECONDS', 60)))
+        return maximum, window
+
+    def _rate_limit_cache_key(self, ip):
+        """Cle par fenetre fixe : une requete ne peut pas prolonger le blocage."""
+        _, window = self._rate_limit_values()
+        bucket = int(time.time() // window)
+        return f"security_rate_limit:{bucket}:{ip}"
+
+    def _rate_limit_response(self, request):
+        """Retourne le statut HTTP standard 429 avec le delai de reprise."""
+        message = "Trop de requêtes. Veuillez patienter."
+        _, window = self._rate_limit_values()
+        if self._attend_du_json(request):
+            response = JsonResponse({'success': False, 'error': message}, status=429)
+        else:
+            response = HttpResponse(message, status=429, content_type='text/plain; charset=utf-8')
+        response['Retry-After'] = str(window)
+        return response
     
     def is_rate_limited(self, ip):
         """Vérifie si l'IP dépasse la limite de requêtes"""
-        cache_key = f"rate_limit_{ip}"
-        requests = cache.get(cache_key, 0)
-        return requests > 100  # Max 100 requêtes par minute
+        maximum, _ = self._rate_limit_values()
+        requests = cache.get(self._rate_limit_cache_key(ip), 0)
+        return requests >= maximum
     
     def increment_request_count(self, ip):
         """Incrémente le compteur de requêtes pour une IP"""
-        cache_key = f"rate_limit_{ip}"
-        requests = cache.get(cache_key, 0)
-        cache.set(cache_key, requests + 1, 60)  # Expire après 1 minute
+        _, window = self._rate_limit_values()
+        cache_key = self._rate_limit_cache_key(ip)
+        if not cache.add(cache_key, 1, timeout=window + 5):
+            try:
+                cache.incr(cache_key)
+            except ValueError:
+                # La cle a expire entre add() et incr() : recreer la fenetre.
+                cache.add(cache_key, 1, timeout=window + 5)
     
     def is_suspicious_user_agent(self, user_agent):
         """Vérifie si le User Agent est suspect"""
@@ -307,8 +361,17 @@ class SecurityMiddleware(MiddlewareMixin):
 
 class SessionSecurityMiddleware(MiddlewareMixin):
     """
-    Middleware pour sécuriser les sessions
+    Ferme les sessions apres une periode sans activite humaine.
+
+    Les appels automatiques (synchronisation et recherche de mise a jour) ne
+    doivent pas maintenir un compte connecte pendant des heures alors que le
+    poste est abandonne.
     """
+
+    BACKGROUND_PATHS = (
+        '/api/v1/sync/state/',
+        '/api/v1/updates/prete/',
+    )
     
     def __init__(self, get_response):
         self.get_response = get_response
@@ -320,6 +383,25 @@ class SessionSecurityMiddleware(MiddlewareMixin):
         """
         # Vérifier que l'utilisateur est disponible (après AuthenticationMiddleware)
         if hasattr(request, 'user') and request.user.is_authenticated:
+            # L'expiration doit passer avant les autres redirections de securite.
+            if self.is_session_expired(request):
+                username = request.user.get_username()
+                logout(request)
+                messages.info(
+                    request,
+                    "Votre session a été fermée après une période d'inactivité.",
+                )
+                logger.info("Session expirée pour utilisateur: %s", username)
+                if self._attend_du_json(request):
+                    return JsonResponse(
+                        {
+                            'success': False,
+                            'error': 'Session expirée pour inactivité.',
+                        },
+                        status=401,
+                    )
+                return redirect('utilisateurs:login')
+
             # Enforcer la vérification du téléphone pour la session
             try:
                 path = request.path or ''
@@ -351,7 +433,15 @@ class SessionSecurityMiddleware(MiddlewareMixin):
                         request.session['phone_verified_at'] = None
                         verified = False
 
-                if not exempt and not verified:
+                # La verification ne peut etre imposee que si un numero a
+                # effectivement ete configure. Les anciens profils sans
+                # telephone doivent rester utilisables et ne pas etre envoyes
+                # dans une boucle verification -> deconnexion.
+                profil = getattr(request.user, 'profil', None)
+                telephone_configure = bool(
+                    (getattr(profil, 'telephone', '') or '').strip()
+                )
+                if not exempt and not verified and telephone_configure:
                     # Préserver la destination initiale
                     from django.urls import reverse
                     verify_url = reverse('utilisateurs:verify_phone')
@@ -359,21 +449,18 @@ class SessionSecurityMiddleware(MiddlewareMixin):
             except Exception:
                 # En cas d'erreur, ne pas bloquer l'utilisateur, continuer les autres contrôles
                 pass
-            # Vérifier l'inactivité de session
-            if self.is_session_expired(request):
-                logout(request)
-                logger.info(f"Session expirée pour utilisateur: {request.user.username}")
-                return redirect('utilisateurs:login')
-            
             # Vérifier le changement d'IP (optionnel, peut causer des problèmes avec les proxies)
             if self.detect_session_hijacking(request):
                 logout(request)
                 logger.warning(f"Tentative de détournement de session détectée pour: {request.user.username}")
                 return redirect('utilisateurs:login')
             
-            # Mettre à jour le timestamp de dernière activité
-            request.session['last_activity'] = time.time()
-            request.session['user_ip'] = self.get_client_ip(request)
+            # Seules les actions humaines renouvellent le delai. Le polling de
+            # synchronisation reste autorise mais ne garde pas la session en vie.
+            if self.is_user_activity(request):
+                request.session['last_activity'] = time.time()
+                request.session['user_ip'] = self.get_client_ip(request)
+                request.session.set_expiry(self.idle_timeout_seconds())
         
         return None
     
@@ -387,11 +474,37 @@ class SessionSecurityMiddleware(MiddlewareMixin):
         return ip
     
     def is_session_expired(self, request):
-        """Vérifie si la session a expiré (30 minutes d'inactivité)"""
+        """Vérifie si la dernière activité dépasse le délai configuré."""
         last_activity = request.session.get('last_activity')
         if last_activity:
-            return time.time() - last_activity > 1800  # 30 minutes
+            try:
+                return time.time() - float(last_activity) > self.idle_timeout_seconds()
+            except (TypeError, ValueError):
+                return True
         return False
+
+    @staticmethod
+    def idle_timeout_seconds():
+        return max(
+            60,
+            int(getattr(settings, 'SESSION_IDLE_TIMEOUT_SECONDS', 1800)),
+        )
+
+    def is_user_activity(self, request):
+        """Distingue une navigation humaine d'un appel automatique de fond."""
+        if request.headers.get('X-Session-Background') == '1':
+            return False
+        path = request.path or '/'
+        return not any(path.startswith(prefix) for prefix in self.BACKGROUND_PATHS)
+
+    @staticmethod
+    def _attend_du_json(request):
+        accept = request.headers.get('Accept', '')
+        return (
+            request.path.startswith('/api/')
+            or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            or 'application/json' in accept
+        )
     
     def detect_session_hijacking(self, request):
         """Détecte les tentatives de détournement de session"""

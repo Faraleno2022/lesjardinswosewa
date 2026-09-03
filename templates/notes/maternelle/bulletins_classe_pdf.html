@@ -1,9 +1,23 @@
+{% load branding %}
+{% school_document_branding ecole bulletin=True as palette %}
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <title>Bulletins Maternelle - {{ classe.nom }}</title>
     <style>
+        :root {
+            --brand-primary: {{ palette.primary }};
+            --brand-secondary: {{ palette.secondary }};
+            --brand-accent: {{ palette.accent }};
+            --brand-header: {{ palette.header }};
+            --brand-header-text: {{ palette.header_text }};
+            --brand-table: {{ palette.table_light }};
+            --brand-text: {{ palette.text }};
+            --brand-border: {{ palette.border }};
+            --brand-danger: {{ palette.danger }};
+            --brand-success: {{ palette.success }};
+        }
         @page {
             size: A4;
             margin: 10mm;
@@ -19,7 +33,7 @@
             font-family: 'Segoe UI', Arial, sans-serif;
             font-size: 10pt;
             line-height: 1.3;
-            color: #333;
+            color: var(--brand-text);
         }
         
         .bulletin-page {
@@ -27,7 +41,7 @@
             min-height: 277mm;
             margin: 0 auto;
             padding: 6mm;
-            border: 2px solid #2c3e50;
+            border: 2px solid var(--brand-border);
             position: relative;
             page-break-after: always;
         }
@@ -41,7 +55,7 @@
             justify-content: space-between;
             align-items: flex-start;
             margin-bottom: 10px;
-            border-bottom: 2px solid #3498db;
+            border-bottom: 2px solid var(--brand-secondary);
             padding-bottom: 8px;
         }
         
@@ -65,7 +79,7 @@
         .republique {
             font-size: 12pt;
             font-weight: bold;
-            color: #2c3e50;
+            color: var(--brand-primary);
         }
         
         .devise {
@@ -78,14 +92,14 @@
         .ecole-nom {
             font-size: 11pt;
             font-weight: bold;
-            color: #2c3e50;
+            color: var(--brand-primary);
             text-transform: uppercase;
         }
         
         .bulletin-titre {
             font-size: 13pt;
             font-weight: bold;
-            color: #e74c3c;
+            color: var(--brand-accent);
         }
         
         .photo-section {
@@ -117,7 +131,7 @@
             padding: 6px 10px;
             border-radius: 5px;
             margin-bottom: 10px;
-            border-left: 3px solid #3498db;
+            border-left: 3px solid var(--brand-secondary);
             font-size: 9pt;
         }
         
@@ -136,7 +150,7 @@
         }
         
         .bareme {
-            background: #f0f0f0;
+            background: var(--brand-table);
             padding: 5px;
             border-radius: 3px;
             margin-bottom: 8px;
@@ -145,8 +159,8 @@
         }
         
         .section-title {
-            background: linear-gradient(90deg, #2c3e50, #34495e);
-            color: white;
+            background: linear-gradient(90deg, var(--brand-header), var(--brand-secondary));
+            color: var(--brand-header-text);
             padding: 5px 10px;
             font-size: 9pt;
             font-weight: bold;
@@ -169,7 +183,7 @@
         .notes-table thead th {
             background: #ecf0f1;
             font-weight: bold;
-            color: #2c3e50;
+            color: var(--brand-primary);
         }
         
         .notes-table tbody td:first-child {
@@ -192,12 +206,12 @@
         }
         
         .lettre-a-plus, .lettre-a { background: #27ae60; }
-        .lettre-b-plus, .lettre-b { background: #3498db; }
+        .lettre-b-plus, .lettre-b { background: var(--brand-secondary); }
         .lettre-b-minus, .lettre-c { background: #f39c12; }
-        .lettre-d { background: #e74c3c; }
+        .lettre-d { background: var(--brand-danger); }
         
         .resultat-box {
-            background: linear-gradient(135deg, #2c3e50, #34495e);
+            background: linear-gradient(135deg, var(--brand-header), var(--brand-secondary));
             color: white;
             padding: 8px;
             border-radius: 5px;
@@ -213,7 +227,7 @@
         .moyenne-display {
             display: inline-block;
             background: white;
-            color: #2c3e50;
+            color: var(--brand-primary);
             padding: 5px 15px;
             border-radius: 5px;
             margin: 3px;
@@ -241,11 +255,11 @@
         
         .mention-excellent { background: #27ae60; }
         .mention-tres-bien { background: #2ecc71; }
-        .mention-bien { background: #3498db; }
+        .mention-bien { background: var(--brand-secondary); }
         .mention-assez-bien { background: #17a2b8; }
         .mention-moyen { background: #f39c12; }
         .mention-passable { background: #e67e22; }
-        .mention-eprouve-des-difficultes { background: #e74c3c; }
+        .mention-eprouve-des-difficultes { background: var(--brand-danger); }
         
         .analyse-section, .recommandations-section {
             margin-bottom: 8px;

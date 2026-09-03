@@ -281,8 +281,8 @@ R : Votre role ne vous donne pas acces a ces modules. Contacter l'Administrateur
 **Q : Comment changer d'annee scolaire ?**
 R : Aller dans **Administration > Annee scolaire** et mettre a jour l'annee en cours. Attention : cette operation affecte tout le systeme.
 
-**Q : L'application affiche "Licence invalide". Que faire ?**
-R : La licence de l'application a expire ou est absente. Contacter le support pour obtenir une nouvelle cle de licence, puis lancer `generate_license_gui.py`.
+**Q : L'application demande une licence. Que faire ?**
+R : La version actuelle ne demande aucune licence. Installez la derniere mise a jour officielle ; si une ancienne fenetre reste affichee, contactez le support pour verifier le raccourci utilise.
 
 **Q : Comment retrouver un eleve archive ?**
 R : Aller dans **Eleves > Archives**. Les eleves archives sont conserves mais n'apparaissent pas dans les listes actives.

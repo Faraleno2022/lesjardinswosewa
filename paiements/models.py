@@ -1,14 +1,53 @@
 from django.db import models
 from django.db.models import Sum
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator, RegexValidator
 from decimal import Decimal
 from eleves.models import Eleve
 from synchronisation.mixins import SyncTrackedModel
 
+
+ANNEE_SCOLAIRE_VALIDATOR = RegexValidator(
+    regex=r'^\d{4}-\d{4}$',
+    message="L'année scolaire doit être au format AAAA-AAAA.",
+)
+
+
+def _audit_json_value(value):
+    """Convertit une valeur Django en donnée JSON stable pour l'audit."""
+    if isinstance(value, Decimal):
+        return str(value)
+    if hasattr(value, 'isoformat'):
+        return value.isoformat()
+    return value
+
 class TypePaiement(SyncTrackedModel):
     """Modèle pour les types de paiements"""
+    CATEGORIE_CHOICES = [
+        ('AUTO', 'Détection automatique (compatibilité)'),
+        ('SCOLARITE', 'Scolarité / inscription'),
+        ('CANTINE', 'Cantine'),
+        ('TRANSPORT', 'Transport / bus'),
+        ('FOURNITURES', 'Fournitures scolaires'),
+        ('UNIFORME', 'Uniforme'),
+        ('ACTIVITES', 'Activités'),
+        ('AUTRE', 'Autre'),
+    ]
+
     nom = models.CharField(max_length=100, unique=True, verbose_name="Nom du type")
     description = models.TextField(blank=True, null=True, verbose_name="Description")
+    categorie = models.CharField(
+        max_length=20,
+        choices=CATEGORIE_CHOICES,
+        default='AUTO',
+        db_index=True,
+        verbose_name="Catégorie comptable",
+        help_text=(
+            "Seuls les types de catégorie Scolarité alimentent l'échéancier "
+            "des frais scolaires."
+        ),
+    )
     actif = models.BooleanField(default=True, verbose_name="Actif")
     
     class Meta:
@@ -17,6 +56,16 @@ class TypePaiement(SyncTrackedModel):
     
     def __str__(self):
         return self.nom
+
+    @property
+    def categorie_effective(self):
+        from .calculs import categorie_effective
+        return categorie_effective(self)
+
+    @property
+    def est_scolarite(self):
+        from .calculs import est_type_scolarite
+        return est_type_scolarite(self)
 
 class ModePaiement(SyncTrackedModel):
     """Modèle pour les modes de paiements"""
@@ -35,6 +84,61 @@ class ModePaiement(SyncTrackedModel):
     def __str__(self):
         return self.nom
 
+
+class PaiementQuerySet(models.QuerySet):
+    """Portée historique des paiements, indépendante des transferts d'élève."""
+
+    def pour_ecole(self, ecole):
+        ecole_id = getattr(ecole, 'pk', ecole)
+        if not ecole_id:
+            return self.none()
+        return self.filter(
+            models.Q(ecole_encaissement_id=ecole_id)
+            | models.Q(
+                ecole_encaissement__isnull=True,
+                eleve__classe__ecole_id=ecole_id,
+            )
+        )
+
+    def pour_ecoles(self, ecoles):
+        ecole_ids = [getattr(ecole, 'pk', ecole) for ecole in ecoles]
+        ecole_ids = [value for value in ecole_ids if value]
+        if not ecole_ids:
+            return self.none()
+        return self.filter(
+            models.Q(ecole_encaissement_id__in=ecole_ids)
+            | models.Q(
+                ecole_encaissement__isnull=True,
+                eleve__classe__ecole_id__in=ecole_ids,
+            )
+        )
+
+    def pour_classe(self, classe):
+        classe_id = getattr(classe, 'pk', classe)
+        if not classe_id:
+            return self.none()
+        return self.filter(
+            models.Q(classe_encaissement_id=classe_id)
+            | models.Q(
+                classe_encaissement__isnull=True,
+                eleve__classe_id=classe_id,
+            )
+        )
+
+    def pour_classes(self, classes):
+        classe_ids = [getattr(classe, 'pk', classe) for classe in classes]
+        classe_ids = [value for value in classe_ids if value]
+        if not classe_ids:
+            return self.none()
+        return self.filter(
+            models.Q(classe_encaissement_id__in=classe_ids)
+            | models.Q(
+                classe_encaissement__isnull=True,
+                eleve__classe_id__in=classe_ids,
+            )
+        )
+
+
 class Paiement(SyncTrackedModel):
     """Modèle principal pour les paiements"""
     STATUT_CHOICES = [
@@ -42,18 +146,47 @@ class Paiement(SyncTrackedModel):
         ('VALIDE', 'Validé'),
         ('REJETE', 'Rejeté'),
         ('REMBOURSE', 'Remboursé'),
+        ('ANNULE', 'Annulé (suppression douce)'),
     ]
     
     # Références
     eleve = models.ForeignKey(Eleve, on_delete=models.CASCADE, related_name='paiements')
     type_paiement = models.ForeignKey(TypePaiement, on_delete=models.CASCADE)
     mode_paiement = models.ForeignKey(ModePaiement, on_delete=models.CASCADE)
+    # Ces deux références sont figées lors de l'encaissement. Elles empêchent
+    # un transfert ultérieur de déplacer artificiellement le reçu dans les
+    # rapports de la nouvelle école ou de la nouvelle classe.
+    ecole_encaissement = models.ForeignKey(
+        'eleves.Ecole',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='paiements_encaisses',
+        verbose_name="École lors de l'encaissement",
+    )
+    classe_encaissement = models.ForeignKey(
+        'eleves.Classe',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='paiements_encaisses',
+        verbose_name="Classe lors de l'encaissement",
+    )
+
+    objects = PaiementQuerySet.as_manager()
     
     # Informations du paiement
     numero_recu = models.CharField(max_length=20, unique=True, verbose_name="Numéro de reçu")
     montant = models.DecimalField(
         max_digits=10, decimal_places=0,
-        verbose_name="Montant (GNF)"
+        verbose_name="Montant (GNF)",
+        validators=[MinValueValidator(Decimal('1'))],
+    )
+    annee_scolaire = models.CharField(
+        max_length=9,
+        db_index=True,
+        validators=[ANNEE_SCOLAIRE_VALIDATOR],
+        verbose_name="Année scolaire",
     )
     date_paiement = models.DateField(verbose_name="Date de paiement", db_index=True)
     statut = models.CharField(max_length=20, choices=STATUT_CHOICES, default='EN_ATTENTE', verbose_name="Statut", db_index=True)
@@ -65,6 +198,11 @@ class Paiement(SyncTrackedModel):
         help_text="Numéro de transaction Mobile Money, chèque, etc."
     )
     observations = models.TextField(blank=True, null=True, verbose_name="Observations")
+    motif_annulation = models.TextField(
+        blank=True,
+        verbose_name="Motif de l'annulation",
+        help_text="Conservé et synchronisé lors d'une suppression douce.",
+    )
     
     # Métadonnées
     date_creation = models.DateTimeField(auto_now_add=True)
@@ -90,52 +228,273 @@ class Paiement(SyncTrackedModel):
             models.Index(fields=['numero_recu']),          # Recherche par numéro de reçu
             models.Index(fields=['date_paiement']),         # Filtrage par date seule
             models.Index(fields=['date_creation']),         # Tri par date de création
+            models.Index(
+                fields=['ecole_encaissement', 'date_paiement'],
+                name='paiements_ecole_date_idx',
+            ),
+            models.Index(
+                fields=['classe_encaissement', 'date_paiement'],
+                name='paiements_classe_date_idx',
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(montant__gt=0),
+                name='paiement_montant_strictement_positif',
+            ),
         ]
     
     def __str__(self):
         return f"{self.numero_recu} - {self.eleve.nom_complet} - {self.montant:,.0f} GNF"
+
+    def clean(self):
+        super().clean()
+        if self.montant is None or Decimal(str(self.montant)) <= 0:
+            raise ValidationError({'montant': 'Le montant doit être supérieur à zéro.'})
+        if not (
+            self.eleve_id and self.type_paiement_id
+            and self.annee_scolaire and self.statut == 'VALIDE'
+        ):
+            return
+
+        from .calculs import est_type_scolarite, filtre_types_scolarite
+        if not est_type_scolarite(self.type_paiement):
+            return
+        echeancier = EcheancierPaiement.objects.filter(
+            eleve_id=self.eleve_id,
+            annee_scolaire=self.annee_scolaire,
+        ).first()
+        if not echeancier:
+            return
+        autres = Paiement.objects.filter(
+            eleve_id=self.eleve_id,
+            annee_scolaire=self.annee_scolaire,
+            statut='VALIDE',
+        ).filter(filtre_types_scolarite()).exclude(pk=self.pk)
+        total_autres = autres.aggregate(total=Sum('montant'))['total'] or Decimal('0')
+        remises = PaiementRemise.objects.filter(
+            paiement__eleve_id=self.eleve_id,
+            paiement__annee_scolaire=self.annee_scolaire,
+        ).filter(filtre_types_scolarite('paiement__type_paiement')).filter(
+            models.Q(paiement__statut='VALIDE') | models.Q(paiement_id=self.pk)
+        ).aggregate(total=Sum('montant_remise'))['total'] or Decimal('0')
+        couverture = total_autres + Decimal(str(self.montant)) + remises
+        if couverture > echeancier.total_du:
+            maximum = max(Decimal('0'), echeancier.total_du - total_autres - remises)
+            raise ValidationError({
+                'montant': (
+                    "Le paiement dépasserait le solde annuel. "
+                    f"Montant maximum autorisé : {maximum:,.0f} GNF."
+                )
+            })
     
+    AUDIT_FIELDS = (
+        'eleve_id', 'type_paiement_id', 'mode_paiement_id',
+        'ecole_encaissement_id', 'classe_encaissement_id', 'montant',
+        'annee_scolaire', 'date_paiement', 'statut', 'reference_externe',
+        'observations', 'motif_annulation',
+        'valide_par_id', 'date_validation',
+    )
+
+    @classmethod
+    def _audit_snapshot(cls, pk):
+        values = cls.objects.filter(pk=pk).values(*cls.AUDIT_FIELDS).first()
+        if not values:
+            return None
+        return {key: _audit_json_value(value) for key, value in values.items()}
+
     def save(self, *args, **kwargs):
-        """Génère automatiquement un numéro de reçu si non défini"""
+        """Génère le reçu et mémorise chaque modification du paiement."""
+        snapshot_fields = set()
+        if self.eleve_id and (
+            not self.classe_encaissement_id or not self.ecole_encaissement_id
+        ):
+            classe = getattr(self.eleve, 'classe', None)
+            if classe is not None:
+                if not self.classe_encaissement_id:
+                    self.classe_encaissement = classe
+                    snapshot_fields.add('classe_encaissement')
+                if not self.ecole_encaissement_id:
+                    self.ecole_encaissement_id = classe.ecole_id
+                    snapshot_fields.add('ecole_encaissement')
+        year_was_missing = not self.annee_scolaire
+        if not self.annee_scolaire and self.eleve_id:
+            self.annee_scolaire = (
+                getattr(getattr(self.eleve, 'classe', None), 'annee_scolaire', '')
+                or ''
+            )
+        if not self.annee_scolaire:
+            raise ValidationError({
+                'annee_scolaire': "L'année scolaire du paiement est obligatoire."
+            })
+        ANNEE_SCOLAIRE_VALIDATOR(self.annee_scolaire)
+        if self.montant is None or Decimal(str(self.montant)) <= 0:
+            raise ValidationError({'montant': 'Le montant doit être supérieur à zéro.'})
+        self.clean()
+        if kwargs.get('update_fields') is not None:
+            kwargs['update_fields'] = set(kwargs['update_fields']) | snapshot_fields
+            if year_was_missing:
+                kwargs['update_fields'].add('annee_scolaire')
+
+        before = self._audit_snapshot(self.pk) if self.pk else None
+
         if not self.numero_recu:
             from django.utils import timezone
-            from django.db import transaction, IntegrityError
-            
-            annee = timezone.now().year
-            prefix = f"REC{annee}"
-            
-            # Réessayer quelques fois en cas de collision concurrente
-            for _ in range(10):
-                dernier = (
-                    Paiement.objects
-                    .filter(numero_recu__startswith=prefix)
-                    .order_by('-numero_recu')
-                    .first()
-                )
-                if dernier and isinstance(dernier.numero_recu, str) and len(dernier.numero_recu) >= 4:
-                    try:
-                        seq = int(dernier.numero_recu[-4:]) + 1
-                    except ValueError:
-                        seq = 1
-                else:
-                    seq = 1
+            from django.db import IntegrityError
 
-                self.numero_recu = f"{prefix}{seq:04d}"
+            from .numerotation import prochain_numero
+
+            annee = timezone.now().year
+
+            # Le numéro porte un code propre à ce poste : sans lui, deux
+            # caisses qui encaissent en même temps produisent le même numéro,
+            # et le paiement qui arrive ensuite par synchronisation se heurte à
+            # la contrainte d'unicité — il finit abandonné, donc perdu, sur le
+            # poste destinataire. La boucle ne couvre plus que la concurrence
+            # entre deux enregistrements du même poste.
+            for tentative in range(10):
+                self.numero_recu = prochain_numero(Paiement, annee, decalage=tentative)
                 try:
                     super().save(*args, **kwargs)
-                    return
+                    break
                 except IntegrityError:
-                    # Une collision est survenue, on retente avec le numéro suivant
                     continue
             else:
-                # Si on n'arrive pas à générer un numéro unique après 10 tentatives
                 raise ValueError("Impossible de générer un numéro de reçu unique après 10 tentatives")
         else:
             super().save(*args, **kwargs)
+
+        if before is not None:
+            after = self._audit_snapshot(self.pk)
+            if after and before != after:
+                changed_fields = [
+                    field for field in self.AUDIT_FIELDS
+                    if before.get(field) != after.get(field)
+                ]
+                try:
+                    eleve_label = f"{self.eleve.matricule} - {self.eleve.nom_complet}"
+                except Exception:
+                    eleve_label = ''
+                operation = getattr(
+                    self,
+                    '_audit_operation',
+                    HistoriqueModificationPaiement.Operation.MODIFICATION,
+                )
+                if (
+                    before.get('statut') != 'ANNULE'
+                    and after.get('statut') == 'ANNULE'
+                ):
+                    operation = HistoriqueModificationPaiement.Operation.SUPPRESSION
+                HistoriqueModificationPaiement.objects.create(
+                    paiement=self,
+                    ecole=self.ecole_reference,
+                    numero_recu=self.numero_recu,
+                    eleve=eleve_label,
+                    utilisateur=getattr(self, '_audit_user', None),
+                    operation=operation,
+                    motif=(
+                        getattr(self, '_audit_reason', '')
+                        or (
+                            self.motif_annulation
+                            if operation == HistoriqueModificationPaiement.Operation.SUPPRESSION
+                            else ''
+                        )
+                        or "Modification automatique du paiement"
+                    ),
+                    champs_modifies=changed_fields,
+                    donnees_avant=before,
+                    donnees_apres=after,
+                )
+
+        self._audit_user = None
+        self._audit_reason = ''
+        self._audit_operation = HistoriqueModificationPaiement.Operation.MODIFICATION
     
     @property
     def montant_avec_frais(self):
         return self.montant + self.mode_paiement.frais_supplementaires
+
+    @property
+    def classe_reference(self):
+        """Classe du reçu, figée à l'encaissement avec repli historique."""
+        return self.classe_encaissement or getattr(self.eleve, 'classe', None)
+
+    @property
+    def ecole_reference(self):
+        """École du reçu, figée à l'encaissement avec repli historique."""
+        classe = self.classe_reference
+        return self.ecole_encaissement or getattr(classe, 'ecole', None)
+
+
+class HistoriqueModificationPaiement(models.Model):
+    """Mémoire inaltérable des changements apportés aux paiements."""
+
+    class Operation(models.TextChoices):
+        MODIFICATION = 'MODIFICATION', 'Modification'
+        SUPPRESSION = 'SUPPRESSION', 'Suppression douce'
+
+    paiement = models.ForeignKey(
+        Paiement,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='historique_modifications',
+    )
+    ecole = models.ForeignKey(
+        'eleves.Ecole',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='historiques_paiements',
+        verbose_name="École concernée",
+    )
+    numero_recu = models.CharField(max_length=20, db_index=True)
+    eleve = models.CharField(max_length=250, blank=True)
+    utilisateur = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='modifications_paiements',
+    )
+    operation = models.CharField(
+        max_length=20,
+        choices=Operation.choices,
+        default=Operation.MODIFICATION,
+        db_index=True,
+    )
+    motif = models.TextField()
+    champs_modifies = models.JSONField(default=list, blank=True)
+    donnees_avant = models.JSONField(default=dict)
+    donnees_apres = models.JSONField(default=dict)
+    date_modification = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-date_modification', '-id']
+        verbose_name = "Historique de modification de paiement"
+        verbose_name_plural = "Historique des modifications de paiements"
+
+    def __str__(self):
+        return f"{self.numero_recu} - {self.date_modification:%d/%m/%Y %H:%M}"
+
+    @staticmethod
+    def _montant_snapshot(donnees):
+        try:
+            return Decimal(str((donnees or {}).get('montant') or 0))
+        except (TypeError, ValueError, ArithmeticError):
+            return Decimal('0')
+
+    @property
+    def montant_avant(self):
+        return self._montant_snapshot(self.donnees_avant)
+
+    @property
+    def montant_apres(self):
+        return self._montant_snapshot(self.donnees_apres)
+
+    @property
+    def variation_montant(self):
+        return self.montant_apres - self.montant_avant
 
 class EcheancierPaiement(SyncTrackedModel):
     """Modèle pour l'échéancier des paiements d'un élève"""
@@ -150,8 +509,12 @@ class EcheancierPaiement(SyncTrackedModel):
         ('EN_RETARD', 'En retard'),
     ]
     
-    eleve = models.OneToOneField(Eleve, on_delete=models.CASCADE, related_name='echeancier')
-    annee_scolaire = models.CharField(max_length=9, verbose_name="Année scolaire")
+    eleve = models.ForeignKey(Eleve, on_delete=models.CASCADE, related_name='echeanciers')
+    annee_scolaire = models.CharField(
+        max_length=9,
+        validators=[ANNEE_SCOLAIRE_VALIDATOR],
+        verbose_name="Année scolaire",
+    )
     nature_frais = models.CharField(
         max_length=20,
         choices=NATURE_FRAIS_CHOICES,
@@ -163,19 +526,23 @@ class EcheancierPaiement(SyncTrackedModel):
     # Montants dus
     frais_inscription_du = models.DecimalField(
         max_digits=10, decimal_places=0, default=Decimal('0'),
-        verbose_name="Frais d'inscription dus (GNF)"
+        verbose_name="Frais d'inscription dus (GNF)",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     tranche_1_due = models.DecimalField(
         max_digits=10, decimal_places=0, default=Decimal('0'),
-        verbose_name="1ère tranche due (GNF)"
+        verbose_name="1ère tranche due (GNF)",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     tranche_2_due = models.DecimalField(
         max_digits=10, decimal_places=0, default=Decimal('0'),
-        verbose_name="2ème tranche due (GNF)"
+        verbose_name="2ème tranche due (GNF)",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     tranche_3_due = models.DecimalField(
         max_digits=10, decimal_places=0, default=Decimal('0'),
-        verbose_name="3ème tranche due (GNF)"
+        verbose_name="3ème tranche due (GNF)",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     
     # Dates d'échéance
@@ -187,19 +554,23 @@ class EcheancierPaiement(SyncTrackedModel):
     # Montants payés
     frais_inscription_paye = models.DecimalField(
         max_digits=10, decimal_places=0, default=Decimal('0'),
-        verbose_name="Frais d'inscription payés (GNF)"
+        verbose_name="Frais d'inscription payés (GNF)",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     tranche_1_payee = models.DecimalField(
         max_digits=10, decimal_places=0, default=Decimal('0'),
-        verbose_name="1ère tranche payée (GNF)"
+        verbose_name="1ère tranche payée (GNF)",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     tranche_2_payee = models.DecimalField(
         max_digits=10, decimal_places=0, default=Decimal('0'),
-        verbose_name="2ème tranche payée (GNF)"
+        verbose_name="2ème tranche payée (GNF)",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     tranche_3_payee = models.DecimalField(
         max_digits=10, decimal_places=0, default=Decimal('0'),
-        verbose_name="3ème tranche payée (GNF)"
+        verbose_name="3ème tranche payée (GNF)",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     
     statut = models.CharField(max_length=20, choices=STATUT_CHOICES, default='A_PAYER', verbose_name="Statut")
@@ -217,9 +588,45 @@ class EcheancierPaiement(SyncTrackedModel):
             models.Index(fields=['statut']),                 # Filtrage par statut
             models.Index(fields=['annee_scolaire', 'statut']),  # Combinaison fréquente
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['eleve', 'annee_scolaire'],
+                name='echeancier_unique_eleve_annee',
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(frais_inscription_du__gte=0)
+                    & models.Q(tranche_1_due__gte=0)
+                    & models.Q(tranche_2_due__gte=0)
+                    & models.Q(tranche_3_due__gte=0)
+                    & models.Q(frais_inscription_paye__gte=0)
+                    & models.Q(tranche_1_payee__gte=0)
+                    & models.Q(tranche_2_payee__gte=0)
+                    & models.Q(tranche_3_payee__gte=0)
+                ),
+                name='echeancier_montants_non_negatifs',
+            ),
+        ]
 
     def __str__(self):
         return f"Échéancier {self.eleve.nom_complet} - {self.annee_scolaire}"
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        for field_name in (
+            'frais_inscription_du', 'tranche_1_due', 'tranche_2_due', 'tranche_3_due',
+            'frais_inscription_paye', 'tranche_1_payee', 'tranche_2_payee', 'tranche_3_payee',
+        ):
+            value = Decimal(str(getattr(self, field_name) or 0))
+            if value < 0:
+                errors[field_name] = 'Le montant ne peut pas être négatif.'
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     @property
     def libelle_frais_admission(self):
@@ -235,14 +642,28 @@ class EcheancierPaiement(SyncTrackedModel):
     
     @property
     def total_remises_valides(self):
-        """Total des remises appliquées sur des paiements validés de l'élève."""
-        total = (
+        """Part réellement utilisable des remises validées sur les tranches.
+
+        Une remise ne couvre jamais l'inscription/réinscription et ne peut pas
+        dépasser le reste dû de ses tranches cibles. Cette propriété conserve
+        ainsi la même règle que les vues, reçus, exports et relances.
+        """
+        from .allocation import allocate_discounts
+        from .calculs import filtre_types_scolarite
+
+        remises = (
             PaiementRemise.objects
-            .filter(paiement__eleve_id=self.eleve_id, paiement__statut='VALIDE')
-            .aggregate(total=Sum('montant_remise'))
-            .get('total') or 0
+            .filter(
+                paiement__eleve_id=self.eleve_id,
+                paiement__annee_scolaire=self.annee_scolaire,
+                paiement__statut='VALIDE',
+            )
+            .filter(filtre_types_scolarite('paiement__type_paiement'))
+            .select_related('paiement')
+            .order_by('paiement__date_paiement', 'paiement_id', 'id')
         )
-        return Decimal(total)
+        allocation, _ = allocate_discounts(self, remises)
+        return sum(allocation.values(), Decimal('0'))
 
     @property
     def solde_restant(self):
@@ -251,9 +672,10 @@ class EcheancierPaiement(SyncTrackedModel):
 
     @property
     def pourcentage_paye(self):
-        """Pourcentage payé, borné entre 0 et 100"""
+        """Pourcentage couvert par les paiements et remises validées."""
         if self.total_du > 0:
-            pct = (self.total_paye / self.total_du) * 100
+            couverture = self.total_paye + self.total_remises_valides
+            pct = (couverture / self.total_du) * 100
             return min(pct, Decimal('100'))
         return Decimal('0')
 
@@ -277,7 +699,8 @@ class RemiseReduction(SyncTrackedModel):
     valeur = models.DecimalField(
         max_digits=10, decimal_places=2,
         verbose_name="Valeur",
-        help_text="Pourcentage (ex: 10.50) ou montant en GNF"
+        help_text="Pourcentage (ex: 10.50) ou montant en GNF",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     motif = models.CharField(max_length=20, choices=MOTIF_CHOICES, verbose_name="Motif")
     description = models.TextField(blank=True, null=True, verbose_name="Description")
@@ -294,6 +717,25 @@ class RemiseReduction(SyncTrackedModel):
     class Meta:
         verbose_name = "Remise/Réduction"
         verbose_name_plural = "Remises/Réductions"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(valeur__gte=0),
+                name='remise_reduction_valeur_non_negative',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        valeur = Decimal(str(self.valeur or 0))
+        if valeur < 0:
+            errors['valeur'] = "La valeur ne peut pas être négative."
+        if self.type_remise == 'POURCENTAGE' and valeur > 100:
+            errors['valeur'] = "Une remise en pourcentage ne peut pas dépasser 100 %."
+        if self.date_debut and self.date_fin and self.date_debut > self.date_fin:
+            errors['date_fin'] = "La date de fin doit suivre la date de début."
+        if errors:
+            raise ValidationError(errors)
     
     def __str__(self):
         if self.type_remise == 'POURCENTAGE':
@@ -343,7 +785,8 @@ class PaiementRemise(SyncTrackedModel):
     remise = models.ForeignKey(RemiseReduction, on_delete=models.CASCADE)
     montant_remise = models.DecimalField(
         max_digits=10, decimal_places=0,
-        verbose_name="Montant de la remise (GNF)"
+        verbose_name="Montant de la remise (GNF)",
+        validators=[MinValueValidator(Decimal('0'))],
     )
     # blank=True uniquement pour les lignes créées avant l'ajout du champ :
     # le formulaire d'application, lui, exige toujours un motif.
@@ -370,11 +813,24 @@ class PaiementRemise(SyncTrackedModel):
         default='',
         verbose_name="Base de calcul retenue",
     )
+    # Vrai quand le montant du reçu a été diminué d'autant. Sans cette trace,
+    # rouvrir l'écran de remise déduirait une seconde fois la même remise :
+    # le montant brut du reçu ne serait plus reconstituable.
+    deduite_du_paiement = models.BooleanField(
+        default=False,
+        verbose_name="Déduite du montant du reçu",
+    )
 
     class Meta:
         verbose_name = "Remise appliquée"
         verbose_name_plural = "Remises appliquées"
         unique_together = ['paiement', 'remise']
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(montant_remise__gte=0),
+                name='paiement_remise_montant_non_negatif',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.paiement.numero_recu} - {self.remise.nom} - {self.montant_remise:,.0f} GNF"

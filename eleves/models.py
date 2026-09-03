@@ -1,9 +1,15 @@
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.models import User
 from django.core.validators import RegexValidator
 from decimal import Decimal
 import unicodedata
 from synchronisation.mixins import SyncTrackedModel
+
+
+COULEUR_HEX_VALIDATOR = RegexValidator(
+    r'^#[0-9A-Fa-f]{6}$',
+    'Utilisez une couleur hexadécimale au format #RRGGBB.',
+)
 
 class Ecole(SyncTrackedModel):
     """Modèle pour représenter une école"""
@@ -41,6 +47,47 @@ class Ecole(SyncTrackedModel):
     image = models.ImageField(upload_to='ecoles/images/', blank=True, null=True,
                               verbose_name="Photo de l'ecole",
                               help_text="Photo du batiment de l'ecole (affichee sur le livret scolaire)")
+    couleur_primaire = models.CharField(
+        max_length=7, default='#163B65', validators=[COULEUR_HEX_VALIDATOR],
+        verbose_name="Couleur principale",
+        help_text="Navigation, titres, cartes principales et en-têtes de documents.",
+    )
+    couleur_secondaire = models.CharField(
+        max_length=7, default='#2F75B5', validators=[COULEUR_HEX_VALIDATOR],
+        verbose_name="Couleur secondaire",
+    )
+    couleur_accent = models.CharField(
+        max_length=7, default='#F2B134', validators=[COULEUR_HEX_VALIDATOR],
+        verbose_name="Couleur d'accent",
+    )
+    couleur_succes = models.CharField(
+        max_length=7, default='#198754', validators=[COULEUR_HEX_VALIDATOR],
+        verbose_name="Couleur succès",
+    )
+    couleur_avertissement = models.CharField(
+        max_length=7, default='#F59E0B', validators=[COULEUR_HEX_VALIDATOR],
+        verbose_name="Couleur avertissement",
+    )
+    couleur_danger = models.CharField(
+        max_length=7, default='#DC3545', validators=[COULEUR_HEX_VALIDATOR],
+        verbose_name="Couleur danger / retard",
+    )
+    couleur_information = models.CharField(
+        max_length=7, default='#0EA5E9', validators=[COULEUR_HEX_VALIDATOR],
+        verbose_name="Couleur information",
+    )
+    couleur_fond_documents = models.CharField(
+        max_length=7, default='#F5F8FB', validators=[COULEUR_HEX_VALIDATOR],
+        verbose_name="Fond clair des documents",
+    )
+    couleur_texte_documents = models.CharField(
+        max_length=7, default='#172B3A', validators=[COULEUR_HEX_VALIDATOR],
+        verbose_name="Texte principal des documents",
+    )
+    couleur_bordure_documents = models.CharField(
+        max_length=7, default='#AFC3D6', validators=[COULEUR_HEX_VALIDATOR],
+        verbose_name="Bordures des documents",
+    )
     # Préfixe explicite pour les matricules (ex: "AL-FUR/")
     code_prefixe = models.CharField(
         max_length=20,
@@ -432,6 +479,12 @@ class Eleve(SyncTrackedModel):
             "2 850 000 en 10ème année), auquel s'ajoutent les frais d'inscription ou de réinscription."
         ),
     )
+    test_accueil_evalue = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name="Test d'accueil évalué",
+        help_text="Cochez lorsque l'élève a passé et reçu l'évaluation du test d'accueil.",
+    )
     
     # Responsables
     responsable_principal = models.ForeignKey(
@@ -449,6 +502,26 @@ class Eleve(SyncTrackedModel):
     date_creation = models.DateTimeField(auto_now_add=True)
     date_modification = models.DateTimeField(auto_now=True)
     cree_par = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    est_dans_corbeille = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name="Dans la corbeille",
+    )
+    supprime_le = models.DateTimeField(null=True, blank=True, verbose_name="Supprimé le")
+    supprime_par = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='eleves_places_corbeille',
+        verbose_name="Supprimé par",
+    )
+    statut_avant_suppression = models.CharField(
+        max_length=20,
+        choices=STATUT_CHOICES,
+        blank=True,
+        verbose_name="Statut avant suppression",
+    )
     
     class Meta:
         verbose_name = "Élève"
@@ -466,6 +539,23 @@ class Eleve(SyncTrackedModel):
     @property
     def nom_complet(self):
         return f"{self.prenom} {self.nom}"
+
+    @property
+    def echeancier(self):
+        """Échéancier de l'année scolaire actuelle de la classe.
+
+        La relation est volontairement exposée sous le même nom que l'ancien
+        ``OneToOneField`` afin de préserver les vues et templates historiques.
+        Contrairement à l'ancien comportement, un échéancier d'une année
+        précédente n'est jamais retourné pour la nouvelle année.
+        """
+        if not self.pk:
+            return None
+        annee_scolaire = getattr(getattr(self, 'classe', None), 'annee_scolaire', None)
+        queryset = self.echeanciers.all()
+        if annee_scolaire:
+            return queryset.filter(annee_scolaire=annee_scolaire).first()
+        return queryset.order_by('-annee_scolaire', '-date_creation').first()
     
     @property
     def age(self):
@@ -475,10 +565,47 @@ class Eleve(SyncTrackedModel):
         today = date.today()
         return today.year - self.date_naissance.year - ((today.month, today.day) < (self.date_naissance.month, self.date_naissance.day))
 
+    def placer_dans_corbeille(self, utilisateur=None):
+        """Archive l'élève sans perdre ses données associées."""
+        from django.utils import timezone
+
+        if self.est_dans_corbeille:
+            return False
+        self.statut_avant_suppression = self.statut or 'ACTIF'
+        self.est_dans_corbeille = True
+        self.supprime_le = timezone.now()
+        self.supprime_par = utilisateur if getattr(utilisateur, 'is_authenticated', False) else None
+        self.statut = 'EXCLU'
+        self.save(update_fields=[
+            'statut', 'statut_avant_suppression', 'est_dans_corbeille',
+            'supprime_le', 'supprime_par', 'date_modification',
+        ])
+        return True
+
+    def restaurer_depuis_corbeille(self):
+        """Restaure l'élève et son statut précédent."""
+        if not self.est_dans_corbeille:
+            return False
+        self.statut = self.statut_avant_suppression or 'ACTIF'
+        self.est_dans_corbeille = False
+        self.supprime_le = None
+        self.supprime_par = None
+        self.statut_avant_suppression = ''
+        self.save(update_fields=[
+            'statut', 'statut_avant_suppression', 'est_dans_corbeille',
+            'supprime_le', 'supprime_par', 'date_modification',
+        ])
+        return True
+
     def _reaffecter_matricules_ancienne_classe(self, ancienne_classe, ancien_matricule):
         """Désactivée pour éviter les conflits UNIQUE"""
         pass
     def save(self, *args, **kwargs):
+        """Enregistre un transfert de classe comme une opération atomique."""
+        with transaction.atomic():
+            return self._save_atomic(*args, **kwargs)
+
+    def _save_atomic(self, *args, **kwargs):
         """Génère automatiquement le matricule au format CODE-### si absent.
         - CODE déterminé par la classe via `_code_classe_from_nom_ou_niveau`
         - ### est une séquence à 3 chiffres, incrémentée par classe (et donc par école)
@@ -499,6 +626,19 @@ class Eleve(SyncTrackedModel):
                 old_instance = Eleve.objects.get(pk=self.pk)
                 if old_instance.classe_id != self.classe_id:
                     # Changement de classe détecté
+                    # Figer d'abord la portée des anciens reçus encore dépourvus
+                    # de snapshot (données historiques/importées). Après le
+                    # transfert, la classe courante ne permettrait plus de
+                    # retrouver leur école d'encaissement réelle.
+                    from paiements.models import Paiement
+
+                    Paiement.objects.filter(eleve_id=self.pk).filter(
+                        models.Q(ecole_encaissement__isnull=True)
+                        | models.Q(classe_encaissement__isnull=True)
+                    ).update(
+                        ecole_encaissement_id=old_instance.classe.ecole_id,
+                        classe_encaissement_id=old_instance.classe_id,
+                    )
                     regenerer_matricule = True
                     ancienne_classe = old_instance.classe
                     ancien_matricule = self.matricule
@@ -612,6 +752,18 @@ class Eleve(SyncTrackedModel):
         
         # Créer l'historique du changement de classe après la sauvegarde
         if changement_classe_info:
+            # Le tarif de la classe cible est appliqué avant de finaliser
+            # l'historique. Si une erreur inattendue survient, transaction.atomic
+            # annule aussi le changement de classe et de matricule.
+            from paiements.services import reconcilier_transfert_classe
+
+            self._financial_transfer_info = reconcilier_transfert_classe(
+                self,
+                ancienne_classe,
+                self.classe,
+                cree_par=changement_classe_info['utilisateur'],
+            )
+
             # Transférer les notes vers la nouvelle classe
             transfert_result = self._transferer_notes_vers_nouvelle_classe(ancienne_classe, self.classe)
             notes_transferees = transfert_result.get('transferees', 0)
@@ -914,6 +1066,15 @@ class Eleve(SyncTrackedModel):
             )
 
         return {'transferees': notes_transferees, 'ignorees': notes_ignorees}
+
+class EleveCorbeille(Eleve):
+    """Vue proxy des élèves archivés, utilisée par l'administration."""
+
+    class Meta:
+        proxy = True
+        verbose_name = "Élève dans la corbeille"
+        verbose_name_plural = "Corbeille des élèves"
+
 
 class HistoriqueEleve(SyncTrackedModel):
     """Modèle pour l'historique des modifications d'un élève"""

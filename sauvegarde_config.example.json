@@ -1,0 +1,24 @@
+{
+  "_README": "FACULTATIF. Sans ce fichier, la sauvegarde fonctionne deja : destinations detectees automatiquement (dossier local 'sauvegardes', dossier cloud OneDrive/Google Drive/Dropbox, cle USB ou disque externe branche), une archive toutes les 6 heures pendant que l'application tourne. Copiez ce fichier en 'sauvegarde_config.json' (a cote de MySchoolGN.exe) uniquement pour changer ces reglages. Redemarrez ensuite l'application.",
+
+  "_DESTINATIONS": "Remplace la detection automatique. Mettre les chemins complets, du plus important au moins important. Laisser absent pour la detection automatique.",
+  "MYSCHOOL_SAUVEGARDE_DESTINATIONS": [
+    "D:\\Sauvegardes MySchoolGN",
+    "C:\\Users\\NOM\\OneDrive\\Sauvegardes MySchoolGN"
+  ],
+
+  "_SOUS_DOSSIER": "Nom du sous-dossier cree dans le cloud et sur la cle USB (detection automatique uniquement).",
+  "MYSCHOOL_SAUVEGARDE_SOUS_DOSSIER": "Sauvegardes MySchoolGN",
+
+  "_INTERVALLE": "Heures entre deux sauvegardes automatiques. 6 = quatre fois par jour. Minimum 0.5.",
+  "MYSCHOOL_SAUVEGARDE_INTERVALLE_HEURES": "6",
+
+  "_AUTO": "Mettre '0' pour desactiver la sauvegarde automatique en arriere-plan (deconseille).",
+  "MYSCHOOL_SAUVEGARDE_AUTO": "1",
+
+  "_MOT_DE_PASSE": "Chiffre l'archive (AES). Necessite le module pyzipper : sans lui, l'archive est ecrite en clair et un avertissement est journalise. ATTENTION : mot de passe perdu = archive irrecuperable. A conserver hors de la machine.",
+  "MYSCHOOL_SAUVEGARDE_MOT_DE_PASSE": "",
+
+  "_ROTATION": "Non configurable : 7 quotidiennes, 4 hebdomadaires, 12 mensuelles conservees par destination.",
+  "_JOURNAL": "Chaque execution est tracee dans logs/sauvegarde.log."
+}

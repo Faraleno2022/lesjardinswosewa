@@ -9,28 +9,6 @@
     <div class="card-body p-4">
       <h1 class="h4 mb-3 text-center"><i class="fas fa-sign-in-alt me-2"></i>Connexion</h1>
 
-      {# Affichage des messages d'erreur/info directement dans le formulaire pour ne rien rater #}
-      {% if messages %}
-        {% for message in messages %}
-          {% if 'error' in message.tags or 'warning' in message.tags %}
-            <div class="alert alert-danger d-flex align-items-center" role="alert">
-              <i class="fas fa-exclamation-triangle me-2"></i>
-              <div>{{ message }}</div>
-            </div>
-          {% elif 'success' in message.tags %}
-            <div class="alert alert-success d-flex align-items-center" role="alert">
-              <i class="fas fa-check-circle me-2"></i>
-              <div>{{ message }}</div>
-            </div>
-          {% else %}
-            <div class="alert alert-info d-flex align-items-center" role="alert">
-              <i class="fas fa-info-circle me-2"></i>
-              <div>{{ message }}</div>
-            </div>
-          {% endif %}
-        {% endfor %}
-      {% endif %}
-
       {% if blocked %}
         <div class="alert alert-danger d-flex align-items-center" role="alert">
           <i class="fas fa-ban me-2"></i>

@@ -5,6 +5,7 @@ from uuid import UUID
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db.models import Max, Q
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.utils.dateparse import parse_datetime
@@ -17,6 +18,10 @@ from utilisateurs.utils import user_is_admin, user_school
 
 from .engine import apply_sync_change, snapshot_changes_for_ecole
 from .models import SyncChange, SyncDevice
+
+
+# Fraicheur de `derniere_connexion` : voir _device_from_headers.
+CONNEXION_REFRESH_SECONDS = 60
 
 
 def _json_body(request):
@@ -60,8 +65,27 @@ def _device_from_headers(request):
     device = SyncDevice.objects.select_related('ecole').filter(device_id=device_id, actif=True).first()
     if not device or not device.verifier_token(token):
         return None, JsonResponse({'ok': False, 'error': 'Appareil non autorise.'}, status=403)
-    device.marquer_connexion()
+    # Les postes interrogent le serveur toutes les quelques secondes pour que
+    # les ajouts apparaissent tout de suite. Reecrire l'horodatage a chaque
+    # appel ajouterait autant d'ecritures inutiles : une par minute suffit a
+    # savoir qu'un poste est en ligne.
+    derniere = device.derniere_connexion
+    if not derniere or (timezone.now() - derniere).total_seconds() > CONNEXION_REFRESH_SECONDS:
+        device.marquer_connexion()
     return device, None
+
+
+def appareil_authentifie(request):
+    """
+    Authentifie un poste a partir de ses en-tetes de synchronisation.
+
+    Retourne `(appareil, None)`, ou `(None, reponse_d_erreur)`. Expose pour les
+    autres applications — la diffusion des mises a jour s'adresse aux memes
+    postes, avec les memes identifiants : leur faire une seconde facon de
+    s'authentifier multiplierait les endroits ou une revocation peut etre
+    oubliee.
+    """
+    return _device_from_headers(request)
 
 
 def _schools_for_user(user):
@@ -288,6 +312,34 @@ def push(request):
     })
 
 
+def _watermark_for_device(device, since_id):
+    """
+    Repere jusqu'ou le poste peut avancer quand le lot est vide.
+
+    Sans cela, `since_id` restait fige des qu'un changement ne le concernait
+    pas (le sien, ou un envoi refuse d'un autre poste) : le poste redemandait
+    alors ce meme intervalle a chaque cycle. En avancant le repere, ses
+    verifications suivantes ne coutent plus rien tant que rien ne bouge, ce
+    qui rend une cadence de quelques secondes tenable.
+
+    Les lignes poussees par un poste et encore en attente sont exclues : elles
+    sont en cours d'application au moment meme de la lecture et deviendront
+    livrables dans l'instant. Les depasser les rendrait invisibles a jamais.
+    """
+    dernier = (
+        SyncChange.objects
+        .filter(ecole=device.ecole)
+        .exclude(device__isnull=False, statut=SyncChange.STATUT_PENDING)
+        .aggregate(dernier=Max('id'))['dernier']
+    )
+    if not dernier:
+        return since_id
+    try:
+        return max(int(since_id), dernier) if since_id else dernier
+    except (TypeError, ValueError):
+        return dernier
+
+
 @csrf_exempt
 @require_http_methods(['GET', 'POST'])
 def pull(request):
@@ -307,6 +359,13 @@ def pull(request):
         initial = data.get('initial') in {True, '1', 'true', 'yes'}
 
     if initial:
+        # Repere releve avant l'instantane : le poste neuf reprend ensuite le
+        # fil a cet endroit, au lieu de rejouer tout l'historique des
+        # changements qui l'ont precede — historique deja contenu dans
+        # l'instantane, mais que rien ne lui disait de sauter. Pris avant, il
+        # ne peut que faire redescendre deux fois un changement concurrent, ce
+        # qui est sans effet : l'application se fait par `sync_uuid`.
+        repere = _watermark_for_device(device, since_id)
         serialized_changes = snapshot_changes_for_ecole(device.ecole)
         return JsonResponse({
             'ok': True,
@@ -316,11 +375,21 @@ def pull(request):
             'since_id': since_id,
             'initial': True,
             'changes': serialized_changes,
-            'latest_change_id': since_id,
+            'latest_change_id': repere,
             'server_time': timezone.now().isoformat(),
         })
 
-    changes = SyncChange.objects.filter(ecole=device.ecole, statut=SyncChange.STATUT_APPLIED).exclude(device=device)
+    # Deux origines doivent etre servies aux postes :
+    #  - les changements pousses par un autre poste puis appliques ici ;
+    #  - ceux nes sur ce serveur meme (saisie dans le site en ligne). Ceux-la
+    #    sont crees par le signal local et restent PENDING, faute d'un poste a
+    #    qui les pousser ; ils sont pourtant deja dans la base, donc bons a
+    #    distribuer. Les ignorer rendait toute saisie en ligne invisible des
+    #    postes.
+    changes = SyncChange.objects.filter(ecole=device.ecole).filter(
+        Q(statut=SyncChange.STATUT_APPLIED)
+        | Q(device__isnull=True, statut=SyncChange.STATUT_PENDING)
+    ).exclude(device=device)
     if since_id:
         try:
             changes = changes.filter(id__gt=int(since_id))
@@ -333,6 +402,13 @@ def pull(request):
         if timezone.is_naive(parsed_since):
             parsed_since = timezone.make_aware(parsed_since, timezone.get_current_timezone())
         changes = changes.filter(date_creation__gt=parsed_since)
+
+    # Le repere est releve AVANT de lire le lot, jamais apres. Un changement
+    # enregistre entre les deux requetes serait sinon compte par le repere sans
+    # figurer dans le lot : le poste avancerait son `since_id` par-dessus une
+    # donnee qu'il n'a jamais recue, et celle-ci ne lui serait plus jamais
+    # servie. Pris avant, le repere reste au pire en retard d'un cycle.
+    repere = _watermark_for_device(device, since_id)
 
     changes = changes.order_by('id')[:200]
     serialized_changes = [
@@ -357,6 +433,54 @@ def pull(request):
         'since': since,
         'since_id': since_id,
         'changes': serialized_changes,
-        'latest_change_id': serialized_changes[-1]['id'] if serialized_changes else since_id,
+        'latest_change_id': (
+            serialized_changes[-1]['id'] if serialized_changes else repere
+        ),
         'server_time': timezone.now().isoformat(),
     })
+
+
+@require_GET
+def state(request):
+    """
+    Filigrane de fraicheur des donnees de l'ecole : identifiant du dernier
+    changement enregistre localement.
+
+    Deux appelants s'en servent, et c'est ce qui rend la propagation visible
+    tout de suite :
+      - le worker du poste, qui evite un `pull` complet tant que le filigrane
+        n'a pas bouge : la cadence peut donc etre serree sans charger le
+        serveur ;
+      - les pages ouvertes dans le navigateur, qui se rafraichissent des
+        qu'une donnee arrive d'un autre poste.
+
+    L'appelant s'authentifie soit par les en-tetes appareil, soit par sa
+    session : la meme vue sert le serveur en ligne et les postes locaux.
+    """
+    ecole = None
+    if request.headers.get('X-Sync-Device'):
+        device, error_response = _device_from_headers(request)
+        if error_response:
+            return error_response
+        ecole = device.ecole
+    else:
+        user = getattr(request, 'user', None)
+        if not (user and user.is_authenticated):
+            return JsonResponse({'ok': False, 'error': 'Authentification requise.'}, status=401)
+        ecole = _current_school(user)
+
+    changes = SyncChange.objects.all()
+    if ecole:
+        changes = changes.filter(ecole=ecole)
+    last_change_id = changes.aggregate(dernier=Max('id'))['dernier'] or 0
+
+    response = JsonResponse({
+        'ok': True,
+        'ecole_id': ecole.pk if ecole else None,
+        'last_change_id': last_change_id,
+        'server_time': timezone.now().isoformat(),
+    })
+    # Sans cela, un cache intermediaire figerait le filigrane et les postes
+    # continueraient d'afficher des donnees perimees.
+    response['Cache-Control'] = 'no-store, max-age=0'
+    return response

@@ -5,6 +5,7 @@ Inclut toutes les notes de chaque élève pour chaque matière
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404
 from django.http import HttpResponse
+from ecole_moderne.branding import get_pdf_palette
 from decimal import Decimal
 import io
 import logging
@@ -202,6 +203,7 @@ def exporter_notes_complet_excel(request):
         
         # Récupérer les informations de l'école
         ecole = classe.ecole
+        palette = get_pdf_palette(ecole, bulletin=True)
         
         # En-tête école
         ws.merge_cells('A1:' + get_column_letter(5 + len(matieres)) + '1')
@@ -425,7 +427,7 @@ def exporter_notes_complet_pdf(request):
             'Title',
             parent=styles['Heading1'],
             fontSize=14,
-            textColor=colors.HexColor('#007bff'),
+            textColor=palette['primary'],
             alignment=TA_CENTER,
             spaceAfter=4
         )
@@ -465,7 +467,7 @@ def exporter_notes_complet_pdf(request):
             fontSize=7.2,
             leading=7.8,
             alignment=TA_CENTER,
-            textColor=colors.whitesmoke,
+            textColor=palette['header_text'],
             wordWrap='CJK'
         )
 
@@ -534,8 +536,8 @@ def exporter_notes_complet_pdf(request):
         
         # Styles du tableau
         style_commands = [
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#007bff')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('BACKGROUND', (0, 0), (-1, 0), palette['header']),
+            ('TEXTCOLOR', (0, 0), (-1, 0), palette['header_text']),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 7.4),
@@ -544,7 +546,7 @@ def exporter_notes_complet_pdf(request):
             ('TOPPADDING', (0, 0), (-1, -1), 3),
             ('BOTTOMPADDING', (0, 1), (-1, -1), 3),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')]),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, palette['table_light']]),
             ('ALIGN', (2, 1), (2, -1), 'LEFT'),  # Nom complet aligné à gauche
         ]
         

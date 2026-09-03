@@ -1,6 +1,19 @@
 from django import forms
 from django.core.exceptions import ValidationError
-from .models import Enseignant, TypeEnseignant, StatutEnseignant, AffectationClasse, PresenceEnseignant
+from django.db.models import Q, Sum
+from django.utils import timezone
+from decimal import Decimal
+from .models import (
+    AffectationClasse,
+    AvanceSalaire,
+    Enseignant,
+    EtatSalaire,
+    PeriodeSalaire,
+    PresenceEnseignant,
+    StatutAvanceSalaire,
+    StatutEnseignant,
+    TypeEnseignant,
+)
 from eleves.models import Ecole, Classe
 
 
@@ -72,13 +85,13 @@ class EnseignantForm(forms.ModelForm):
             'statut': 'Statut',
             'taux_horaire': 'Taux horaire (GNF)',
             'salaire_fixe': 'Salaire fixe (GNF)',
-            'heures_mensuelles': 'Heures mensuelles',
+            'heures_mensuelles': 'Volume mensuel indicatif',
             'date_embauche': 'Date d\'embauche *',
         }
         help_texts = {
-            'taux_horaire': 'Pour les enseignants du secondaire uniquement',
-            'salaire_fixe': 'Pour garderie, maternelle, primaire et administrateurs',
-            'heures_mensuelles': 'Nombre d\'heures de travail prévues par mois (pour calcul précis du salaire)',
+            'taux_horaire': 'Pour le secondaire. Le salaire est calculé avec les heures réelles.',
+            'salaire_fixe': 'Montant mensuel négocié pour garderie, maternelle, primaire et cadres/administrateurs',
+            'heures_mensuelles': 'Optionnel et indicatif. Les heures payées viennent des pointages ou de la saisie globale du mois.',
             'date_embauche': 'Date d\'entrée en fonction',
         }
 
@@ -119,10 +132,6 @@ class EnseignantForm(forms.ModelForm):
                 raise ValidationError({
                     'taux_horaire': 'Le taux horaire est obligatoire pour les enseignants du secondaire.'
                 })
-            if not heures_mensuelles:
-                raise ValidationError({
-                    'heures_mensuelles': 'Le nombre d\'heures mensuelles est obligatoire pour les enseignants du secondaire.'
-                })
             if salaire_fixe:
                 cleaned_data['salaire_fixe'] = None  # Effacer le salaire fixe
         else:
@@ -132,6 +141,7 @@ class EnseignantForm(forms.ModelForm):
                 })
             if taux_horaire:
                 cleaned_data['taux_horaire'] = None  # Effacer le taux horaire
+            cleaned_data['heures_mensuelles'] = None
         
         # Validation des heures mensuelles
         if heures_mensuelles and heures_mensuelles <= 0:
@@ -158,6 +168,49 @@ class EnseignantForm(forms.ModelForm):
                     raise ValidationError('Format de téléphone invalide. Utilisez le format guinéen.')
         return telephone
 
+
+class HeuresMensuellesPeriodeForm(forms.Form):
+    """Formulaire dynamique de saisie globale des heures d'une période."""
+
+    def __init__(
+        self,
+        *args,
+        enseignants,
+        initiales=None,
+        verrouilles=None,
+        pointes=None,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        initiales = initiales or {}
+        verrouilles = set(verrouilles or ())
+        pointes = set(pointes or ())
+        for enseignant in enseignants:
+            nom_champ = f'heures_{enseignant.pk}'
+            self.fields[nom_champ] = forms.DecimalField(
+                required=False,
+                min_value=Decimal('0'),
+                max_value=Decimal('744'),
+                max_digits=6,
+                decimal_places=2,
+                label=f'Heures de {enseignant.nom_complet}',
+                help_text=(
+                    'Les pointages journaliers sont prioritaires.'
+                    if enseignant.pk in pointes
+                    else "À utiliser uniquement si aucune heure n'a été pointée."
+                ),
+                widget=forms.NumberInput(attrs={
+                    'class': 'form-control form-control-sm',
+                    'step': '0.25',
+                    'min': '0',
+                    'max': '744',
+                    'placeholder': 'Pointages',
+                }),
+                initial=initiales.get(enseignant.pk),
+                disabled=(
+                    enseignant.pk in verrouilles or enseignant.pk in pointes
+                ),
+            )
 
 class AffectationClasseForm(forms.ModelForm):
     """Formulaire pour affecter un enseignant à une classe"""
@@ -301,10 +354,233 @@ class PresenceForm(forms.ModelForm):
         cleaned_data = super().clean()
         heure_arrivee = cleaned_data.get('heure_arrivee')
         heure_depart = cleaned_data.get('heure_depart')
+        heures_travaillees = cleaned_data.get('heures_travaillees')
         statut = cleaned_data.get('statut')
-        
-        # Si présent, les heures sont recommandées
-        if statut == 'PRESENT' and not (heure_arrivee and heure_depart):
-            self.add_warning('Heures d\'arrivée et de départ recommandées pour les présents.')
+
+        if bool(heure_arrivee) != bool(heure_depart):
+            raise ValidationError(
+                "L'heure d'arrivée et l'heure de départ doivent être renseignées ensemble."
+            )
+
+        if statut in {'PRESENT', 'RETARD'}:
+            if not (heure_arrivee and heure_depart) and not (
+                heures_travaillees is not None and heures_travaillees > 0
+            ):
+                raise ValidationError(
+                    "Renseignez les heures d'arrivée et de départ, ou le total travaillé."
+                )
+
+        if statut in {'ABSENT', 'CONGE', 'MALADIE'}:
+            if heure_arrivee or heure_depart or (
+                heures_travaillees is not None and heures_travaillees > 0
+            ):
+                raise ValidationError(
+                    'Aucune heure travaillée ne peut être enregistrée pour ce statut.'
+                )
         
         return cleaned_data
+
+
+class EtatSalaireAjustementForm(forms.ModelForm):
+    """Modification contrôlée du calcul avant validation définitive."""
+
+    class Meta:
+        model = EtatSalaire
+        fields = [
+            'salaire_base', 'total_heures', 'taux_horaire_applique',
+            'primes', 'deductions', 'observations',
+        ]
+        widgets = {
+            'salaire_base': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '0', 'step': '0.01'
+            }),
+            'total_heures': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '0', 'max': '744', 'step': '0.25'
+            }),
+            'taux_horaire_applique': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '0', 'step': '0.01'
+            }),
+            'primes': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '0', 'step': '0.01'
+            }),
+            'deductions': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '0', 'step': '0.01'
+            }),
+            'observations': forms.Textarea(attrs={
+                'class': 'form-control', 'rows': 4,
+                'placeholder': 'Motif des primes ou retenues',
+            }),
+        }
+
+    def __init__(self, *args, heures_pointage=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.heures_pointage = Decimal(heures_pointage or 0)
+
+        if self.instance.enseignant.est_taux_horaire:
+            self.fields.pop('salaire_base')
+            self.fields['total_heures'].required = True
+            self.fields['taux_horaire_applique'].required = True
+            if self.heures_pointage > 0:
+                self.fields['total_heures'].disabled = True
+                self.fields['total_heures'].help_text = (
+                    'Valeur calculée automatiquement depuis les pointages journaliers.'
+                )
+            else:
+                self.fields['total_heures'].help_text = (
+                    "Saisie manuelle autorisée car aucune heure n'a été pointée."
+                )
+        else:
+            self.fields.pop('total_heures')
+            self.fields.pop('taux_horaire_applique')
+            self.fields['salaire_base'].required = True
+
+    def clean(self):
+        cleaned_data = super().clean()
+        primes = cleaned_data.get('primes') or 0
+        deductions = cleaned_data.get('deductions') or 0
+        if self.instance.enseignant.est_taux_horaire:
+            heures = cleaned_data.get('total_heures')
+            taux = cleaned_data.get('taux_horaire_applique')
+            if heures is None or taux is None:
+                salaire_base = Decimal('0')
+            else:
+                salaire_base = heures * taux
+        else:
+            salaire_base = cleaned_data.get('salaire_base') or Decimal('0')
+
+        avances = self.instance.avances or 0
+        if deductions + avances > salaire_base + primes:
+            self.add_error(
+                'deductions',
+                'Les retenues et les avances ne peuvent pas dépasser '
+                'le salaire de base et les primes.',
+            )
+
+        return cleaned_data
+
+
+class AvanceSalaireForm(forms.ModelForm):
+    """Création et modification contrôlées d'une avance sur salaire."""
+
+    class Meta:
+        model = AvanceSalaire
+        fields = [
+            'enseignant', 'periode', 'date_avance', 'montant',
+            'reference', 'motif',
+        ]
+        widgets = {
+            'enseignant': forms.Select(attrs={'class': 'form-select'}),
+            'periode': forms.Select(attrs={'class': 'form-select'}),
+            'date_avance': forms.DateInput(attrs={
+                'class': 'form-control', 'type': 'date',
+            }),
+            'montant': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '1', 'step': '1',
+                'placeholder': 'Montant versé en GNF',
+            }),
+            'reference': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Numéro de reçu ou référence (facultatif)',
+            }),
+            'motif': forms.Textarea(attrs={
+                'class': 'form-control', 'rows': 3,
+                'placeholder': "Motif ou observation concernant l'avance",
+            }),
+        }
+
+    def __init__(self, *args, user=None, ecole=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.user = user
+        self.ecole = ecole
+
+        enseignants = Enseignant.objects.filter(statut=StatutEnseignant.ACTIF)
+        periodes = PeriodeSalaire.objects.filter(cloturee=False)
+        if ecole is not None:
+            enseignants = enseignants.filter(ecole=ecole)
+            periodes = periodes.filter(ecole=ecole)
+
+        if self.instance.pk:
+            enseignants = Enseignant.objects.filter(
+                Q(pk=self.instance.enseignant_id)
+                | Q(pk__in=enseignants.values('pk'))
+            )
+            periodes = PeriodeSalaire.objects.filter(
+                Q(pk=self.instance.periode_id)
+                | Q(pk__in=periodes.values('pk'))
+            )
+
+        self.fields['enseignant'].queryset = enseignants.select_related(
+            'ecole'
+        ).order_by('nom', 'prenoms')
+        self.fields['periode'].queryset = periodes.select_related(
+            'ecole'
+        ).order_by('-annee', '-mois')
+        self.fields['enseignant'].label_from_instance = lambda obj: (
+            f"{obj.nom_complet} — {obj.get_type_enseignant_display()}"
+        )
+        self.fields['date_avance'].initial = (
+            self.instance.date_avance if self.instance.pk else timezone.localdate()
+        )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        enseignant = cleaned_data.get('enseignant')
+        periode = cleaned_data.get('periode')
+        montant = cleaned_data.get('montant')
+        date_avance = cleaned_data.get('date_avance')
+
+        if date_avance and date_avance > timezone.localdate():
+            self.add_error('date_avance', "La date de l'avance ne peut pas être future.")
+
+        if periode and periode.cloturee:
+            self.add_error('periode', "Cette période de salaire est clôturée.")
+
+        if enseignant and periode and enseignant.ecole_id != periode.ecole_id:
+            self.add_error(
+                'enseignant',
+                "L'enseignant et la période doivent appartenir à la même école.",
+            )
+
+        if enseignant and periode:
+            etat = EtatSalaire.objects.filter(
+                enseignant=enseignant,
+                periode=periode,
+            ).first()
+            if etat and (etat.valide or etat.paye):
+                self.add_error(
+                    'periode',
+                    "Le salaire de cet enseignant est déjà validé pour cette période.",
+                )
+            elif etat and montant:
+                autres = AvanceSalaire.objects.filter(
+                    enseignant=enseignant,
+                    periode=periode,
+                    statut=StatutAvanceSalaire.EN_ATTENTE,
+                )
+                if self.instance.pk:
+                    autres = autres.exclude(pk=self.instance.pk)
+                total_autres = autres.aggregate(total=Sum('montant'))['total'] or 0
+                disponible = (
+                    (etat.salaire_base or 0)
+                    + (etat.primes or 0)
+                    - (etat.deductions or 0)
+                )
+                if total_autres + montant > disponible:
+                    self.add_error(
+                        'montant',
+                        "Le total des avances dépasse le salaire disponible "
+                        f"({disponible:,.0f} GNF).",
+                    )
+
+        return cleaned_data
+
+
+class AnnulationAvanceSalaireForm(forms.Form):
+    motif_annulation = forms.CharField(
+        label="Motif de l'annulation",
+        min_length=3,
+        widget=forms.Textarea(attrs={
+            'class': 'form-control', 'rows': 3,
+            'placeholder': "Expliquez pourquoi cette avance est annulée",
+        }),
+    )

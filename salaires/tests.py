@@ -1,3 +1,821 @@
-from django.test import TestCase
+from datetime import date, time
+from decimal import Decimal
+from unittest.mock import patch
 
-# Create your tests here.
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
+from django.test import TestCase, override_settings
+from django.urls import reverse
+
+from eleves.models import Classe, Ecole
+from synchronisation.engine import queryset_for_ecole, serialize_instance
+from synchronisation.registry import SYNC_MODEL_SET
+
+from .forms import (
+    AvanceSalaireForm,
+    EnseignantForm,
+    EtatSalaireAjustementForm,
+    PresenceForm,
+)
+from .models import (
+    AffectationClasse,
+    AvanceSalaire,
+    Enseignant,
+    EtatSalaire,
+    PeriodeSalaire,
+    PresenceEnseignant,
+    SaisieHeuresMensuelles,
+    SourceHeuresSalaire,
+    StatutAvanceSalaire,
+    TypeEnseignant,
+)
+from .services import calculer_etat_salaire as calculer_etat_salaire_reel
+
+
+INTEGRITY_MIDDLEWARE = 'ecole_moderne.integrity_middleware.IntegrityMiddleware'
+TEST_MIDDLEWARE = tuple(
+    middleware for middleware in settings.MIDDLEWARE
+    if middleware != INTEGRITY_MIDDLEWARE
+)
+
+
+@override_settings(MIDDLEWARE=TEST_MIDDLEWARE)
+class MoteurPaieTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser(
+            username='audit-paie',
+            email='audit-paie@example.com',
+            password='mot-de-passe-test',
+        )
+        self.ecole = Ecole.objects.create(
+            nom='École test paie',
+            adresse='Conakry',
+            telephone='+224610000000',
+            directeur='Direction test',
+        )
+        self.user.profil.ecole = self.ecole
+        self.user.profil.save(update_fields=['ecole'])
+        self.classe_a = Classe.objects.create(
+            ecole=self.ecole,
+            nom='Classe A',
+            niveau='COLLEGE_7',
+            annee_scolaire='2025-2026',
+        )
+        self.classe_b = Classe.objects.create(
+            ecole=self.ecole,
+            nom='Classe B',
+            niveau='COLLEGE_8',
+            annee_scolaire='2025-2026',
+        )
+        self.periode = PeriodeSalaire.objects.create(
+            mois=7,
+            annee=2026,
+            ecole=self.ecole,
+            nombre_semaines=Decimal('4'),
+            cree_par=self.user,
+        )
+        self.client.force_login(self.user)
+
+    def creer_secondaire(self, nom='Secondaire', taux='10000'):
+        return Enseignant.objects.create(
+            nom=nom,
+            prenoms='Test',
+            ecole=self.ecole,
+            type_enseignant=TypeEnseignant.SECONDAIRE,
+            statut='ACTIF',
+            taux_horaire=Decimal(taux),
+            date_embauche=date(2025, 1, 1),
+            cree_par=self.user,
+        )
+
+    def creer_fixe(self, nom='Fixe', salaire='1000000', embauche=date(2025, 1, 1)):
+        return Enseignant.objects.create(
+            nom=nom,
+            prenoms='Test',
+            ecole=self.ecole,
+            type_enseignant=TypeEnseignant.PRIMAIRE,
+            statut='ACTIF',
+            salaire_fixe=Decimal(salaire),
+            date_embauche=embauche,
+            cree_par=self.user,
+        )
+
+    def affecter(self, enseignant, classe, heures, **kwargs):
+        valeurs = {
+            'enseignant': enseignant,
+            'classe': classe,
+            'heures_par_semaine': Decimal(heures),
+            'date_debut': date(2025, 1, 1),
+            'actif': True,
+        }
+        valeurs.update(kwargs)
+        return AffectationClasse.objects.create(**valeurs)
+
+    def pointer(self, enseignant, jours, heures=8):
+        for jour in jours:
+            PresenceEnseignant.objects.create(
+                enseignant=enseignant,
+                date=date(2026, 7, jour),
+                statut='PRESENT',
+                heures_travaillees=Decimal(heures),
+                pointe_par=self.user,
+            )
+
+    def calculer(self):
+        return self.client.post(
+            reverse('salaires:calculer_salaires', args=[self.periode.id])
+        )
+
+    def test_net_egale_base_plus_primes_moins_retenues(self):
+        enseignant = self.creer_fixe()
+        etat = EtatSalaire.objects.create(
+            enseignant=enseignant,
+            periode=self.periode,
+            salaire_base=Decimal('1000000'),
+            primes=Decimal('100000'),
+            deductions=Decimal('25000'),
+            salaire_net=Decimal('0'),
+            calcule_par=self.user,
+        )
+        self.assertEqual(etat.salaire_net, Decimal('1075000.00'))
+
+    def test_avance_est_deduite_automatiquement_du_salaire(self):
+        enseignant = self.creer_fixe()
+        AvanceSalaire.objects.create(
+            enseignant=enseignant,
+            periode=self.periode,
+            date_avance=date(2026, 7, 10),
+            montant=Decimal('200000'),
+            reference='REC-AV-001',
+            cree_par=self.user,
+        )
+
+        self.calculer()
+
+        etat = EtatSalaire.objects.get(
+            enseignant=enseignant,
+            periode=self.periode,
+        )
+        self.assertEqual(etat.salaire_base, Decimal('1000000.00'))
+        self.assertEqual(etat.avances, Decimal('200000.00'))
+        self.assertEqual(etat.salaire_net, Decimal('800000.00'))
+
+    def test_ajout_avance_recalcule_immediatement_un_brouillon(self):
+        enseignant = self.creer_fixe()
+        self.calculer()
+
+        response = self.client.post(
+            reverse('salaires:avances_salaire'),
+            {
+                'enseignant': enseignant.id,
+                'periode': self.periode.id,
+                'date_avance': '2026-07-12',
+                'montant': '150000',
+                'reference': 'REC-AV-002',
+                'motif': 'Besoin familial',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        avance = AvanceSalaire.objects.get(reference='REC-AV-002')
+        etat = EtatSalaire.objects.get(
+            enseignant=enseignant,
+            periode=self.periode,
+        )
+        self.assertEqual(avance.statut, StatutAvanceSalaire.EN_ATTENTE)
+        self.assertEqual(etat.avances, Decimal('150000.00'))
+        self.assertEqual(etat.salaire_net, Decimal('850000.00'))
+
+    def test_validation_fixe_les_avances_deduites(self):
+        enseignant = self.creer_fixe()
+        avance = AvanceSalaire.objects.create(
+            enseignant=enseignant,
+            periode=self.periode,
+            date_avance=date(2026, 7, 10),
+            montant=Decimal('125000'),
+            cree_par=self.user,
+        )
+        self.calculer()
+        etat = EtatSalaire.objects.get(
+            enseignant=enseignant,
+            periode=self.periode,
+        )
+
+        response = self.client.post(
+            reverse('salaires:valider_etat_salaire', args=[etat.id])
+        )
+
+        self.assertEqual(response.status_code, 302)
+        etat.refresh_from_db()
+        avance.refresh_from_db()
+        self.assertTrue(etat.valide)
+        self.assertEqual(etat.avances, Decimal('125000.00'))
+        self.assertEqual(avance.statut, StatutAvanceSalaire.DEDUITE)
+        self.assertEqual(avance.etat_salaire, etat)
+        self.assertFalse(avance.peut_etre_modifiee)
+
+    def test_annulation_conserve_avance_et_recalcule_le_brouillon(self):
+        enseignant = self.creer_fixe()
+        avance = AvanceSalaire.objects.create(
+            enseignant=enseignant,
+            periode=self.periode,
+            date_avance=date(2026, 7, 10),
+            montant=Decimal('100000'),
+            cree_par=self.user,
+        )
+        self.calculer()
+
+        response = self.client.post(
+            reverse('salaires:annuler_avance_salaire', args=[avance.id]),
+            {'motif_annulation': 'Montant saisi par erreur'},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        avance.refresh_from_db()
+        etat = EtatSalaire.objects.get(
+            enseignant=enseignant,
+            periode=self.periode,
+        )
+        self.assertEqual(AvanceSalaire.objects.count(), 1)
+        self.assertEqual(avance.statut, StatutAvanceSalaire.ANNULEE)
+        self.assertEqual(avance.motif_annulation, 'Montant saisi par erreur')
+        self.assertEqual(etat.avances, Decimal('0.00'))
+        self.assertEqual(etat.salaire_net, Decimal('1000000.00'))
+
+    def test_formulaire_refuse_des_avances_superieures_au_salaire(self):
+        enseignant = self.creer_fixe()
+        self.calculer()
+        form = AvanceSalaireForm(
+            data={
+                'enseignant': enseignant.id,
+                'periode': self.periode.id,
+                'date_avance': '2026-07-10',
+                'montant': '1000001',
+                'reference': '',
+                'motif': '',
+            },
+            user=self.user,
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn('montant', form.errors)
+
+    def test_ecran_gestion_avances_est_accessible(self):
+        enseignant = self.creer_fixe()
+        AvanceSalaire.objects.create(
+            enseignant=enseignant,
+            periode=self.periode,
+            date_avance=date(2026, 7, 10),
+            montant=Decimal('50000'),
+            reference='REC-ECRAN-001',
+            cree_par=self.user,
+        )
+
+        response = self.client.get(reverse('salaires:avances_salaire'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Avances sur salaire')
+        self.assertContains(response, 'REC-ECRAN-001')
+        self.assertContains(response, enseignant.nom_complet)
+
+    def test_avance_est_incluse_dans_la_synchronisation_de_lecole(self):
+        enseignant = self.creer_fixe()
+        avance = AvanceSalaire.objects.create(
+            enseignant=enseignant,
+            periode=self.periode,
+            date_avance=date(2026, 7, 10),
+            montant=Decimal('75000'),
+            reference='REC-SYNC-001',
+            cree_par=self.user,
+        )
+
+        self.assertIn('salaires.AvanceSalaire', SYNC_MODEL_SET)
+        self.assertTrue(
+            queryset_for_ecole(AvanceSalaire, self.ecole).filter(
+                pk=avance.pk
+            ).exists()
+        )
+        payload = serialize_instance(avance, include_files=False)
+        self.assertEqual(payload['montant'], '75000')
+        self.assertEqual(payload['reference'], 'REC-SYNC-001')
+        self.assertEqual(
+            payload['enseignant']['sync_uuid'],
+            str(enseignant.sync_uuid),
+        )
+
+    def test_salaire_horaire_utilise_le_pointage_reel(self):
+        enseignant = self.creer_secondaire()
+        self.affecter(enseignant, self.classe_a, '10')
+        self.pointer(enseignant, range(1, 6))
+
+        self.calculer()
+
+        etat = EtatSalaire.objects.get(enseignant=enseignant, periode=self.periode)
+        self.assertEqual(etat.total_heures, Decimal('40.00'))
+        self.assertEqual(etat.taux_horaire_applique, Decimal('10000.00'))
+        self.assertEqual(etat.salaire_base, Decimal('400000.00'))
+        self.assertEqual(etat.source_heures, SourceHeuresSalaire.POINTAGE)
+
+    def test_secondaire_exige_le_taux_mais_pas_un_volume_mensuel(self):
+        form = EnseignantForm(
+            data={
+                'nom': 'Horaire',
+                'prenoms': 'Sans forfait mensuel',
+                'ecole': self.ecole.id,
+                'type_enseignant': TypeEnseignant.SECONDAIRE,
+                'statut': 'ACTIF',
+                'taux_horaire': '15000',
+                'heures_mensuelles': '',
+                'date_embauche': '2026-01-01',
+            },
+            user=self.user,
+        )
+
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_pointage_arrivee_depart_recalcule_immediatement_le_salaire(self):
+        enseignant = self.creer_secondaire()
+
+        response = self.client.post(
+            reverse('salaires:pointer_presence'),
+            {
+                'date': '2026-07-01',
+                'enseignants': [str(enseignant.id)],
+                f'statut_{enseignant.id}': 'PRESENT',
+                f'heure_arrivee_{enseignant.id}': '08:00',
+                f'heure_depart_{enseignant.id}': '16:30',
+                f'observations_{enseignant.id}': '',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        presence = PresenceEnseignant.objects.get(
+            enseignant=enseignant, date=date(2026, 7, 1)
+        )
+        etat = EtatSalaire.objects.get(
+            enseignant=enseignant, periode=self.periode
+        )
+        self.assertEqual(presence.heures_travaillees, Decimal('8.50'))
+        self.assertEqual(etat.total_heures, Decimal('8.50'))
+        self.assertEqual(etat.salaire_base, Decimal('85000.00'))
+        self.assertEqual(etat.source_heures, SourceHeuresSalaire.POINTAGE)
+
+    def test_pointages_restent_prioritaires_sur_la_saisie_mensuelle(self):
+        enseignant = self.creer_secondaire()
+        self.pointer(enseignant, [1, 2], heures=8)
+        SaisieHeuresMensuelles.objects.create(
+            enseignant=enseignant,
+            periode=self.periode,
+            heures=Decimal('100'),
+            saisi_par=self.user,
+        )
+
+        response = self.client.post(
+            reverse(
+                'salaires:saisir_heures_mensuelles', args=[self.periode.id]
+            ),
+            {f'heures_{enseignant.id}': '100'},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        saisie = SaisieHeuresMensuelles.objects.get(
+            enseignant=enseignant, periode=self.periode
+        )
+        etat = EtatSalaire.objects.get(
+            enseignant=enseignant, periode=self.periode
+        )
+        self.assertEqual(saisie.heures, Decimal('100.00'))
+        self.assertEqual(etat.total_heures, Decimal('16.00'))
+        self.assertEqual(etat.salaire_base, Decimal('160000.00'))
+        self.assertEqual(etat.source_heures, SourceHeuresSalaire.POINTAGE)
+
+        response = self.client.post(
+            reverse(
+                'salaires:saisir_heures_mensuelles', args=[self.periode.id]
+            ),
+            {f'heures_{enseignant.id}': ''},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            SaisieHeuresMensuelles.objects.filter(
+                enseignant=enseignant, periode=self.periode
+            ).exists()
+        )
+        etat.refresh_from_db()
+        self.assertEqual(etat.total_heures, Decimal('16.00'))
+        self.assertEqual(etat.salaire_base, Decimal('160000.00'))
+        self.assertEqual(etat.source_heures, SourceHeuresSalaire.POINTAGE)
+
+    def test_saisie_mensuelle_calcule_le_salaire_sans_pointage(self):
+        enseignant = self.creer_secondaire()
+
+        response = self.client.post(
+            reverse(
+                'salaires:saisir_heures_mensuelles', args=[self.periode.id]
+            ),
+            {f'heures_{enseignant.id}': '72.5'},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        etat = EtatSalaire.objects.get(
+            enseignant=enseignant, periode=self.periode
+        )
+        self.assertEqual(etat.total_heures, Decimal('72.50'))
+        self.assertEqual(etat.salaire_base, Decimal('725000.00'))
+        self.assertEqual(
+            etat.source_heures, SourceHeuresSalaire.SAISIE_MENSUELLE
+        )
+
+    def test_secondaire_sans_affectation_ne_plante_pas(self):
+        enseignant = self.creer_secondaire()
+        self.pointer(enseignant, [1])
+
+        response = self.calculer()
+
+        self.assertEqual(response.status_code, 302)
+        etat = EtatSalaire.objects.get(enseignant=enseignant, periode=self.periode)
+        self.assertEqual(etat.salaire_base, Decimal('80000.00'))
+        self.assertFalse(etat.details_heures.exists())
+
+    def test_absence_de_pointage_donne_zero_heure(self):
+        enseignant = self.creer_secondaire()
+
+        self.calculer()
+
+        etat = EtatSalaire.objects.get(enseignant=enseignant, periode=self.periode)
+        self.assertEqual(etat.total_heures, Decimal('0.00'))
+        self.assertEqual(etat.salaire_base, Decimal('0.00'))
+
+    def test_repartition_respecte_les_heures_hebdomadaires(self):
+        enseignant = self.creer_secondaire()
+        self.affecter(enseignant, self.classe_a, '10')
+        self.affecter(enseignant, self.classe_b, '20')
+        self.pointer(enseignant, range(1, 16))
+
+        self.calculer()
+
+        etat = EtatSalaire.objects.get(enseignant=enseignant, periode=self.periode)
+        details = list(
+            etat.details_heures.order_by('affectation_classe__classe__nom')
+            .values_list('heures_prevues', 'heures_realisees')
+        )
+        self.assertEqual(
+            details,
+            [
+                (Decimal('40.00'), Decimal('40.00')),
+                (Decimal('80.00'), Decimal('80.00')),
+            ],
+        )
+
+    def test_affectation_historique_cloturee_est_utilisee(self):
+        enseignant = self.creer_secondaire()
+        self.affecter(
+            enseignant,
+            self.classe_a,
+            '10',
+            date_debut=date(2026, 7, 1),
+            date_fin=date(2026, 7, 31),
+            actif=False,
+        )
+        self.pointer(enseignant, range(1, 6))
+
+        self.calculer()
+
+        etat = EtatSalaire.objects.get(enseignant=enseignant, periode=self.periode)
+        detail = etat.details_heures.get()
+        self.assertEqual(detail.heures_prevues, Decimal('40.00'))
+        self.assertEqual(detail.heures_realisees, Decimal('40.00'))
+
+    def test_forfait_est_proratise_selon_date_embauche(self):
+        enseignant = self.creer_fixe(
+            salaire='3100000', embauche=date(2026, 7, 16)
+        )
+
+        self.calculer()
+
+        etat = EtatSalaire.objects.get(enseignant=enseignant, periode=self.periode)
+        self.assertEqual(etat.salaire_base, Decimal('1600000.00'))
+        self.assertEqual(etat.source_heures, SourceHeuresSalaire.SALAIRE_FIXE)
+
+    def test_embauche_apres_periode_est_exclue(self):
+        enseignant = self.creer_fixe(embauche=date(2026, 8, 1))
+
+        self.calculer()
+
+        self.assertFalse(
+            EtatSalaire.objects.filter(
+                enseignant=enseignant, periode=self.periode
+            ).exists()
+        )
+
+    def test_calcul_du_lot_est_atomique(self):
+        self.creer_fixe(nom='A enseignant')
+        self.creer_fixe(nom='B enseignant')
+        appels = 0
+
+        def calcul_avec_erreur(enseignant, periode, utilisateur):
+            nonlocal appels
+            appels += 1
+            if appels == 2:
+                raise RuntimeError('erreur simulée')
+            return calculer_etat_salaire_reel(enseignant, periode, utilisateur)
+
+        with patch('salaires.services.calculer_etat_salaire', side_effect=calcul_avec_erreur):
+            self.calculer()
+
+        self.assertEqual(EtatSalaire.objects.count(), 0)
+
+    def test_salaire_negatif_est_refuse_par_le_formulaire(self):
+        form = EnseignantForm(
+            data={
+                'nom': 'Fixe',
+                'prenoms': 'Négatif',
+                'ecole': self.ecole.id,
+                'type_enseignant': TypeEnseignant.PRIMAIRE,
+                'statut': 'ACTIF',
+                'salaire_fixe': '-100000',
+                'heures_mensuelles': '160',
+                'date_embauche': '2025-01-01',
+            },
+            user=self.user,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn('salaire_fixe', form.errors)
+
+    def test_salaire_negatif_est_refuse_hors_formulaire(self):
+        with self.assertRaises(ValidationError):
+            self.creer_fixe(salaire='-100000')
+
+    def test_recalcul_conserve_un_brouillon_devenu_ineligible(self):
+        enseignant = self.creer_fixe()
+        self.calculer()
+        self.assertTrue(
+            EtatSalaire.objects.filter(
+                enseignant=enseignant, periode=self.periode
+            ).exists()
+        )
+
+        enseignant.statut = 'DEMISSIONNAIRE'
+        enseignant.save(update_fields=['statut'])
+        self.calculer()
+
+        self.assertTrue(
+            EtatSalaire.objects.filter(
+                enseignant=enseignant, periode=self.periode
+            ).exists()
+        )
+
+    def test_un_brouillon_ineligible_ne_peut_pas_etre_valide(self):
+        enseignant = self.creer_fixe()
+        etat = EtatSalaire.objects.create(
+            enseignant=enseignant,
+            periode=self.periode,
+            salaire_base=Decimal('1000000'),
+            salaire_net=Decimal('1000000'),
+            calcule_par=self.user,
+        )
+        enseignant.statut = 'DEMISSIONNAIRE'
+        enseignant.save(update_fields=['statut'])
+
+        response = self.client.post(
+            reverse('salaires:valider_etat_salaire', args=[etat.id])
+        )
+
+        self.assertEqual(response.status_code, 302)
+        etat.refresh_from_db()
+        self.assertFalse(etat.valide)
+
+    def test_retenue_superieure_au_brut_est_refusee(self):
+        enseignant = self.creer_fixe()
+        etat = EtatSalaire.objects.create(
+            enseignant=enseignant,
+            periode=self.periode,
+            salaire_base=Decimal('1000000'),
+            salaire_net=Decimal('1000000'),
+            calcule_par=self.user,
+        )
+        etat.deductions = Decimal('1000001')
+        with self.assertRaises(ValidationError):
+            etat.save()
+
+    def test_ajustement_primes_retenues_recalcule_le_net(self):
+        enseignant = self.creer_fixe()
+        etat = EtatSalaire.objects.create(
+            enseignant=enseignant,
+            periode=self.periode,
+            salaire_base=Decimal('1000000'),
+            salaire_net=Decimal('1000000'),
+            calcule_par=self.user,
+        )
+
+        response = self.client.post(
+            reverse('salaires:ajuster_etat_salaire', args=[etat.id]),
+            {
+                'salaire_base': '900000',
+                'primes': '100000',
+                'deductions': '25000',
+                'observations': 'Ajustement contrôlé',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        etat.refresh_from_db()
+        self.assertEqual(etat.salaire_base, Decimal('900000.00'))
+        self.assertEqual(etat.salaire_net, Decimal('975000.00'))
+        self.assertEqual(etat.observations, 'Ajustement contrôlé')
+
+    def test_ajustement_horaire_sans_pointage_modifie_heures_et_taux(self):
+        enseignant = self.creer_secondaire()
+        self.calculer()
+        etat = EtatSalaire.objects.get(
+            enseignant=enseignant, periode=self.periode
+        )
+
+        response = self.client.post(
+            reverse('salaires:ajuster_etat_salaire', args=[etat.id]),
+            {
+                'total_heures': '12.5',
+                'taux_horaire_applique': '15000',
+                'primes': '10000',
+                'deductions': '5000',
+                'observations': 'Heures saisies faute de pointage',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        etat.refresh_from_db()
+        self.assertEqual(etat.total_heures, Decimal('12.50'))
+        self.assertEqual(etat.taux_horaire_applique, Decimal('15000.00'))
+        self.assertEqual(etat.salaire_base, Decimal('187500.00'))
+        self.assertEqual(etat.salaire_net, Decimal('192500.00'))
+        self.assertEqual(
+            etat.source_heures, SourceHeuresSalaire.SAISIE_MENSUELLE
+        )
+        self.assertEqual(
+            SaisieHeuresMensuelles.objects.get(
+                enseignant=enseignant, periode=self.periode
+            ).heures,
+            Decimal('12.50'),
+        )
+
+    def test_ajustement_horaire_conserve_les_heures_pointees(self):
+        enseignant = self.creer_secondaire()
+        self.pointer(enseignant, [1], heures=8)
+        self.calculer()
+        etat = EtatSalaire.objects.get(
+            enseignant=enseignant, periode=self.periode
+        )
+
+        response = self.client.post(
+            reverse('salaires:ajuster_etat_salaire', args=[etat.id]),
+            {
+                'total_heures': '100',
+                'taux_horaire_applique': '12000',
+                'primes': '0',
+                'deductions': '0',
+                'observations': '',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        etat.refresh_from_db()
+        self.assertEqual(etat.total_heures, Decimal('8.00'))
+        self.assertEqual(etat.taux_horaire_applique, Decimal('12000.00'))
+        self.assertEqual(etat.salaire_base, Decimal('96000.00'))
+        self.assertEqual(etat.source_heures, SourceHeuresSalaire.POINTAGE)
+        self.assertFalse(
+            SaisieHeuresMensuelles.objects.filter(
+                enseignant=enseignant, periode=self.periode
+            ).exists()
+        )
+
+    def test_recu_affiche_les_jours_de_presence_pour_un_salaire_fixe(self):
+        enseignant = self.creer_fixe()
+        self.pointer(enseignant, [1, 2, 3], heures=8)
+        self.calculer()
+        etat = EtatSalaire.objects.get(
+            enseignant=enseignant, periode=self.periode
+        )
+        self.assertEqual(etat.nombre_jours_presence, 3)
+
+        with patch('reportlab.platypus.Table') as table_mock:
+            response = self.client.get(
+                reverse('salaires:fiche_paie_pdf', args=[etat.id])
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+        donnees = table_mock.call_args.args[0]
+        self.assertIn(['Jours de présence', '3 jours'], donnees)
+
+    def test_formulaire_presence_sans_heures_ne_plante_plus(self):
+        enseignant = self.creer_secondaire()
+        form = PresenceForm(
+            data={
+                'enseignant': enseignant.id,
+                'date': '2026-07-01',
+                'statut': 'PRESENT',
+                'observations': '',
+            },
+            ecole=self.ecole,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn('__all__', form.errors)
+
+    def test_presence_calcule_les_heures_et_limite_les_statuts_absents(self):
+        enseignant = self.creer_secondaire()
+        presence = PresenceEnseignant.objects.create(
+            enseignant=enseignant,
+            date=date(2026, 7, 1),
+            statut='PRESENT',
+            heure_arrivee=time(8, 0),
+            heure_depart=time(16, 30),
+            pointe_par=self.user,
+        )
+        self.assertEqual(presence.heures_travaillees, Decimal('8.50'))
+
+        presence.statut = 'ABSENT'
+        with self.assertRaises(ValidationError):
+            presence.save()
+
+    def test_nombre_semaines_invalide_est_refuse(self):
+        response = self.client.post(
+            reverse('salaires:creer_periode'),
+            {
+                'mois': '8',
+                'annee': '2026',
+                'ecole': str(self.ecole.id),
+                'nombre_semaines': '-1',
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            PeriodeSalaire.objects.filter(
+                ecole=self.ecole, mois=8, annee=2026
+            ).exists()
+        )
+
+    def test_creation_periode_regroupe_et_calcule_tous_les_enseignants(self):
+        enseignant_fixe = self.creer_fixe()
+        enseignant_horaire = self.creer_secondaire()
+
+        response = self.client.post(
+            reverse('salaires:creer_periode'),
+            {
+                'mois': '8',
+                'annee': '2026',
+                'ecole': str(self.ecole.pk),
+                'nombre_semaines': '4.33',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        periode = PeriodeSalaire.objects.get(
+            ecole=self.ecole, mois=8, annee=2026
+        )
+        self.assertEqual(periode.etats_salaire.count(), 2)
+        etat_fixe = periode.etats_salaire.get(enseignant=enseignant_fixe)
+        etat_horaire = periode.etats_salaire.get(
+            enseignant=enseignant_horaire
+        )
+        self.assertEqual(etat_fixe.salaire_net, Decimal('1000000.00'))
+        self.assertEqual(etat_horaire.salaire_net, Decimal('0.00'))
+
+    def test_cloture_prepare_aussi_le_lot_de_la_periode_suivante(self):
+        enseignant = self.creer_fixe()
+
+        response = self.client.post(
+            reverse('salaires:cloturer_periode', args=[self.periode.pk])
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.periode.refresh_from_db()
+        self.assertTrue(self.periode.cloturee)
+        periode_suivante = PeriodeSalaire.objects.get(
+            ecole=self.ecole, mois=8, annee=2026
+        )
+        etat = periode_suivante.etats_salaire.get(enseignant=enseignant)
+        self.assertEqual(etat.salaire_net, Decimal('1000000.00'))
+
+    def test_formulaire_ajustement_refuse_les_valeurs_negatives(self):
+        enseignant = self.creer_fixe()
+        etat = EtatSalaire.objects.create(
+            enseignant=enseignant,
+            periode=self.periode,
+            salaire_base=Decimal('1000000'),
+            salaire_net=Decimal('1000000'),
+            calcule_par=self.user,
+        )
+        form = EtatSalaireAjustementForm(
+            data={
+                'salaire_base': '1000000',
+                'primes': '-1',
+                'deductions': '0',
+                'observations': '',
+            },
+            instance=etat,
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn('primes', form.errors)

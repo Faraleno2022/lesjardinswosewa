@@ -1,7 +1,8 @@
 ﻿; MySchoolGN - Inno Setup Installer Script
 ; ==========================================
-; Auteur  : GS Hadja Kanfing Dian
-; Version : 1.1.0
+; Édition : GS Les Jardins Wosewa
+; Version : voir MyAppVersion ci-dessous (recopie depuis ecole_moderne/version.py
+; par build_exe.py : un seul numero a modifier, jamais deux a garder d'accord)
 ;
 ; Prérequis : Inno Setup 6+ (https://jrsoftware.org/isinfo.php)
 ;
@@ -13,18 +14,23 @@
 ;
 ; Supporte :
 ;   - Installation fraîche
-;   - Mise à jour (préserve base de données, licences, médias, config)
+;   - Mise à jour (préserve base de données, médias et synchronisation)
+
+#define MyAppVersion "1.3.6"
+#ifndef MyBuildDir
+  #define MyBuildDir "dist\MySchoolGN"
+#endif
 
 [Setup]
 ; ── Identification ─────────────────────────────────────────────────────────────
 AppId={{B7E4A2D1-F3C8-4B91-A5E6-GS2024HADJA01}
 AppName=MySchoolGN
-AppVersion=1.1.0
-AppVerName=MySchoolGN 1.1.0
-AppPublisher=GS Hadja Kanfing Dian
-AppPublisherURL=https://myschoolgn.space
-AppSupportURL=https://myschoolgn.space
-AppCopyright=Copyright © 2024 GS Hadja Kanfing Dian. Tous droits réservés.
+AppVersion={#MyAppVersion}
+AppVerName=MySchoolGN {#MyAppVersion}
+AppPublisher=GS Les Jardins Wosewa
+AppPublisherURL=https://www.lesjardinswosewa.com
+AppSupportURL=https://www.lesjardinswosewa.com
+AppCopyright=Copyright © 2026 GS Les Jardins Wosewa. Tous droits réservés.
 
 ; ── Installation ───────────────────────────────────────────────────────────────
 DefaultDirName={autopf}\MySchoolGN
@@ -40,7 +46,7 @@ RestartApplications=no
 
 ; ── Sortie ─────────────────────────────────────────────────────────────────────
 OutputDir=Output
-OutputBaseFilename=MySchoolGN_Setup_v1.1.0
+OutputBaseFilename=MySchoolGN_Setup_v{#MyAppVersion}_LesJardinsWosewa
 
 ; ── Icône et splash ────────────────────────────────────────────────────────────
 SetupIconFile=myschool.ico
@@ -48,7 +54,9 @@ SetupIconFile=myschool.ico
 ; ── Compression ────────────────────────────────────────────────────────────────
 Compression=lzma2/ultra64
 SolidCompression=yes
-LZMAUseSeparateProcess=yes
+; La compression dans un processus enfant peut perdre l'acces aux fichiers
+; PyInstaller sur certains postes Windows et interrompre la creation du setup.
+LZMAUseSeparateProcess=no
 
 ; ── Interface ──────────────────────────────────────────────────────────────────
 WizardStyle=modern
@@ -61,10 +69,10 @@ UninstallDisplayIcon={autopf}\MySchoolGN\MySchoolGN.exe
 CreateUninstallRegKey=yes
 
 ; ── Version info (visible dans Programmes et fonctionnalités) ──────────────────
-VersionInfoVersion=1.1.0.0
-VersionInfoCompany=GS Hadja Kanfing Dian
+VersionInfoVersion={#MyAppVersion}.0
+VersionInfoCompany=GS Les Jardins Wosewa
 VersionInfoDescription=MySchoolGN - Système de Gestion Scolaire
-VersionInfoCopyright=Copyright © 2024 GS Hadja Kanfing Dian
+VersionInfoCopyright=Copyright © 2026 GS Les Jardins Wosewa
 
 [Languages]
 Name: "french"; MessagesFile: "compiler:Languages\French.isl"
@@ -75,17 +83,15 @@ Name: "startmenuicon"; Description: "Créer une entrée dans le menu Démarrer";
 Name: "autostart";     Description: "Lancer MySchoolGN au démarrage de Windows"; GroupDescription: "Options :";   Flags: unchecked
 
 [Files]
-; Application compilée (tout le dossier dist\MySchoolGN)
-Source: "dist\MySchoolGN\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Application compilée. MyBuildDir peut être redéfini par ISCC /DMyBuildDir=...
+; lorsqu'un poste nettoie automatiquement les dossiers PyInstaller build/dist.
+Source: "{#MyBuildDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; Script de désinstallation
 Source: "desinstaller.bat"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Script d'arrêt du serveur (raccourci menu Démarrer)
 Source: "Arreter_MySchoolGN.bat"; DestDir: "{app}"; Flags: ignoreversion
-
-; Outil d'activation de licence (pour le technicien)
-Source: "license_manager.py"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Icône
 Source: "myschool.ico"; DestDir: "{app}"; Flags: ignoreversion
@@ -100,6 +106,7 @@ Name: "{app}\media";                Permissions: users-modify
 Name: "{app}\media\photos_eleves";  Permissions: users-modify
 Name: "{app}\media\logos_ecoles";   Permissions: users-modify
 Name: "{app}\backups";              Permissions: users-modify
+Name: "{app}\sync";                 Permissions: users-modify
 Name: "{app}\staticfiles";          Permissions: users-modify
 
 [Icons]
@@ -116,12 +123,20 @@ Name: "{userstartup}\MySchoolGN"; Filename: "{app}\MySchoolGN.exe"; WorkingDir: 
 
 [Registry]
 ; Enregistrement pour le panneau "Programmes et fonctionnalités"
-Root: HKCU; Subkey: "Software\GS Hadja Kanfing Dian\MySchoolGN"; ValueType: string; ValueName: "Version";    ValueData: "1.1.0"; Flags: uninsdeletekey
+; Le chemin historique est conserve pour que Windows reconnaisse cette version
+; comme une mise a jour des installations existantes.
+Root: HKCU; Subkey: "Software\GS Hadja Kanfing Dian\MySchoolGN"; ValueType: string; ValueName: "Version";    ValueData: "{#MyAppVersion}"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\GS Hadja Kanfing Dian\MySchoolGN"; ValueType: string; ValueName: "InstallDir"; ValueData: "{app}";  Flags: uninsdeletevalue
 
 [Run]
 ; Proposer de lancer l'application après installation
 Filename: "{app}\MySchoolGN.exe"; Description: "Démarrer MySchoolGN maintenant"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+
+; Mise a jour automatique : l'application s'est arretee elle-meme pour se
+; laisser remplacer, et l'installation est silencieuse. Sans cette ligne,
+; l'utilisateur qui vient de lancer MySchoolGN ne verrait jamais sa fenetre
+; s'ouvrir. L'entree ci-dessus, elle, est ignoree en mode silencieux.
+Filename: "{app}\MySchoolGN.exe"; WorkingDir: "{app}"; Flags: nowait; Check: RelanceDemandee
 
 [UninstallRun]
 ; Arrêter le serveur avant la désinstallation
@@ -136,9 +151,9 @@ Type: files;          Name: "{app}\install_path.txt"
 
 [Messages]
 WelcomeLabel1=Bienvenue dans l'assistant d'installation de MySchoolGN
-WelcomeLabel2=Ce programme va installer MySchoolGN - Système de Gestion Scolaire sur votre ordinateur.%n%nMySchoolGN est une solution complète de gestion scolaire développée par GS Hadja Kanfing Dian. Elle fonctionne entièrement hors ligne.%n%nFermez toutes les autres applications avant de continuer.
+WelcomeLabel2=Ce programme va installer MySchoolGN - Système de Gestion Scolaire sur votre ordinateur.%n%nCette édition est configurée pour le GS Les Jardins Wosewa et fonctionne entièrement hors ligne avec synchronisation sécurisée.%n%nFermez toutes les autres applications avant de continuer.
 FinishedHeadingLabel=Installation de MySchoolGN terminée !
-FinishedLabel=MySchoolGN a été installé avec succès sur votre ordinateur.%n%nIdentifiants par défaut :%n  Utilisateur : admin%n  Mot de passe  : admin1234%n%nL'application s'ouvre dans sa propre fenêtre.%n%nNOTE : Si aucune licence annuelle n'a été ajoutée pendant l'installation, une période d'essai de 30 jours démarre automatiquement.
+FinishedLabel=MySchoolGN a été installé avec succès sur votre ordinateur.%n%nIdentifiants par défaut :%n  Utilisateur : admin%n  Mot de passe  : admin1234%n%nL'application fonctionne hors ligne et synchronise automatiquement les données avec www.lesjardinswosewa.com lorsque la connexion Internet est disponible.
 
 [Code]
 
@@ -148,8 +163,6 @@ FinishedLabel=MySchoolGN a été installé avec succès sur votre ordinateur.%n%
 var
   IsUpdate: Boolean;
   BackupTempDir: String;
-  LicenseQuestionAsked: Boolean;
-  SelectedLicenseFile: String;
 
 // ── Détection si c'est une mise à jour ───────────────────────────────────────
 function IsUpgradeInstall(): Boolean;
@@ -160,16 +173,13 @@ begin
   Result := FileExists(ExePath);
 end;
 
-// ── Afficher l'ID machine à la fin pour l'activation ─────────────────────────
-function GetMachineId(): String;
-var
-  MachineGuid: String;
+// Determine le mode avant toute navigation dans l'assistant. En installation
+// silencieuse, aucune logique critique ne doit dependre de l'affichage d'une
+// page : la sauvegarde des donnees doit fonctionner meme sans interface.
+procedure InitializeWizard();
 begin
-  if RegQueryStringValue(HKEY_LOCAL_MACHINE,
-    'SOFTWARE\Microsoft\Cryptography', 'MachineGuid', MachineGuid) then
-    Result := MachineGuid
-  else
-    Result := 'Indisponible';
+  IsUpdate := IsUpgradeInstall();
+  BackupTempDir := ExpandConstant('{tmp}\MySchoolGN_UpdateBackup');
 end;
 
 // ── Arrêter l'application si elle est en cours d'exécution ───────────────────
@@ -276,9 +286,6 @@ end;
 
 // ── Sauvegarde des données utilisateur avant l'installation ──────────────────
 procedure BackupUserData();
-var
-  FindRec: TFindRec;
-  AppDir: String;
 begin
   BackupTempDir := ExpandConstant('{tmp}\MySchoolGN_UpdateBackup');
   ForceDirectories(BackupTempDir);
@@ -286,20 +293,9 @@ begin
   // Fichiers de données critiques
   BackupFile('db.sqlite3');
   BackupFile('.secret_key');
-  BackupFile('.trial_start');
   BackupFile('.env');
-  BackupFile('license.dat');
-
-  // Tous les fichiers de licence (license_*.lic)
-  AppDir := ExpandConstant('{app}\');
-  if FindFirst(AppDir + 'license_*.lic', FindRec) then
-  try
-    repeat
-      BackupFile(FindRec.Name);
-    until not FindNext(FindRec);
-  finally
-    FindClose(FindRec);
-  end;
+  BackupFile('sync_config.json');
+  BackupFile('.sync_state.json');
 
   // Dossier media (photos élèves, logos écoles, etc.)
   BackupDirectory('media');
@@ -309,29 +305,20 @@ begin
 
   // Dossier logs
   BackupDirectory('logs');
+
+  // Ancien emplacement de configuration utilise sur certains postes
+  BackupDirectory('sync');
 end;
 
 // ── Restauration des données utilisateur après l'installation ────────────────
 procedure RestoreUserData();
-var
-  FindRec: TFindRec;
 begin
   // Fichiers de données critiques
   RestoreFile('db.sqlite3');
   RestoreFile('.secret_key');
-  RestoreFile('.trial_start');
   RestoreFile('.env');
-  RestoreFile('license.dat');
-
-  // Restaurer tous les fichiers de licence
-  if FindFirst(BackupTempDir + '\license_*.lic', FindRec) then
-  try
-    repeat
-      RestoreFile(FindRec.Name);
-    until not FindNext(FindRec);
-  finally
-    FindClose(FindRec);
-  end;
+  RestoreFile('sync_config.json');
+  RestoreFile('.sync_state.json');
 
   // Restaurer le dossier media
   RestoreDirectory('media');
@@ -342,92 +329,39 @@ begin
   // Restaurer le dossier logs
   RestoreDirectory('logs');
 
+  // Restaurer l'ancien emplacement de configuration, s'il existe
+  RestoreDirectory('sync');
+
   // Nettoyage du dossier temporaire
   CleanupBackupDir();
 end;
 
-// ── Question licence pendant l'installation fraîche ─────────────────────────
-procedure AskLicenseBeforeInstall();
+// ── Configuration personnalisée placée à côté de l'installateur ─────────────
+procedure InstallExternalSyncConfig();
 var
-  LicenseFile: String;
-begin
-  LicenseQuestionAsked := True;
-  SelectedLicenseFile := '';
-
-  if WizardSilent() then
-    Exit;
-
-  if MsgBox(
-    'Avez-vous déjà une licence annuelle MySchoolGN ?' + #13#10 + #13#10 +
-    'Oui : sélectionnez votre fichier .lic pour l''ajouter pendant l''installation.' + #13#10 +
-    'Non : MySchoolGN continuera avec la version d''essai gratuite de 30 jours.',
-    mbConfirmation, MB_YESNO
-  ) = IDYES then
-  begin
-    LicenseFile := '';
-    if GetOpenFileName(
-      'Sélectionner le fichier de licence annuelle',
-      LicenseFile,
-      '',
-      'Fichiers de licence (*.lic;*.dat)|*.lic;*.dat|Tous les fichiers (*.*)|*.*',
-      'lic'
-    ) then
-    begin
-      SelectedLicenseFile := LicenseFile;
-      MsgBox(
-        'Licence sélectionnée.' + #13#10 + #13#10 +
-        'Elle sera ajoutée automatiquement pendant l''installation.',
-        mbInformation, MB_OK
-      );
-    end
-    else
-    begin
-      MsgBox(
-        'Aucune licence sélectionnée.' + #13#10 +
-        'MySchoolGN continuera avec l''essai gratuit de 30 jours.',
-        mbInformation, MB_OK
-      );
-    end;
-  end;
-end;
-
-procedure InstallSelectedLicense();
-var
+  SourceFile: String;
   DestFile: String;
 begin
-  if SelectedLicenseFile = '' then
+  SourceFile := ExpandConstant('{src}\sync_config.json');
+  if not FileExists(SourceFile) then
   begin
-    Log('Aucune licence fournie : essai gratuit de 30 jours au premier lancement.');
+    Log('Aucune configuration externe de synchronisation détectée.');
     Exit;
   end;
 
-  DestFile := ExpandConstant('{app}\license.dat');
-  if CopyFile(SelectedLicenseFile, DestFile, False) then
-  begin
-    CopyFile(SelectedLicenseFile, ExpandConstant('{app}\') + ExtractFileName(SelectedLicenseFile), False);
-    Log('Licence installée : ' + ExtractFileName(SelectedLicenseFile));
-    MsgBox(
-      'Licence ajoutée avec succès.' + #13#10 + #13#10 +
-      'MySchoolGN démarrera en version activée.',
-      mbInformation, MB_OK
-    );
-  end
+  DestFile := ExpandConstant('{app}\sync_config.json');
+  if CopyFile(SourceFile, DestFile, False) then
+    Log('Configuration de synchronisation personnalisée installée.')
   else
-  begin
-    Log('Licence non installée : impossible de copier le fichier sélectionné.');
-    MsgBox(
-      'Impossible de copier la licence dans le dossier d''installation.' + #13#10 +
-      'Vous pourrez l''activer plus tard depuis MySchoolGN.',
-      mbError, MB_OK
-    );
-  end;
+    Log('ERREUR : impossible d''installer la configuration de synchronisation personnalisée.');
 end;
 
-function NextButtonClick(CurPageID: Integer): Boolean;
+// ── Relance apres une mise a jour automatique ────────────────────────────────
+// Le poste lance l'installateur avec /RELANCE=1 lorsqu'il s'est arrete de
+// lui-meme pour installer une nouvelle version.
+function RelanceDemandee(): Boolean;
 begin
-  Result := True;
-  if (CurPageID = wpReady) and (not IsUpdate) and (not LicenseQuestionAsked) then
-    AskLicenseBeforeInstall();
+  Result := ExpandConstant('{param:RELANCE|0}') = '1';
 end;
 
 // ── Adapter les messages selon le mode (installation / mise à jour) ──────────
@@ -438,14 +372,13 @@ var
 begin
   if CurPageID = wpWelcome then
   begin
-    IsUpdate := IsUpgradeInstall();
     if IsUpdate then
     begin
       WizardForm.WelcomeLabel1.Caption := 'Mise à jour de MySchoolGN';
-      WelcomeMsg := 'Ce programme va mettre à jour MySchoolGN vers la version 1.1.0 sur votre ordinateur.' + #13#10 + #13#10 +
+      WelcomeMsg := 'Ce programme va mettre à jour MySchoolGN vers la version {#MyAppVersion} sur votre ordinateur.' + #13#10 + #13#10 +
         'Vos données seront automatiquement préservées :' + #13#10 +
         '  • Base de données (élèves, notes, etc.)' + #13#10 +
-        '  • Licences et période d''essai' + #13#10 +
+        '  • Configuration de synchronisation' + #13#10 +
         '  • Photos et médias' + #13#10 +
         '  • Sauvegardes' + #13#10 + #13#10 +
         'L''application sera fermée automatiquement pendant la mise à jour.' + #13#10 + #13#10 +
@@ -462,7 +395,7 @@ begin
       FinishedMsg := 'MySchoolGN a été mis à jour avec succès.' + #13#10 + #13#10 +
         'Toutes vos données ont été préservées :' + #13#10 +
         '  • Base de données intacte' + #13#10 +
-        '  • Licences conservées' + #13#10 +
+        '  • Synchronisation conservée' + #13#10 +
         '  • Photos et médias restaurés' + #13#10 + #13#10 +
         'L''application s''ouvre dans votre navigateur sur http://127.0.0.1:8000';
       WizardForm.FinishedLabel.Caption := FinishedMsg;
@@ -494,10 +427,9 @@ begin
       RestoreUserData();
       Log('Restauration terminée. Mise à jour réussie.');
     end;
-    if not IsUpdate then
-    begin
-      InstallSelectedLicense();
-    end;
+    // Le fichier téléchargé depuis la fiche école remplace volontairement la
+    // configuration intégrée, y compris lors d'une reconfiguration du poste.
+    InstallExternalSyncConfig();
   end;
 end;
 
@@ -548,7 +480,7 @@ begin
               'DONNÉES PRÉSERVÉES' + NewLine +
               'Les données suivantes seront automatiquement préservées :' + NewLine +
               '  • Base de données (db.sqlite3)' + NewLine +
-              '  • Fichiers de licence' + NewLine +
+              '  • Configuration de synchronisation' + NewLine +
               '  • Photos et médias' + NewLine +
               '  • Sauvegardes' + NewLine +
               '  • Configuration (.secret_key, .env)' + NewLine +
@@ -560,10 +492,9 @@ begin
               MemoGroupInfo + NewLine + NewLine +
               MemoTasksInfo + NewLine + NewLine +
               '─────────────────────────────────────────' + NewLine +
-              'ACTIVATION DE LICENCE' + NewLine +
-              'Pendant l''installation, MySchoolGN demandera si vous avez' + NewLine +
-              'une licence annuelle. Si oui, elle sera ajoutée immédiatement.' + NewLine +
-              'Sinon, l''essai gratuit de 30 jours démarre automatiquement.' + NewLine +
+              'SYNCHRONISATION AUTOMATIQUE' + NewLine +
+              'MySchoolGN fonctionne hors ligne et synchronise automatiquement' + NewLine +
+              'les données dès que la connexion Internet est disponible.' + NewLine +
               '─────────────────────────────────────────';
   end;
 end;
