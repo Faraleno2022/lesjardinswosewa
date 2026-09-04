@@ -11,6 +11,11 @@ urlpatterns = [
     path('enseignants/', views.liste_enseignants, name='liste_enseignants'),
     path('enseignants/export/csv/', views.export_enseignants_csv, name='export_enseignants_csv'),
     path('enseignants/export/pdf/', views.export_enseignants_pdf, name='export_enseignants_pdf'),
+    path(
+        'enseignants/classes-disponibles/',
+        views.classes_disponibles_enseignant,
+        name='classes_disponibles_enseignant',
+    ),
     path('enseignants/ajouter/', views.ajouter_enseignant, name='ajouter_enseignant'),
     path('enseignants/<int:enseignant_id>/', views.detail_enseignant, name='detail_enseignant'),
     path('enseignants/<int:enseignant_id>/modifier/', views.modifier_enseignant, name='modifier_enseignant'),

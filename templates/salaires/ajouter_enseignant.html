@@ -72,6 +72,19 @@
         display: block;
         animation: fadeIn 0.3s ease;
     }
+
+    .assignment-fields {
+        display: none;
+    }
+
+    .assignment-fields.show {
+        display: block;
+        animation: fadeIn 0.3s ease;
+    }
+
+    #id_classes_secondaire {
+        min-height: 11rem;
+    }
     
     @keyframes fadeIn {
         from { opacity: 0; transform: translateY(-10px); }
@@ -185,6 +198,7 @@
 
         <form method="post" novalidate>
             {% csrf_token %}
+            <input type="hidden" name="gestion_affectations_presente" value="1">
             
             <!-- Informations Personnelles -->
             <div class="form-section">
@@ -353,6 +367,86 @@
                 </div>
             </div>
 
+            <!-- Affectation de classe -->
+            <div class="form-section">
+                <h6><i class="fas fa-chalkboard-teacher me-2 text-info"></i>Affectation de classe</h6>
+                <div class="alert alert-info py-2">
+                    <i class="fas fa-info-circle me-1"></i>
+                    La maternelle et le primaire utilisent une classe principale.
+                    Le secondaire peut être affecté à plusieurs classes.
+                </div>
+
+                <div class="assignment-fields" id="classe-principale-field">
+                    <div class="form-group mb-0">
+                        <label for="{{ form.classe_principale.id_for_label }}" class="form-label">
+                            {{ form.classe_principale.label }}
+                        </label>
+                        {{ form.classe_principale }}
+                        {% if form.classe_principale.help_text %}
+                            <div class="help-text">{{ form.classe_principale.help_text }}</div>
+                        {% endif %}
+                        {% if form.classe_principale.errors %}
+                            <ul class="error-list">
+                                {% for error in form.classe_principale.errors %}<li>{{ error }}</li>{% endfor %}
+                            </ul>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="assignment-fields" id="classes-secondaire-field">
+                    <div class="row">
+                        <div class="col-lg-6">
+                            <div class="form-group">
+                                <label for="{{ form.classes_secondaire.id_for_label }}" class="form-label">
+                                    {{ form.classes_secondaire.label }}
+                                </label>
+                                {{ form.classes_secondaire }}
+                                {% if form.classes_secondaire.help_text %}
+                                    <div class="help-text">{{ form.classes_secondaire.help_text }}</div>
+                                {% endif %}
+                                {% if form.classes_secondaire.errors %}
+                                    <ul class="error-list">
+                                        {% for error in form.classes_secondaire.errors %}<li>{{ error }}</li>{% endfor %}
+                                    </ul>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="form-group">
+                                <label for="{{ form.matiere_affectation.id_for_label }}" class="form-label">
+                                    {{ form.matiere_affectation.label }}
+                                </label>
+                                {{ form.matiere_affectation }}
+                                {% if form.matiere_affectation.errors %}
+                                    <ul class="error-list">
+                                        {% for error in form.matiere_affectation.errors %}<li>{{ error }}</li>{% endfor %}
+                                    </ul>
+                                {% endif %}
+                            </div>
+                            <div class="form-group">
+                                <label for="{{ form.heures_affectation.id_for_label }}" class="form-label">
+                                    {{ form.heures_affectation.label }}
+                                </label>
+                                {{ form.heures_affectation }}
+                                {% if form.heures_affectation.help_text %}
+                                    <div class="help-text">{{ form.heures_affectation.help_text }}</div>
+                                {% endif %}
+                                {% if form.heures_affectation.errors %}
+                                    <ul class="error-list">
+                                        {% for error in form.heures_affectation.errors %}<li>{{ error }}</li>{% endfor %}
+                                    </ul>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="classes-loading" class="small text-muted d-none" role="status">
+                    <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                    Chargement des classes…
+                </div>
+            </div>
+
             <!-- Rémunération -->
             <div class="form-section">
                 <h6><i class="fas fa-money-bill-wave me-2 text-warning"></i>Rémunération</h6>
@@ -451,6 +545,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const salaireFixeField = document.getElementById('salaire-fixe-field');
     const tauxHoraireField = document.getElementById('taux-horaire-field');
     const heuresMensuellesField = document.getElementById('heures-mensuelles-field');
+    const ecoleSelect = document.getElementById('{{ form.ecole.id_for_label }}');
+    const classePrincipaleField = document.getElementById('classe-principale-field');
+    const classesSecondaireField = document.getElementById('classes-secondaire-field');
+    const classePrincipaleSelect = document.getElementById('{{ form.classe_principale.id_for_label }}');
+    const classesSecondaireSelect = document.getElementById('{{ form.classes_secondaire.id_for_label }}');
+    const classesLoading = document.getElementById('classes-loading');
+    const classesUrl = '{% url "salaires:classes_disponibles_enseignant" %}';
     
     function toggleSalaryFields() {
         const selectedType = typeEnseignantSelect.value;
@@ -481,12 +582,82 @@ document.addEventListener('DOMContentLoaded', function() {
             heuresMensuellesField.classList.remove('show');
         }
     }
+
+    function toggleAssignmentFields() {
+        const selectedType = typeEnseignantSelect.value;
+        const classePrincipaleVisible = selectedType === 'MATERNELLE' || selectedType === 'PRIMAIRE';
+        const classesSecondaireVisible = selectedType === 'SECONDAIRE';
+        classePrincipaleField.classList.toggle('show', classePrincipaleVisible);
+        classesSecondaireField.classList.toggle('show', classesSecondaireVisible);
+        classePrincipaleField.setAttribute('aria-hidden', classePrincipaleVisible ? 'false' : 'true');
+        classesSecondaireField.setAttribute('aria-hidden', classesSecondaireVisible ? 'false' : 'true');
+    }
+
+    function remplacerOptions(select, classes, multiple) {
+        const anciennesSelections = new Set(
+            Array.from(select.selectedOptions).map(option => option.value)
+        );
+        select.replaceChildren();
+        if (!multiple) {
+            const optionVide = document.createElement('option');
+            optionVide.value = '';
+            optionVide.textContent = '---------';
+            select.appendChild(optionVide);
+        }
+        classes.forEach(classe => {
+            const option = document.createElement('option');
+            option.value = String(classe.id);
+            option.textContent = classe.libelle;
+            option.selected = anciennesSelections.has(option.value);
+            select.appendChild(option);
+        });
+    }
+
+    async function chargerClasses() {
+        const selectedType = typeEnseignantSelect.value;
+        const ecoleId = ecoleSelect.value;
+        const estPrincipale = selectedType === 'MATERNELLE' || selectedType === 'PRIMAIRE';
+        const estSecondaire = selectedType === 'SECONDAIRE';
+        if (!ecoleId || (!estPrincipale && !estSecondaire)) {
+            return;
+        }
+
+        classesLoading.classList.remove('d-none');
+        try {
+            const params = new URLSearchParams({
+                ecole_id: ecoleId,
+                type_enseignant: selectedType,
+            });
+            const response = await fetch(classesUrl + '?' + params.toString(), {
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+            });
+            if (!response.ok) {
+                throw new Error('Chargement impossible');
+            }
+            const donnees = await response.json();
+            remplacerOptions(
+                estPrincipale ? classePrincipaleSelect : classesSecondaireSelect,
+                donnees.classes || [],
+                estSecondaire
+            );
+        } catch (erreur) {
+            console.error(erreur);
+        } finally {
+            classesLoading.classList.add('d-none');
+        }
+    }
     
     // Initialiser l'affichage
     toggleSalaryFields();
+    toggleAssignmentFields();
     
     // Écouter les changements
-    typeEnseignantSelect.addEventListener('change', toggleSalaryFields);
+    typeEnseignantSelect.addEventListener('change', function() {
+        toggleSalaryFields();
+        toggleAssignmentFields();
+        chargerClasses();
+    });
+    ecoleSelect.addEventListener('change', chargerClasses);
     
     // Animation d'apparition du formulaire
     const formContainer = document.querySelector('.form-container');

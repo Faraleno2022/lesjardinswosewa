@@ -7,6 +7,74 @@ from .models import (
 )
 
 
+class AffectationClasseInline(admin.TabularInline):
+    model = AffectationClasse
+    extra = 1
+    autocomplete_fields = ['classe']
+    fields = [
+        'classe', 'matiere', 'heures_par_semaine',
+        'date_debut', 'date_fin', 'actif',
+    ]
+    show_change_link = True
+    can_delete = False
+
+
+@admin.register(Enseignant)
+class EnseignantAdmin(admin.ModelAdmin):
+    list_display = [
+        'nom', 'prenoms', 'ecole', 'type_enseignant',
+        'statut', 'classes_actives',
+    ]
+    list_filter = ['ecole', 'type_enseignant', 'statut']
+    search_fields = ['nom', 'prenoms', 'telephone', 'email']
+    autocomplete_fields = ['ecole']
+    readonly_fields = ['date_creation', 'date_modification']
+    inlines = [AffectationClasseInline]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('ecole').prefetch_related(
+            'affectations__classe'
+        )
+
+    @admin.display(description='Classes actives')
+    def classes_actives(self, obj):
+        return ', '.join(
+            affectation.classe.nom
+            for affectation in obj.affectations.all()
+            if affectation.actif
+        ) or '—'
+
+    def save_model(self, request, obj, form, change):
+        if not obj.cree_par_id:
+            obj.cree_par = request.user
+        super().save_model(request, obj, form, change)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(AffectationClasse)
+class AffectationClasseAdmin(admin.ModelAdmin):
+    list_display = [
+        'enseignant', 'classe', 'matiere',
+        'heures_par_semaine', 'date_debut', 'date_fin', 'actif',
+    ]
+    list_filter = [
+        'actif', 'enseignant__ecole', 'enseignant__type_enseignant',
+        'classe__niveau', 'classe__annee_scolaire',
+    ]
+    search_fields = [
+        'enseignant__nom', 'enseignant__prenoms',
+        'classe__nom', 'matiere',
+    ]
+    autocomplete_fields = ['enseignant', 'classe']
+    list_select_related = ['enseignant', 'classe']
+
+    def has_delete_permission(self, request, obj=None):
+        # Une affectation se clôture pour préserver l'historique.
+        return False
+
+
 @admin.register(PresenceEnseignant)
 class PresenceEnseignantAdmin(admin.ModelAdmin):
     list_display = ['enseignant', 'date', 'statut', 'heure_arrivee', 'heure_depart', 'heures_travaillees', 'justifie']

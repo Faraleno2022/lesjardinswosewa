@@ -30,6 +30,7 @@ from .forms import (
     AffectationClasseForm,
     AnnulationAvanceSalaireForm,
     AvanceSalaireForm,
+    classes_affectables,
     EnseignantForm,
     EtatSalaireAjustementForm,
     HeuresMensuellesPeriodeForm,
@@ -46,8 +47,8 @@ from .services import (
 )
 from eleves.models import Ecole, Classe
 from utilisateurs.utils import user_is_admin, user_school
-from utilisateurs.permissions import can_add_teachers
-from ecole_moderne.security_decorators import delete_permission_required, require_school_object
+from utilisateurs.permissions import can_add_teachers, has_permission
+from ecole_moderne.security_decorators import require_school_object
 from ecole_moderne.branding import get_pdf_palette
 
 # Importer les vues de présence
@@ -60,6 +61,39 @@ from .views_presences import (
 def _ecole_utilisateur(request):
     """Compat: utiliser l'utilitaire centralisé"""
     return user_school(request.user)
+
+
+@can_add_teachers
+def classes_disponibles_enseignant(request):
+    """Retourne les classes compatibles avec l'école et le type choisis."""
+    try:
+        ecole_id = int(request.GET.get('ecole_id', ''))
+    except (TypeError, ValueError):
+        return JsonResponse({'classes': []})
+
+    type_enseignant = request.GET.get('type_enseignant', '')
+    ecole_user = _ecole_utilisateur(request)
+    if (
+        not user_is_admin(request.user)
+        and (ecole_user is None or ecole_user.pk != ecole_id)
+    ):
+        return JsonResponse(
+            {'erreur': "Vous ne pouvez consulter que les classes de votre école."},
+            status=403,
+        )
+
+    classes = classes_affectables(ecole_id, type_enseignant)
+    return JsonResponse({
+        'classes': [
+            {
+                'id': classe.pk,
+                'libelle': str(classe),
+                'niveau': classe.niveau,
+                'annee_scolaire': classe.annee_scolaire,
+            }
+            for classe in classes
+        ],
+    })
 
 @login_required
 def tableau_bord(request):
@@ -547,12 +581,17 @@ def detail_enseignant(request, enseignant_id):
         'etats_salaire': etats_salaire,
         'avances_salaire': avances_salaire,
         'stats': stats,
+        'peut_gerer_affectations': has_permission(
+            request.user,
+            'peut_ajouter_enseignants',
+        ),
     }
     
     return render(request, 'salaires/detail_enseignant.html', context)
 
 
 @login_required
+@can_add_teachers
 @require_school_object(model=Enseignant, pk_kwarg='enseignant_id', field_path='ecole')
 def ajouter_affectation(request, enseignant_id):
     """Créer une affectation de classe pour un enseignant"""
@@ -581,6 +620,7 @@ def ajouter_affectation(request, enseignant_id):
 
 
 @login_required
+@can_add_teachers
 @require_school_object(model=AffectationClasse, pk_kwarg='affectation_id', field_path='enseignant__ecole')
 def clore_affectation(request, affectation_id):
     """Clore (désactiver) une affectation en mettant une date de fin à aujourd'hui"""
@@ -604,10 +644,10 @@ def clore_affectation(request, affectation_id):
 
 
 @login_required
-@delete_permission_required()
+@can_add_teachers
 @require_school_object(model=AffectationClasse, pk_kwarg='affectation_id', field_path='enseignant__ecole')
 def supprimer_affectation(request, affectation_id):
-    """Supprimer une affectation (si besoin)"""
+    """Compatibilité : clôture une affectation sans effacer son historique."""
     affectation = get_object_or_404(
         AffectationClasse.objects.select_related('enseignant__ecole'),
         id=affectation_id
@@ -619,8 +659,16 @@ def supprimer_affectation(request, affectation_id):
 
     if request.method == 'POST':
         enseignant_id = affectation.enseignant_id
-        affectation.delete()
-        messages.success(request, 'Affectation supprimée.')
+        affectation.actif = False
+        affectation.date_fin = max(
+            timezone.localdate(),
+            affectation.date_debut,
+        )
+        affectation.save()
+        messages.success(
+            request,
+            'Affectation clôturée et conservée dans l’historique.',
+        )
         return redirect('salaires:detail_enseignant', enseignant_id=enseignant_id)
     messages.error(request, "Méthode non autorisée.")
     return redirect(
@@ -2257,9 +2305,11 @@ def ajouter_enseignant(request):
     if request.method == 'POST':
         form = EnseignantForm(request.POST, user=request.user)
         if form.is_valid():
-            enseignant = form.save(commit=False)
-            enseignant.cree_par = request.user
-            enseignant.save()
+            with transaction.atomic():
+                enseignant = form.save(commit=False)
+                enseignant.cree_par = request.user
+                enseignant.save()
+                form.sauvegarder_affectations(enseignant)
             
             messages.success(
                 request, 
@@ -2281,6 +2331,7 @@ def ajouter_enseignant(request):
 
 
 @login_required
+@can_add_teachers
 def modifier_enseignant(request, enseignant_id):
     """Modifier un enseignant existant"""
     ecole_user = _ecole_utilisateur(request)
@@ -2292,7 +2343,9 @@ def modifier_enseignant(request, enseignant_id):
     if request.method == 'POST':
         form = EnseignantForm(request.POST, instance=enseignant, user=request.user)
         if form.is_valid():
-            form.save()
+            with transaction.atomic():
+                form.save()
+                form.sauvegarder_affectations(enseignant)
             messages.success(
                 request, 
                 f"L'enseignant {enseignant.nom_complet} a été modifié avec succès !"

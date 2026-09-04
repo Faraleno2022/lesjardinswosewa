@@ -243,30 +243,46 @@
         </div>
     </div>
 
-    <!-- Affectations de Classes -->
-    {% if affectations %}
+    <!-- Affectations de classes -->
     <div class="row">
         <div class="col-12">
             <div class="teacher-info-card">
-                <h5 class="card-title mb-3">
-                    <i class="fas fa-chalkboard-teacher me-2 text-warning"></i>
-                    Affectations de Classes ({{ affectations.count }})
-                </h5>
-                <div class="mb-3">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chalkboard-teacher me-2 text-warning"></i>
+                        {% if enseignant.type_enseignant == 'MATERNELLE' or enseignant.type_enseignant == 'PRIMAIRE' %}
+                            Classe principale
+                        {% else %}
+                            Affectations de classes
+                        {% endif %}
+                        ({{ affectations_actuelles.count }})
+                    </h5>
+                    {% if peut_gerer_affectations %}
+                    {% if enseignant.type_enseignant == 'MATERNELLE' or enseignant.type_enseignant == 'PRIMAIRE' or enseignant.type_enseignant == 'SECONDAIRE' %}
                     <a class="btn btn-primary" href="{% url 'salaires:ajouter_affectation' enseignant.id %}">
                         <i class="fas fa-plus me-1"></i> Affecter une classe
                     </a>
+                    {% endif %}
+                    {% endif %}
                 </div>
-                
-                {% for affectation in affectations %}
+
+                {% for affectation in affectations_actuelles %}
                 <div class="assignment-card">
                     <div class="row align-items-center">
                         <div class="col-md-6">
                             <strong>{{ affectation.classe.nom }}</strong>
-                            <small class="text-muted d-block">{{ affectation.classe.niveau }}</small>
+                            <small class="text-muted d-block">
+                                {{ affectation.classe.get_niveau_display }} ·
+                                {{ affectation.classe.annee_scolaire }}
+                            </small>
+                            {% if affectation.matiere %}
+                            <small class="text-primary d-block">{{ affectation.matiere }}</small>
+                            {% endif %}
                         </div>
                         <div class="col-md-3">
+                            {% if affectation.heures_par_semaine %}
                             <span class="badge bg-info">{{ affectation.heures_par_semaine }}h/semaine</span>
+                            {% endif %}
                         </div>
                         <div class="col-md-3 text-end">
                             <div class="mb-1">
@@ -279,7 +295,7 @@
                                 </small>
                             </div>
                             <div class="d-flex gap-1 justify-content-end">
-                                {% if affectation.actif and not affectation.date_fin %}
+                                {% if peut_gerer_affectations and affectation.actif and not affectation.date_fin %}
                                 <form method="post" action="{% url 'salaires:clore_affectation' affectation.id %}">
                                     {% csrf_token %}
                                     <button type="submit" class="btn btn-sm btn-outline-warning" title="Clore l'affectation">
@@ -287,21 +303,35 @@
                                     </button>
                                 </form>
                                 {% endif %}
-                                <form method="post" action="{% url 'salaires:supprimer_affectation' affectation.id %}" onsubmit="return confirm('Supprimer cette affectation ?');">
-                                    {% csrf_token %}
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Supprimer l'affectation">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </form>
                             </div>
                         </div>
                     </div>
                 </div>
+                {% empty %}
+                <div class="alert alert-light border mb-0">
+                    Aucune classe n’est actuellement affectée à cet enseignant.
+                </div>
                 {% endfor %}
+
+                {% if historique_affectations %}
+                <details class="mt-3">
+                    <summary class="fw-semibold">
+                        Historique des affectations ({{ historique_affectations.count }})
+                    </summary>
+                    <div class="mt-2">
+                        {% for affectation in historique_affectations %}
+                        <div class="border rounded p-2 mb-2 text-muted">
+                            {{ affectation.classe.nom }} ·
+                            {{ affectation.date_debut|date:"d/m/Y" }}
+                            {% if affectation.date_fin %} au {{ affectation.date_fin|date:"d/m/Y" }}{% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </details>
+                {% endif %}
             </div>
         </div>
     </div>
-    {% endif %}
 
     <!-- Historique des Salaires -->
     <div class="row">

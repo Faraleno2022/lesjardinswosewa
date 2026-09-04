@@ -10,6 +10,7 @@ from .models import (
     EtatSalaire,
     PeriodeSalaire,
     PresenceEnseignant,
+    NIVEAUX_CLASSES_ENSEIGNANT,
     StatutAvanceSalaire,
     StatutEnseignant,
     TypeEnseignant,
@@ -17,8 +18,82 @@ from .models import (
 from eleves.models import Ecole, Classe
 
 
+def classes_affectables(ecole_id, type_enseignant, inclure_ids=()):
+    """Classes compatibles de l'année récente, limitées à une école."""
+    niveaux = NIVEAUX_CLASSES_ENSEIGNANT.get(type_enseignant, ())
+    if not ecole_id or not niveaux:
+        return Classe.objects.none()
+
+    toutes = Classe.objects.filter(
+        ecole_id=ecole_id,
+        niveau__in=niveaux,
+    )
+    annee_recente = (
+        toutes.order_by('-annee_scolaire')
+        .values_list('annee_scolaire', flat=True)
+        .first()
+    )
+    if not annee_recente:
+        return toutes.none()
+
+    filtre = Q(annee_scolaire=annee_recente)
+    ids = tuple(inclure_ids or ())
+    if ids:
+        filtre |= Q(pk__in=ids)
+    return toutes.filter(filtre).order_by(
+        '-annee_scolaire',
+        'niveau',
+        'nom',
+    )
+
+
 class EnseignantForm(forms.ModelForm):
     """Formulaire pour créer/modifier un enseignant"""
+
+    classe_principale = forms.ModelChoiceField(
+        queryset=Classe.objects.none(),
+        required=False,
+        label='Classe principale',
+        help_text='Pour un enseignant de maternelle ou du primaire.',
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+    classes_secondaire = forms.ModelMultipleChoiceField(
+        queryset=Classe.objects.none(),
+        required=False,
+        label='Classes affectées',
+        help_text=(
+            'Pour le secondaire. Maintenez Ctrl (Windows) ou Commande (Mac) '
+            'pour sélectionner plusieurs classes.'
+        ),
+        widget=forms.SelectMultiple(attrs={
+            'class': 'form-select',
+            'size': '6',
+        }),
+    )
+    matiere_affectation = forms.CharField(
+        required=False,
+        max_length=100,
+        label='Matière des nouvelles affectations',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Ex. Mathématiques',
+        }),
+    )
+    heures_affectation = forms.DecimalField(
+        required=False,
+        min_value=Decimal('0.25'),
+        max_value=Decimal('168'),
+        max_digits=5,
+        decimal_places=2,
+        label='Heures par semaine',
+        help_text='Obligatoire lorsqu’une nouvelle classe secondaire est sélectionnée.',
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'step': '0.25',
+            'min': '0.25',
+            'max': '168',
+        }),
+    )
     
     class Meta:
         model = Enseignant
@@ -98,6 +173,7 @@ class EnseignantForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop('user', None)
         super().__init__(*args, **kwargs)
+        self.est_creation = not bool(self.instance.pk)
         
         # Rendre certains champs obligatoires
         self.fields['nom'].required = True
@@ -119,12 +195,71 @@ class EnseignantForm(forms.ModelForm):
         if not self.instance.pk:
             self.fields['statut'].initial = StatutEnseignant.ACTIF
 
+        if self.is_bound:
+            ecole_id = self.data.get(self.add_prefix('ecole'))
+            type_enseignant = self.data.get(self.add_prefix('type_enseignant'))
+        else:
+            ecole_initiale = (
+                self.instance.ecole_id
+                if self.instance.pk
+                else self.initial.get('ecole')
+            )
+            if hasattr(ecole_initiale, 'pk'):
+                ecole_initiale = ecole_initiale.pk
+            if not ecole_initiale and self.user:
+                from utilisateurs.utils import user_school
+                ecole_user = user_school(self.user)
+                ecole_initiale = getattr(ecole_user, 'pk', None)
+            ecole_id = ecole_initiale
+            type_enseignant = (
+                self.instance.type_enseignant
+                if self.instance.pk
+                else self.initial.get('type_enseignant')
+            )
+
+        affectations_actives = AffectationClasse.objects.none()
+        if self.instance.pk:
+            affectations_actives = self.instance.affectations.filter(actif=True)
+        ids_actifs = tuple(
+            affectations_actives.values_list('classe_id', flat=True)
+        )
+
+        if type_enseignant in (
+            TypeEnseignant.MATERNELLE,
+            TypeEnseignant.PRIMAIRE,
+        ):
+            self.fields['classe_principale'].queryset = classes_affectables(
+                ecole_id,
+                type_enseignant,
+                ids_actifs,
+            )
+        if type_enseignant == TypeEnseignant.SECONDAIRE:
+            self.fields['classes_secondaire'].queryset = classes_affectables(
+                ecole_id,
+                type_enseignant,
+                ids_actifs,
+            )
+
+        if not self.is_bound and self.instance.pk:
+            if type_enseignant == TypeEnseignant.SECONDAIRE:
+                self.initial['classes_secondaire'] = ids_actifs
+            elif type_enseignant in (
+                TypeEnseignant.MATERNELLE,
+                TypeEnseignant.PRIMAIRE,
+            ):
+                classe_id = next(iter(ids_actifs), None)
+                if classe_id:
+                    self.initial['classe_principale'] = classe_id
+
     def clean(self):
         cleaned_data = super().clean()
         type_enseignant = cleaned_data.get('type_enseignant')
         taux_horaire = cleaned_data.get('taux_horaire')
         salaire_fixe = cleaned_data.get('salaire_fixe')
         heures_mensuelles = cleaned_data.get('heures_mensuelles')
+        classe_principale = cleaned_data.get('classe_principale')
+        classes_secondaire = cleaned_data.get('classes_secondaire')
+        heures_affectation = cleaned_data.get('heures_affectation')
 
         # Validation selon le type d'enseignant
         if type_enseignant == TypeEnseignant.SECONDAIRE:
@@ -154,7 +289,108 @@ class EnseignantForm(forms.ModelForm):
                 'heures_mensuelles': 'Le nombre d\'heures mensuelles ne peut pas dépasser 200 heures par mois.'
             })
 
+        if type_enseignant in (
+            TypeEnseignant.MATERNELLE,
+            TypeEnseignant.PRIMAIRE,
+        ) and classes_secondaire:
+            self.add_error(
+                'classes_secondaire',
+                'Utilisez la classe principale pour ce type d’enseignant.',
+            )
+
+        if type_enseignant == TypeEnseignant.SECONDAIRE:
+            if classe_principale:
+                self.add_error(
+                    'classe_principale',
+                    'Utilisez les affectations du secondaire.',
+                )
+            classes_ids = {
+                classe.pk for classe in (classes_secondaire or ())
+            }
+            ids_deja_actifs = set()
+            if self.instance.pk:
+                ids_deja_actifs = set(
+                    self.instance.affectations.filter(actif=True)
+                    .values_list('classe_id', flat=True)
+                )
+            if classes_ids - ids_deja_actifs and not heures_affectation:
+                self.add_error(
+                    'heures_affectation',
+                    'Indiquez les heures par semaine pour les nouvelles affectations.',
+                )
+
         return cleaned_data
+
+    def sauvegarder_affectations(self, enseignant):
+        """Synchronise les affectations sans jamais effacer l'historique."""
+        if not self.is_valid():
+            raise ValueError('Le formulaire doit être valide avant les affectations.')
+        if not self.data.get(self.add_prefix('gestion_affectations_presente')):
+            # Compatibilité avec un ancien formulaire encore ouvert dans un
+            # navigateur : ne jamais clôturer ses affectations à son insu.
+            return
+
+        aujourd_hui = timezone.localdate()
+        date_debut = (
+            self.cleaned_data.get('date_embauche')
+            if self.est_creation
+            else aujourd_hui
+        ) or aujourd_hui
+        type_enseignant = self.cleaned_data.get('type_enseignant')
+
+        if type_enseignant in (
+            TypeEnseignant.MATERNELLE,
+            TypeEnseignant.PRIMAIRE,
+        ):
+            selection = self.cleaned_data.get('classe_principale')
+            classes_ids = {selection.pk} if selection else set()
+            matiere = ''
+            heures = None
+        elif type_enseignant == TypeEnseignant.SECONDAIRE:
+            selection = self.cleaned_data.get('classes_secondaire') or ()
+            classes_ids = {classe.pk for classe in selection}
+            matiere = self.cleaned_data.get('matiere_affectation') or ''
+            heures = self.cleaned_data.get('heures_affectation')
+        else:
+            classes_ids = set()
+            matiere = ''
+            heures = None
+
+        actives = list(
+            enseignant.affectations.filter(actif=True).select_related('classe')
+        )
+        actives_par_classe = {
+            affectation.classe_id: affectation for affectation in actives
+        }
+
+        for affectation in actives:
+            if affectation.classe_id not in classes_ids:
+                affectation.actif = False
+                affectation.date_fin = max(
+                    aujourd_hui,
+                    affectation.date_debut,
+                )
+                affectation.save()
+
+        for classe_id in classes_ids:
+            if classe_id in actives_par_classe:
+                continue
+            affectation, creee = AffectationClasse.objects.get_or_create(
+                enseignant=enseignant,
+                classe_id=classe_id,
+                date_debut=date_debut,
+                defaults={
+                    'heures_par_semaine': heures,
+                    'matiere': matiere,
+                    'actif': True,
+                },
+            )
+            if not creee:
+                affectation.heures_par_semaine = heures
+                affectation.matiere = matiere
+                affectation.date_fin = None
+                affectation.actif = True
+                affectation.save()
 
     def clean_telephone(self):
         telephone = self.cleaned_data.get('telephone')
@@ -258,19 +494,23 @@ class AffectationClasseForm(forms.ModelForm):
         self.fields['classe'].required = True
         self.fields['date_debut'].required = True
 
-        # Restreindre les classes à l'école de l'enseignant (année la plus récente)
+        # Restreindre les classes à l'école, au cycle et à l'année récente.
         if self.enseignant and getattr(self.enseignant, 'ecole_id', None):
-            qs = Classe.objects.filter(ecole_id=self.enseignant.ecole_id)
-            annee_recente = (
-                Classe.objects.filter(ecole_id=self.enseignant.ecole_id)
-                .values_list('annee_scolaire', flat=True)
-                .distinct().order_by('-annee_scolaire').first()
+            classe_existante = (
+                (self.instance.classe_id,)
+                if self.instance.pk and self.instance.classe_id
+                else ()
             )
-            if annee_recente:
-                qs = qs.filter(annee_scolaire=annee_recente)
-            self.fields['classe'].queryset = qs
+            self.fields['classe'].queryset = classes_affectables(
+                self.enseignant.ecole_id,
+                self.enseignant.type_enseignant,
+                classe_existante,
+            )
         else:
             self.fields['classe'].queryset = Classe.objects.none()
+
+        if not self.is_bound and not self.instance.pk:
+            self.fields['date_debut'].initial = timezone.localdate()
 
     def clean(self):
         cleaned_data = super().clean()

@@ -18,6 +18,34 @@ class TypeEnseignant(models.TextChoices):
     ADMINISTRATEUR = 'ADMINISTRATEUR', 'Cadre / Administrateur'
 
 
+NIVEAUX_CLASSES_ENSEIGNANT = {
+    TypeEnseignant.MATERNELLE: (
+        'TOUTE_PETITE_SECTION',
+        'PETITE_SECTION',
+        'MOYENNE_SECTION',
+        'GRANDE_SECTION',
+        'MATERNELLE',
+    ),
+    TypeEnseignant.PRIMAIRE: (
+        'PRIMAIRE_1',
+        'PRIMAIRE_2',
+        'PRIMAIRE_3',
+        'PRIMAIRE_4',
+        'PRIMAIRE_5',
+        'PRIMAIRE_6',
+    ),
+    TypeEnseignant.SECONDAIRE: (
+        'COLLEGE_7',
+        'COLLEGE_8',
+        'COLLEGE_9',
+        'COLLEGE_10',
+        'LYCEE_11',
+        'LYCEE_12',
+        'TERMINALE',
+    ),
+}
+
+
 class SourceHeuresSalaire(models.TextChoices):
     NON_APPLICABLE = '', 'Non applicable'
     POINTAGE = 'POINTAGE', 'Pointages arrivée / départ'
@@ -257,7 +285,11 @@ class AffectationClasse(SyncTrackedModel):
     def clean(self):
         super().clean()
         
-        if self.enseignant.est_taux_horaire and not self.heures_par_semaine:
+        if (
+            self.enseignant.est_taux_horaire
+            and self.actif
+            and not self.heures_par_semaine
+        ):
             raise ValidationError({
                 'heures_par_semaine': 'Le nombre d\'heures par semaine est obligatoire pour les enseignants du secondaire.'
             })
@@ -273,6 +305,40 @@ class AffectationClasse(SyncTrackedModel):
         ):
             raise ValidationError({
                 'classe': "La classe et l'enseignant doivent appartenir à la même école."
+            })
+        niveaux_autorises = NIVEAUX_CLASSES_ENSEIGNANT.get(
+            getattr(self.enseignant, 'type_enseignant', None),
+            (),
+        )
+        if (
+            niveaux_autorises
+            and self.classe_id
+            and self.actif
+            and self.classe.niveau not in niveaux_autorises
+        ):
+            raise ValidationError({
+                'classe': (
+                    "Cette classe n'est pas compatible avec le type "
+                    f"{self.enseignant.get_type_enseignant_display()}."
+                )
+            })
+        if (
+            self.enseignant_id
+            and self.actif
+            and self.enseignant.type_enseignant in (
+                TypeEnseignant.MATERNELLE,
+                TypeEnseignant.PRIMAIRE,
+            )
+            and AffectationClasse.objects.filter(
+                enseignant_id=self.enseignant_id,
+                actif=True,
+            ).exclude(pk=self.pk).exists()
+        ):
+            raise ValidationError({
+                'classe': (
+                    'Un enseignant de maternelle ou du primaire ne peut avoir '
+                    'qu’une seule classe active.'
+                )
             })
 
     def save(self, *args, **kwargs):
