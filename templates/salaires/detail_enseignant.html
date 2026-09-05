@@ -363,6 +363,12 @@
                         <div class="text-end">
                             <div class="salary-amount">{{ etat.salaire_net|floatformat:0|intcomma }} GNF</div>
                             <small class="text-muted">{{ etat.date_creation|date:"d/m/Y" }}</small>
+                            {% if etat.primes %}
+                            <div class="text-success small">Primes : +{{ etat.primes|floatformat:0|intcomma }} GNF</div>
+                            {% endif %}
+                            {% if not etat.valide and not etat.paye and not etat.periode.cloturee %}
+                            <a href="{% url 'salaires:ajuster_etat_salaire' etat.id %}#id_primes" class="btn btn-sm btn-outline-success mt-2">Primes et retenues</a>
+                            {% endif %}
                         </div>
                     </div>
                     {% endfor %}

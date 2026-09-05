@@ -105,6 +105,11 @@ class ReportingTempsReelTests(TestCase):
             },
         )
         self.client.force_login(self.comptable)
+        # Ces tests portent sur les rapports après authentification complète.
+        # Le profil possède un téléphone : simuler sa vérification préalable.
+        session = self.client.session
+        session['phone_verified'] = True
+        session.save()
 
     def _creer_eleve(self, matricule, nom, prenom, classe, responsable):
         return Eleve.objects.create(

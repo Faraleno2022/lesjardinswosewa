@@ -143,6 +143,11 @@ class ModificationPaiementForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields['montant'].help_text = (
+            "Si seul le type inscription/réinscription change, la différence de tarif "
+            "sera appliquée à l'enregistrement. Les remises sont conservées. "
+            "Un montant corrigé manuellement est prioritaire."
+        )
         self.fields['type_paiement'].queryset = TypePaiement.objects.filter(
             Q(actif=True) | Q(pk=getattr(self.instance, 'type_paiement_id', None))
         ).distinct()
@@ -155,6 +160,56 @@ class ModificationPaiementForm(forms.ModelForm):
         if montant is None or montant <= 0:
             raise forms.ValidationError("Le montant doit être supérieur à zéro.")
         return montant
+
+    def clean(self):
+        cleaned = super().clean()
+        nouveau_type = cleaned.get('type_paiement')
+        montant = cleaned.get('montant')
+        if not self.instance.pk or nouveau_type is None or montant is None:
+            return cleaned
+        original = Paiement.objects.select_related('type_paiement').get(pk=self.instance.pk)
+        if montant != original.montant or nouveau_type.pk == original.type_paiement_id:
+            return cleaned
+
+        from copy import copy
+        from .calculs import est_type_scolarite, normaliser_libelle
+        from .views import _align_enrollment_fee, _enrollment_preference_from_type
+
+        ancien_nom = original.type_paiement.nom
+        nouveau_nom = nouveau_type.nom
+        ancienne_nature = _enrollment_preference_from_type(ancien_nom)
+        nouvelle_nature = _enrollment_preference_from_type(nouveau_nom)
+
+        def prestations(nom):
+            compact = ''.join(c for c in normaliser_libelle(nom) if c.isalnum())
+            return compact.replace('reinscription', '').replace('inscription', '')
+
+        # Ne pas deviner un montant si les tranches ou le service changent aussi.
+        if (ancienne_nature is None or nouvelle_nature is None
+                or ancienne_nature == nouvelle_nature
+                or prestations(ancien_nom) != prestations(nouveau_nom)
+                or not est_type_scolarite(original.type_paiement)
+                or not est_type_scolarite(nouveau_type)):
+            return cleaned
+        echeancier = EcheancierPaiement.objects.filter(
+            eleve_id=original.eleve_id, annee_scolaire=original.annee_scolaire,
+        ).first()
+        if echeancier is None:
+            return cleaned
+        avant = copy(echeancier)
+        candidat = copy(original)
+        candidat.type_paiement = nouveau_type
+        candidat.date_paiement = cleaned.get('date_paiement') or original.date_paiement
+        _align_enrollment_fee(original.eleve, avant, paiement_candidat=original, persist=False)
+        _align_enrollment_fee(original.eleve, echeancier, paiement_candidat=candidat, persist=False)
+        ajuste = montant + echeancier.frais_inscription_du - avant.frais_inscription_du
+        if ajuste <= 0:
+            self.add_error('montant', "Saisissez le montant encaissé après correction du tarif.")
+        else:
+            # Le reçu est déjà net si la remise a été déduite. Seule
+            # l'admission change : ne jamais déduire de nouveau la remise.
+            cleaned['montant'] = ajuste
+        return cleaned
 
 
 class SuppressionPaiementForm(forms.Form):

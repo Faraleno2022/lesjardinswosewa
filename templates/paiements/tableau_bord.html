@@ -184,6 +184,7 @@
 {% endblock %}
 
 {% block content %}
+<div id="paiements-dashboard-live">
     <!-- Statistiques principales -->
     <div class="row mb-4">
         <div class="col-md-3">
@@ -621,67 +622,47 @@
             </div>
         </div>
     </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Animation des cartes statistiques
-    const statCards = document.querySelectorAll('.stat-card');
-    statCards.forEach(card => {
-        card.addEventListener('mouseenter', function() {
-            this.style.transform = 'translateY(-5px)';
-        });
-        card.addEventListener('mouseleave', function() {
-            this.style.transform = 'translateY(0)';
-        });
-    });
-    
-    // Fonction pour mettre à jour les statistiques
-    function updateStatistics() {
-        fetch('{% url "paiements:ajax_statistiques_paiements" %}')
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // Mettre à jour les valeurs dans l'interface
-                    const stats = data.stats;
-                    
-                    // Total paiements ce mois
-                    const totalElem = document.querySelector('.stat-card.success .stat-number');
-                    if (totalElem) {
-                        totalElem.textContent = new Intl.NumberFormat('fr-FR').format(stats.total_paiements_mois);
-                    }
-                    
-                    // Nombre de paiements ce mois
-                    const nombreElem = document.querySelector('.stat-card:not(.success):not(.warning):not(.danger) .stat-number');
-                    if (nombreElem) {
-                        nombreElem.textContent = new Intl.NumberFormat('fr-FR').format(stats.nombre_paiements_mois);
-                    }
-                    
-                    // Élèves en retard
-                    const retardElem = document.querySelector('.stat-card.warning .stat-number');
-                    if (retardElem) {
-                        retardElem.textContent = new Intl.NumberFormat('fr-FR').format(stats.eleves_en_retard);
-                    }
-                    
-                    // Paiements en attente
-                    const attenteElem = document.querySelector('.stat-card.danger .stat-number');
-                    if (attenteElem) {
-                        attenteElem.textContent = new Intl.NumberFormat('fr-FR').format(stats.paiements_en_attente);
-                    }
-                    
-                    console.log('Statistiques paiements mises à jour:', stats);
-                }
-            })
-            .catch(error => {
-                console.error('Erreur lors de la mise à jour des statistiques:', error);
+    let actualisationEnCours = false;
+
+    async function updateStatistics() {
+        if (actualisationEnCours || document.hidden) return;
+        actualisationEnCours = true;
+        try {
+            // Reprendre le rendu serveur : cartes, remises, retards et audit
+            // utilisent exactement les mêmes calculs qu'au chargement.
+            const response = await fetch(window.location.href, {
+                credentials: 'same-origin',
+                cache: 'no-store',
+                headers: {'X-Session-Background': '1'},
             });
+            if (!response.ok || response.redirected) return;
+            const page = new DOMParser().parseFromString(await response.text(), 'text/html');
+            const nouveau = page.getElementById('paiements-dashboard-live');
+            const actuel = document.getElementById('paiements-dashboard-live');
+            if (nouveau && actuel && nouveau.innerHTML !== actuel.innerHTML) {
+                actuel.replaceChildren(...nouveau.childNodes);
+            }
+        } catch (error) {
+            console.error('Actualisation des paiements impossible:', error);
+        } finally {
+            actualisationEnCours = false;
+        }
     }
-    
-    // Mettre à jour les statistiques au chargement
-    updateStatistics();
-    
-    // Actualisation automatique toutes les 30 secondes
+
+    // Actualiser aussi au retour d'une correction dans un autre onglet ou
+    // lorsque le navigateur restaure une ancienne page avec le bouton Retour.
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) updateStatistics();
+    });
+    window.addEventListener('pageshow', function(event) {
+        if (event.persisted) updateStatistics();
+    });
     setInterval(updateStatistics, 30000);
 });
 </script>

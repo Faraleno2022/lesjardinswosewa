@@ -266,6 +266,11 @@ class Paiement(SyncTrackedModel):
         ).first()
         if not echeancier:
             return
+        # ModelForm valide avant save : projeter le nouveau tarif sans écriture.
+        from .views import _align_enrollment_fee
+        _align_enrollment_fee(
+            self.eleve, echeancier, paiement_candidat=self, persist=False,
+        )
         autres = Paiement.objects.filter(
             eleve_id=self.eleve_id,
             annee_scolaire=self.annee_scolaire,
