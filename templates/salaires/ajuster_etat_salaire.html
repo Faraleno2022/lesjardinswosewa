@@ -9,7 +9,7 @@
         <div class="col-lg-7">
             <div class="card shadow-sm">
                 <div class="card-header bg-warning-subtle">
-                    <h4 class="mb-1"><i class="fas fa-sliders-h me-2"></i>Modifier l'état de salaire</h4>
+                    <h4 class="mb-1"><i class="fas fa-sliders-h me-2"></i>Salaire, primes et retenues</h4>
                     <div class="text-muted">
                         {{ etat.enseignant.nom_complet }} — {{ etat.periode.nom_periode }}
                     </div>
@@ -64,6 +64,7 @@
                         <div class="mb-3">
                             <label class="form-label" for="{{ form.primes.id_for_label }}">Primes (GNF)</label>
                             {{ form.primes }}
+                            <div class="form-text">Total des primes de cette période, ajouté au salaire net. Indiquez leur motif dans les observations.</div>
                             {% for error in form.primes.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
                         </div>
 

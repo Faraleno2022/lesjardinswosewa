@@ -156,7 +156,7 @@ class EnseignantForm(forms.ModelForm):
             'telephone': 'Téléphone',
             'adresse': 'Adresse',
             'ecole': 'École *',
-            'type_enseignant': 'Type d\'enseignant *',
+            'type_enseignant': 'Type de personnel',
             'statut': 'Statut',
             'taux_horaire': 'Taux horaire (GNF)',
             'salaire_fixe': 'Salaire fixe (GNF)',
@@ -165,7 +165,7 @@ class EnseignantForm(forms.ModelForm):
         }
         help_texts = {
             'taux_horaire': 'Pour le secondaire. Le salaire est calculé avec les heures réelles.',
-            'salaire_fixe': 'Montant mensuel négocié pour garderie, maternelle, primaire et cadres/administrateurs',
+            'salaire_fixe': 'Montant mensuel négocié pour le personnel à salaire fixe, hors primes',
             'heures_mensuelles': 'Optionnel et indicatif. Les heures payées viennent des pointages ou de la saisie globale du mois.',
             'date_embauche': 'Date d\'entrée en fonction',
         }

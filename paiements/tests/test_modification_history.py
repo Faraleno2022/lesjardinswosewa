@@ -210,3 +210,198 @@ class ModificationPaiementHistoriqueTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Ce champ est obligatoire')
         self.assertFalse(HistoriqueModificationPaiement.objects.exists())
+
+
+    def _admission_avec_remise(self, nature, montant):
+        from eleves.models import GrilleTarifaire
+        from paiements.models import PaiementRemise, RemiseReduction
+        GrilleTarifaire.objects.create(
+            ecole=self.ecole, niveau=self.classe.niveau,
+            annee_scolaire=self.classe.annee_scolaire,
+            frais_inscription=50000, frais_reinscription=30000,
+            tranche_1=500000, tranche_2=0, tranche_3=0,
+        )
+        self.inscription = TypePaiement.objects.create(nom='Inscription + Tranche 1')
+        self.reinscription = TypePaiement.objects.create(nom='Réinscription + Tranche 1')
+        self.paiement.type_paiement = getattr(self, nature)
+        self.paiement.montant = Decimal(montant)
+        self.paiement.save()
+        remise = RemiseReduction.objects.create(
+            nom='Remise 10 % T1', type_remise='POURCENTAGE', valeur=10,
+            motif='SOCIALE', date_debut=date.today(),
+            date_fin=date.today() + timedelta(days=365),
+        )
+        self.remise_appliquee = PaiementRemise.objects.create(
+            paiement=self.paiement, remise=remise, montant_remise=50000,
+            tranches_concernees='1', base_calcul='TRANCHES_DUES',
+            deduite_du_paiement=True,
+        )
+
+    def _corriger_admission(self, type_paiement, montant):
+        return self.client.post(
+            reverse('paiements:modifier_paiement', args=[self.paiement.pk]),
+            {
+                'type_paiement': type_paiement.pk, 'mode_paiement': self.mode.pk,
+                'montant': str(montant), 'date_paiement': date.today().isoformat(),
+                'motif_modification': 'Correction du type admission choisi par erreur',
+            },
+        )
+
+    def test_correction_vers_inscription_utilise_nouveau_plafond_avec_remise(self):
+        self._admission_avec_remise('reinscription', '480000')
+        response = self._corriger_admission(self.inscription, 500000)
+        self.assertEqual(response.status_code, 302)
+        ech = EcheancierPaiement.objects.get(eleve=self.eleve)
+        self.assertEqual(ech.nature_frais, 'INSCRIPTION')
+        self.assertEqual(ech.total_du, Decimal('550000'))
+        self.assertEqual(ech.total_paye, Decimal('500000'))
+        self.assertEqual(ech.total_remises_valides, Decimal('50000'))
+        self.assertEqual(ech.solde_restant, 0)
+        self.assertEqual(ech.statut, 'PAYE_COMPLET')
+
+    def test_correction_vers_reinscription_refuse_depassement_sans_effet(self):
+        self._admission_avec_remise('inscription', '500000')
+        response = self._corriger_admission(self.reinscription, 510000)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('montant', response.context['form'].errors)
+        self.paiement.refresh_from_db()
+        ech = EcheancierPaiement.objects.get(eleve=self.eleve)
+        self.assertEqual(self.paiement.type_paiement, self.inscription)
+        self.assertEqual(ech.nature_frais, 'INSCRIPTION')
+        self.assertEqual(ech.frais_inscription_du, Decimal('50000'))
+
+    def test_correction_reinscription_remise_cartes_recu_et_annulation(self):
+        from io import BytesIO
+        from pypdf import PdfReader
+        from paiements.services import calculer_situation_echeancier
+        self._admission_avec_remise('inscription', '500000')
+        response = self._corriger_admission(self.reinscription, 500000)
+        self.assertEqual(response.status_code, 302)
+        ech = EcheancierPaiement.objects.get(eleve=self.eleve)
+        self.assertEqual(ech.nature_frais, 'REINSCRIPTION')
+        self.assertEqual(ech.frais_inscription_du, Decimal('30000'))
+        self.assertEqual(ech.total_paye, Decimal('480000'))
+        self.assertEqual(ech.total_remises_valides, Decimal('50000'))
+        self.assertEqual(ech.solde_restant, 0)
+        situation = calculer_situation_echeancier(ech)
+        self.assertEqual(situation['total_du'], Decimal('530000'))
+        self.assertEqual(situation['reste'], 0)
+        self.remise_appliquee.refresh_from_db()
+        self.assertEqual(self.remise_appliquee.montant_remise, Decimal('50000'))
+        self.assertTrue(self.remise_appliquee.deduite_du_paiement)
+        dashboard = self.client.get(reverse('paiements:tableau_bord'))
+        categories = {x['key']: x for x in dashboard.context['indicateurs_categories']}
+        jour = {x['key']: x for x in categories['scolarite']['periodes']}['jour']
+        self.assertEqual(jour['montant'], Decimal('450000'))
+        admission = {x['key']: x for x in categories['reinscription']['periodes']}['jour']
+        self.assertEqual(admission['montant'], Decimal('30000'))
+        inscription = {x['key']: x for x in categories['inscription']['periodes']}['jour']
+        self.assertEqual(inscription['montant'], 0)
+        pdf = self.client.get(reverse('paiements:generer_recu_pdf', args=[self.paiement.pk]))
+        self.assertEqual(pdf.status_code, 200)
+        texte = ''.join(page.extract_text() for page in PdfReader(BytesIO(pdf.content)).pages)
+        self.assertIn('Réinscription', texte)
+        for montant in ('480000', '50000', '530000'):
+            self.assertIn(montant, re.sub(r'[,\s\u00a0\u202f]', '', texte))
+        self.client.post(
+            reverse('paiements:supprimer_paiement', args=[self.paiement.pk]),
+            {'motif_suppression': 'Annulation du reçu corrigé'},
+        )
+        ech.refresh_from_db()
+        self.assertEqual(ech.total_paye, 0)
+        self.assertEqual(ech.total_remises_valides, 0)
+        self.assertEqual(ech.solde_restant, Decimal('530000'))
+        dashboard = self.client.get(reverse('paiements:tableau_bord'))
+        categories = {x['key']: x for x in dashboard.context['indicateurs_categories']}
+        jour = {x['key']: x for x in categories['scolarite']['periodes']}['jour']
+        self.assertEqual(jour['montant'], 0)
+
+
+    def test_correction_partielle_recalcule_solde_sans_deduire_remise_deux_fois(self):
+        self._admission_avec_remise('inscription', '200000')
+        response = self._corriger_admission(self.reinscription, 190000)
+        self.assertEqual(response.status_code, 302)
+        ech = EcheancierPaiement.objects.get(eleve=self.eleve)
+        self.assertEqual(ech.total_du, Decimal('530000'))
+        self.assertEqual(ech.total_paye, Decimal('190000'))
+        self.assertEqual(ech.total_remises_valides, Decimal('50000'))
+        self.assertEqual(ech.solde_restant, Decimal('290000'))
+
+    def test_controle_transactionnel_utilise_aussi_le_nouveau_tarif(self):
+        from django.core.exceptions import ValidationError
+        from paiements.views import _assert_payment_fits_annual_balance
+        self._admission_avec_remise('inscription', '500000')
+        self.paiement.type_paiement = self.reinscription
+        with self.assertRaises(ValidationError):
+            _assert_payment_fits_annual_balance(self.paiement)
+        self.paiement.montant = Decimal('480000')
+        projection = _assert_payment_fits_annual_balance(self.paiement)
+        self.assertEqual(projection.total_du, Decimal('530000'))
+        ech = EcheancierPaiement.objects.get(eleve=self.eleve)
+        self.assertEqual(ech.total_du, Decimal('550000'))
+
+    def test_api_statistiques_reflete_correction_et_annulation(self):
+        self._admission_avec_remise('inscription', '200000')
+        self._corriger_admission(self.reinscription, 180000)
+        url = reverse('paiements:ajax_statistiques_paiements')
+        response = self.client.get(url)
+        self.assertEqual(response.json()['stats']['total_paiements_mois'], 180000)
+        self.client.post(
+            reverse('paiements:supprimer_paiement', args=[self.paiement.pk]),
+            {'motif_suppression': 'Annulation du paiement de test'},
+        )
+        self.assertEqual(self.client.get(url).json()['stats']['total_paiements_mois'], 0)
+
+    def test_changement_type_seul_recalcule_net_sans_deduire_remise_deux_fois(self):
+        self._admission_avec_remise('inscription', '500000')
+        response = self._corriger_admission(self.reinscription, 500000)
+        self.assertEqual(response.status_code, 302)
+        self.paiement.refresh_from_db()
+        self.assertEqual(self.paiement.montant, Decimal('480000'))
+        self.remise_appliquee.refresh_from_db()
+        self.assertEqual(self.remise_appliquee.montant_remise, Decimal('50000'))
+        ech = EcheancierPaiement.objects.get(eleve=self.eleve)
+        self.assertEqual(ech.total_du, Decimal('530000'))
+        self.assertEqual(ech.solde_restant, 0)
+        # Sauvegarder une seconde fois ne doit pas rejouer la différence.
+        response = self._corriger_admission(self.reinscription, 480000)
+        self.assertEqual(response.status_code, 302)
+        self.paiement.refresh_from_db()
+        self.assertEqual(self.paiement.montant, Decimal('480000'))
+        # Le retour vers inscription doit également être automatique.
+        response = self._corriger_admission(self.inscription, 480000)
+        self.assertEqual(response.status_code, 302)
+        self.paiement.refresh_from_db()
+        self.assertEqual(self.paiement.montant, Decimal('500000'))
+        ech.refresh_from_db()
+        self.assertEqual(ech.total_du, Decimal('550000'))
+        self.assertEqual(ech.solde_restant, 0)
+
+    def test_correction_automatique_sans_remise(self):
+        self._admission_avec_remise('inscription', '500000')
+        self.remise_appliquee.delete()
+        response = self._corriger_admission(self.reinscription, 500000)
+        self.assertEqual(response.status_code, 302)
+        self.paiement.refresh_from_db()
+        self.assertEqual(self.paiement.montant, Decimal('480000'))
+        ech = EcheancierPaiement.objects.get(eleve=self.eleve)
+        self.assertEqual(ech.solde_restant, Decimal('50000'))
+
+    def test_correction_automatique_non_positive_refusee_sans_ecriture(self):
+        self._admission_avec_remise('inscription', '10000')
+        response = self._corriger_admission(self.reinscription, 10000)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('montant', response.context['form'].errors)
+        self.paiement.refresh_from_db()
+        self.assertEqual(self.paiement.montant, Decimal('10000'))
+        self.assertEqual(self.paiement.type_paiement, self.inscription)
+        ech = EcheancierPaiement.objects.get(eleve=self.eleve)
+        self.assertEqual(ech.nature_frais, 'INSCRIPTION')
+
+    def test_changement_de_tranche_ne_devine_pas_le_montant(self):
+        self._admission_avec_remise('inscription', '100000')
+        autre_type = TypePaiement.objects.create(nom='Réinscription + Tranche 2')
+        response = self._corriger_admission(autre_type, 100000)
+        self.assertEqual(response.status_code, 302)
+        self.paiement.refresh_from_db()
+        self.assertEqual(self.paiement.montant, Decimal('100000'))

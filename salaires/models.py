@@ -16,7 +16,11 @@ class TypeEnseignant(models.TextChoices):
     PRIMAIRE = 'PRIMAIRE', 'Primaire'
     SECONDAIRE = 'SECONDAIRE', 'Secondaire (taux horaire)'
     ADMINISTRATEUR = 'ADMINISTRATEUR', 'Cadre / Administrateur'
-
+    CHAUFFEUR = 'CHAUFFEUR', 'Chauffeur'
+    VIGILE = 'VIGILE', 'Vigiles'
+    ENTRETIEN = 'ENTRETIEN', 'Service entretien'
+    NOUNOU = 'NOUNOU', 'Nounou'
+    RESTAURATION = 'RESTAURATION', 'Restauration'
 
 NIVEAUX_CLASSES_ENSEIGNANT = {
     TypeEnseignant.MATERNELLE: (
@@ -109,7 +113,7 @@ class Enseignant(SyncTrackedModel):
         null=True, 
         blank=True,
         verbose_name="Salaire fixe (GNF)",
-        help_text="Montant mensuel négocié pour garderie, maternelle, primaire et cadres/administrateurs",
+        help_text="Montant mensuel négocié pour le personnel à salaire fixe, hors primes",
         validators=[MinValueValidator(Decimal('0'))],
     )
     heures_mensuelles = models.DecimalField(
@@ -158,12 +162,10 @@ class Enseignant(SyncTrackedModel):
     @property
     def est_salaire_fixe(self):
         """Vérifie si l'enseignant a un salaire fixe"""
-        return self.type_enseignant in [
-            TypeEnseignant.GARDERIE,
-            TypeEnseignant.MATERNELLE,
-            TypeEnseignant.PRIMAIRE,
-            TypeEnseignant.ADMINISTRATEUR
-        ]
+        return (
+            self.type_enseignant in TypeEnseignant.values
+            and not self.est_taux_horaire
+        )
     
     def clean(self):
         super().clean()

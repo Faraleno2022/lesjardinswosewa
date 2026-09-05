@@ -190,7 +190,7 @@ def _enrollment_preference_from_type(type_name: str):
 
 
 def _enrollment_preference_for_eleve(
-    eleve, preferred_type_name=None, annee_scolaire=None
+    eleve, preferred_type_name=None, annee_scolaire=None, *, paiement_candidat=None
 ):
     """Détermine le frais d'inscription utilisé par l'élève sur l'année."""
     validated_payments = (
@@ -203,7 +203,14 @@ def _enrollment_preference_for_eleve(
         .select_related("type_paiement")
         .order_by("date_paiement", "date_creation", "id")
     )
-    for existing_payment in validated_payments.iterator():
+    if paiement_candidat is not None:
+        # Valider le type corrigé sans conserver l'ancien reçu dans la projection.
+        validated_payments = list(validated_payments.exclude(pk=paiement_candidat.pk))
+        validated_payments.append(paiement_candidat)
+        validated_payments.sort(key=lambda p: (
+            p.date_paiement, p.date_creation or timezone.now(), p.pk or 0,
+        ))
+    for existing_payment in validated_payments:
         preference = _enrollment_preference_from_type(
             getattr(existing_payment.type_paiement, "nom", "")
         )
@@ -265,7 +272,10 @@ def _rebalance_garde_prolongee(eleve, echeancier):
     return ["tranche_1_due", "tranche_2_due", "tranche_3_due"]
 
 
-def _align_enrollment_fee(eleve, echeancier, preferred_type_name=None):
+def _align_enrollment_fee(
+    eleve, echeancier, preferred_type_name=None, *, paiement_candidat=None,
+    persist=True,
+):
     """Aligne le frais dû sur inscription ou réinscription.
 
     Le premier paiement d'inscription/réinscription validé fixe la nature du
@@ -278,7 +288,8 @@ def _align_enrollment_fee(eleve, echeancier, preferred_type_name=None):
     """
     update_fields = []
     preference = _enrollment_preference_for_eleve(
-        eleve, preferred_type_name, echeancier.annee_scolaire
+        eleve, preferred_type_name, echeancier.annee_scolaire,
+        paiement_candidat=paiement_candidat,
     )
 
     if preference is not None:
@@ -310,7 +321,7 @@ def _align_enrollment_fee(eleve, echeancier, preferred_type_name=None):
     # les échéanciers dont le total a déjà dérivé.
     update_fields += _rebalance_garde_prolongee(eleve, echeancier)
 
-    if update_fields:
+    if update_fields and persist:
         echeancier.save(update_fields=update_fields + ["date_modification"])
     return echeancier
 
@@ -2761,6 +2772,9 @@ def _assert_payment_fits_annual_balance(paiement):
         raise ValidationError(
             "Aucun échéancier ne correspond à l'année scolaire du paiement."
         )
+    _align_enrollment_fee(
+        paiement.eleve, echeancier, paiement_candidat=paiement, persist=False,
+    )
     autres_paiements = (
         Paiement.objects.filter(
             eleve=paiement.eleve,
@@ -4735,9 +4749,7 @@ def ajax_classes_par_ecole(request):
 
 @login_required
 def ajax_statistiques_paiements(request):
-    """Endpoint AJAX minimal pour statistiques paiements.
-    Fourni pour satisfaire le routage; peut être enrichi ultérieurement.
-    """
+    """Statistiques du tableau de bord et totaux historiques de compatibilité."""
     try:
         base = filter_by_user_school(Paiement.objects.all(), request.user, 'eleve__classe__ecole')
         total = base.count()
@@ -4745,7 +4757,10 @@ def ajax_statistiques_paiements(request):
     except Exception:
         total = 0
         montant_total = 0
-    return JsonResponse({'success': True, 'total': total, 'montant_total': montant_total})
+    return JsonResponse({
+        'success': True, 'total': total, 'montant_total': montant_total,
+        'stats': _compute_stats(request.user),
+    })
 
 @login_required
 @require_http_methods(["GET", "POST"])
