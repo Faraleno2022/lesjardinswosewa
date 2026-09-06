@@ -53,7 +53,7 @@ def ventiler_encaissements_par_paiement(paiements):
                 annee_scolaire__in=annees,
                 statut='VALIDE',
             )
-            .select_related('type_paiement')
+            .select_related('type_paiement').prefetch_related('remises')
             .order_by('date_paiement', 'date_creation', 'id')
         )
         for encaissement in historique_qs:

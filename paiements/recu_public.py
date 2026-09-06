@@ -199,11 +199,11 @@ def recu_public_pdf(request, paiement_id):
                     annee_scolaire=paiement.annee_scolaire,
                     statut='VALIDE',
                 )
-                .filter(filtre_types_scolarite())
+                .filter(filtre_types_scolarite()).prefetch_related('remises')
                 .order_by('date_paiement', 'date_creation', 'id')
             )
             allocations, _ = build_payment_allocation_history(
-                ech, paiements_valides.iterator()
+                ech, paiements_valides
             )
             current_allocation = allocations.get(paiement.id)
 

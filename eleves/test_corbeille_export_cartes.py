@@ -80,7 +80,7 @@ class CorbeilleExportCartesTests(TestCase):
         import_response = self.client.post(reverse('eleves:importer_eleves'), {
             'classe_id': '', 'generer_matricules': 'on', 'fichier': upload,
         })
-        self.assertRedirects(import_response, reverse('eleves:gestion_classes'))
+        self.assertRedirects(import_response, reverse('eleves:repartir_eleves'))
         self.assertEqual(Eleve.objects.filter(matricule='T8-001').count(), 1)
 
     def test_suppression_ecole_ne_cree_plus_de_contrainte_sync(self):

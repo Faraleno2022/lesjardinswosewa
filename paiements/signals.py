@@ -93,11 +93,47 @@ def auditer_suppression_technique_paiement(sender, instance, **kwargs):
     )
 
 
+@receiver(pre_save, sender=PaiementRemise)
+def memoriser_ancienne_portee_remise(sender, instance, raw=False, **kwargs):
+    # Une réaffectation doit retirer la couverture de l'ancien dossier aussi.
+    instance._ancienne_portee_remise = None
+    if instance.pk and not raw:
+        instance._ancienne_portee_remise = (
+            sender.objects.filter(pk=instance.pk)
+            .values_list('paiement__eleve_id', 'paiement__annee_scolaire')
+            .first()
+        )
+
+
 @receiver(post_save, sender=PaiementRemise)
 @receiver(post_delete, sender=PaiementRemise)
-def recalculer_apres_remise(sender, instance, **kwargs):
+def recalculer_apres_remise(sender, instance, raw=False, **kwargs):
+    if raw:
+        return
     try:
         paiement = instance.paiement
     except Paiement.DoesNotExist:
         return
-    _recalculer(paiement.eleve_id, paiement.annee_scolaire)
+    nouvelle = (paiement.eleve_id, paiement.annee_scolaire)
+    ancienne = getattr(instance, '_ancienne_portee_remise', None)
+    if ancienne and ancienne != nouvelle:
+        _recalculer(*ancienne)
+    _recalculer(*nouvelle)
+
+
+@receiver(post_save, sender=Paiement)
+def activer_dossier_apres_premier_paiement(sender, instance, raw=False, **kwargs):
+    """Une admission importée est activée par un encaissement scolaire validé."""
+    if raw or instance.statut != 'VALIDE' or instance.montant <= 0:
+        return
+    from eleves.models import Eleve
+    from .calculs import est_type_scolarite
+    if not est_type_scolarite(instance.type_paiement):
+        return
+    eleve = Eleve.objects.filter(
+        pk=instance.eleve_id, statut='EN_ATTENTE', est_dans_corbeille=False,
+        classe__annee_scolaire=instance.annee_scolaire,
+    ).first()
+    if eleve:
+        eleve.statut = 'ACTIF'
+        eleve.save(update_fields=['statut', 'date_modification'])

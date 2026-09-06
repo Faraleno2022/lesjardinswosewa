@@ -49,6 +49,7 @@ from .forms import (
 )
 from .allocation import (
     allocate_amount_sequentially,
+    allocate_cash_and_discounts,
     allocate_discounts,
     build_document_payment_allocation_history,
     due_balances,
@@ -59,7 +60,7 @@ from .calculs import (
     filtre_types_scolarite,
     normaliser_libelle,
 )
-from .services import calculer_situations_echeanciers
+from .services import calculer_situation_echeancier, calculer_situations_echeanciers
 from .remise_forms import PaiementRemiseForm, CalculateurRemiseForm
 from utilisateurs.utils import user_is_admin, user_is_superadmin, filter_by_user_school, user_school
 from utilisateurs.permissions import has_permission, get_user_permissions, can_add_payments, can_modify_payments, can_delete_payments, can_validate_payments, can_view_reports, can_apply_discounts
@@ -848,9 +849,6 @@ def _auto_validate_echeancier_for_eleve(
         today = _tz.localdate() if hasattr(_tz, 'localdate') else date.today()
         # Les champs *_paye représentent uniquement les encaissements réels.
         # Les remises participent au statut mais ne deviennent pas un encaissement.
-        cash_allocation, _, _ = allocate_amount_sequentially(
-            cash_to_allocate, due_balances(echeancier)
-        )
         discounts = (
             PaiementRemise.objects
             .filter(
@@ -862,12 +860,8 @@ def _auto_validate_echeancier_for_eleve(
             .select_related('paiement')
             .order_by('paiement__date_paiement', 'paiement_id', 'id')
         )
-        balances_after_cash = {
-            key: due_balances(echeancier)[key] - cash_allocation[key]
-            for key in due_balances(echeancier)
-        }
-        discount_allocation, _ = allocate_discounts(
-            echeancier, discounts, balances=balances_after_cash
+        cash_allocation, discount_allocation, _, _ = allocate_cash_and_discounts(
+            echeancier, cash_to_allocate, discounts,
         )
         couverture = sum(cash_allocation.values(), Decimal('0')) + sum(
             discount_allocation.values(), Decimal('0')
@@ -1551,17 +1545,18 @@ def liste_paiements(request):
             output_field=DecimalField(max_digits=12, decimal_places=0),
         )
     )
-    remises_expr = Coalesce(
-        Sum(
-            'eleve__paiements__remises__montant_remise',
-            filter=Q(
-                eleve__paiements__statut='VALIDE',
-                eleve__paiements__annee_scolaire=F('annee_scolaire'),
-            ) & filtre_types_scolarite('eleve__paiements__type_paiement'),
-        ),
-        Value(0),
-        output_field=DecimalField(max_digits=12, decimal_places=0),
-    )
+    # Agréger les remises séparément : joindre les versements aux échéanciers
+    # multiplie les frais dus lorsqu'un élève a plusieurs paiements ou remises.
+    remises_par_classe = {
+        row['paiement__eleve__classe_id']: int(row['total'] or 0)
+        for row in PaiementRemise.objects.filter(
+            paiement__eleve_id__in=eche_qs.values('eleve_id'),
+            paiement__statut='VALIDE',
+            paiement__annee_scolaire=F('paiement__eleve__classe__annee_scolaire'),
+        ).filter(
+            filtre_types_scolarite('paiement__type_paiement')
+        ).values('paiement__eleve__classe_id').annotate(total=Sum('montant_remise'))
+    }
     # Les deux postes sont strictement disjoints. La nature enregistrée sur
     # l'échéancier reste fiable même lorsque les deux tarifs sont identiques.
     money_field = DecimalField(max_digits=12, decimal_places=0)
@@ -1584,10 +1579,9 @@ def liste_paiements(request):
             Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
             output_field=DecimalField(max_digits=12, decimal_places=0),
         ),
-        remises=remises_expr,
     )
     dues_sco_total = int(aggr_du.get('dues_sco') or 0)
-    remises_total = int(aggr_du.get('remises') or 0)
+    remises_total = sum(remises_par_classe.values())
     du_sco_net = max(dues_sco_total - remises_total, 0)
     frais_inscription_total = int(
         eche_qs.aggregate(
@@ -1629,7 +1623,6 @@ def liste_paiements(request):
                 Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
                 output_field=DecimalField(max_digits=12, decimal_places=0),
             ),
-            remises_sum=remises_expr,
             frais_insc_sum=Coalesce(
                 Sum(F('insc_due'), output_field=DecimalField(max_digits=12, decimal_places=0)),
                 Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
@@ -1646,7 +1639,7 @@ def liste_paiements(request):
     totaux_du_detail_classes = []
     for row in detail_qs:
         dues = int(row.get('dues_sco_sum') or 0)
-        rem = int(row.get('remises_sum') or 0)
+        rem = remises_par_classe.get(row['eleve__classe__id'], 0)
         net_sco = max(dues - rem, 0)
         cnt = int(row.get('eleves_count') or 0)
         insc = int(row.get('frais_insc_sum') or 0)
@@ -3117,17 +3110,10 @@ def echeancier_eleve(request, eleve_id:int):
         today = date.today()
 
     finance_eleve = None
+    situation = None
     if echeancier:
-        remises_total = int(
-            PaiementRemise.objects
-            .filter(paiement__eleve=eleve, paiement__statut='VALIDE')
-            .aggregate(total=Coalesce(
-                Sum('montant_remise'),
-                Value(0, output_field=DecimalField(max_digits=12, decimal_places=0)),
-                output_field=DecimalField(max_digits=12, decimal_places=0),
-            ))
-            .get('total') or 0
-        )
+        situation = calculer_situation_echeancier(echeancier, date_reference=today)
+        remises_total = int(situation['remises'])
 
         postes = [
             {
@@ -3160,22 +3146,23 @@ def echeancier_eleve(request, eleve_id:int):
             },
         ]
         total_du = sum(poste['du'] for poste in postes)
-        total_paye_brut = sum(poste['paye'] for poste in postes)
+        total_paye_brut = int(situation['encaisse'])
         total_couvert = min(total_du, total_paye_brut + remises_total)
         reste_a_payer = max(total_du - total_couvert, 0)
         exigible = sum(poste['du'] for poste in postes if poste['echeance'] and poste['echeance'] < today)
-        retard_reel = max(exigible - total_couvert, 0)
+        retard_reel = int(situation['retard'])
         taux_paye = round((total_couvert / total_du * 100), 1) if total_du > 0 else 0
 
-        postes_non_soldes = [
-            {
-                **poste,
-                'reste': max(poste['du'] - poste['paye'], 0),
-                'en_retard': bool(poste['echeance'] and poste['echeance'] < today and poste['paye'] < poste['du']),
-            }
-            for poste in postes
-            if poste['du'] > poste['paye']
-        ]
+        postes_non_soldes = []
+        for poste in postes:
+            cle = poste['code'].lower()
+            reste = int(situation['restes_par_poste'][cle])
+            if reste > 0:
+                postes_non_soldes.append({
+                    **poste,
+                    'reste': reste,
+                    'en_retard': bool(poste['echeance'] and poste['echeance'] < today),
+                })
         postes_non_soldes.sort(key=lambda item: (not item['en_retard'], item['echeance'] or today))
         prochain_paiement = postes_non_soldes[0] if postes_non_soldes else None
 
@@ -3243,6 +3230,7 @@ def echeancier_eleve(request, eleve_id:int):
         'paiements': paiements,
         'today': today,
         'finance_eleve': finance_eleve,
+        'situation_paiement': situation,
     }
     return render(request, 'paiements/echeancier_eleve.html', context)
 
@@ -3843,47 +3831,30 @@ def generer_recu_pdf(request, paiement_id:int):
 
         # Restes à payer par tranche
         try:
-            def _reste(due, paye):
-                try:
-                    return max(0, int((due or 0) - (paye or 0)))
-                except Exception:
-                    return 0
-            # Calcul global basé sur les paiements validés et les remises de la même année.
-            try:
-                total_du = int((echeancier.frais_inscription_du or 0) + (echeancier.tranche_1_due or 0) + (echeancier.tranche_2_due or 0) + (echeancier.tranche_3_due or 0))
-            except Exception:
-                total_du = 0
-
-            try:
-                sum_montant, sum_remises = _sum_validated_payments_and_remises(
-                    paiement.eleve, paiement.annee_scolaire
+            situation_recu = calculer_situation_echeancier(echeancier)
+            restes_recu = situation_recu['restes_par_poste']
+            if paiement.statut == 'EN_ATTENTE' and est_type_scolarite(paiement.type_paiement):
+                remises_validees = list(PaiementRemise.objects.filter(
+                    paiement__eleve=paiement.eleve,
+                    paiement__annee_scolaire=paiement.annee_scolaire,
+                    paiement__statut='VALIDE',
+                ).filter(filtre_types_scolarite('paiement__type_paiement')).order_by(
+                    'paiement__date_paiement', 'paiement_id', 'id',
+                ))
+                # Aperçu du reçu en attente : mêmes règles que sa validation.
+                _, _, restes_recu, _ = allocate_cash_and_discounts(
+                    echeancier,
+                    situation_recu['encaisse'] + paiement.montant,
+                    remises_validees + list(paiement.remises.all()),
                 )
-            except Exception:
-                sum_montant = 0
-                sum_remises = 0
-
-            # Calcul de la couverture: montants payés + remises validées (les remises couvrent une partie du dû)
-            couverture_validee = max(0, int(sum_montant) + int(sum_remises))
-            # Inclure le paiement courant s'il n'est pas encore validé (montant + remises sur ce reçu)
-            try:
-                couverture_courante = max(0, int(paiement.montant) + int(remises_total or 0))
-            except Exception:
-                couverture_courante = 0
-            couverture_effective = couverture_validee + (couverture_courante if paiement.statut != 'VALIDE' else 0)
-            tout_solde = (total_du <= couverture_effective)
-            solde_global = max(0, int(total_du - couverture_effective))
-
+            solde_global = int(sum(restes_recu.values(), Decimal('0')))
             top -= 6
-            # Solde global restant
             draw_line(f"Solde global restant : {str(f'{solde_global:,}').replace(',', ' ')} GNF", bold=True)
             draw_line("Restes à payer par tranche", bold=True)
-            if tout_solde:
-                r_insc = r_t1 = r_t2 = r_t3 = 0
-            else:
-                r_insc = _reste(echeancier.frais_inscription_du, echeancier.frais_inscription_paye)
-                r_t1 = _reste(echeancier.tranche_1_due, echeancier.tranche_1_payee)
-                r_t2 = _reste(echeancier.tranche_2_due, echeancier.tranche_2_payee)
-                r_t3 = _reste(echeancier.tranche_3_due, echeancier.tranche_3_payee)
+            r_insc = int(restes_recu['inscription'])
+            r_t1 = int(restes_recu['tranche_1'])
+            r_t2 = int(restes_recu['tranche_2'])
+            r_t3 = int(restes_recu['tranche_3'])
             draw_line(f"{label_insc}: {str(f'{r_insc:,}').replace(',', ' ')} GNF")
             draw_line(f"1ère tranche: {str(f'{r_t1:,}').replace(',', ' ')} GNF")
             draw_line(f"2ème tranche: {str(f'{r_t2:,}').replace(',', ' ')} GNF")
@@ -4854,9 +4825,10 @@ def appliquer_remise_paiement(request, paiement_id:int):
         except Exception:
             ech = None
 
+    montant_brut = _montant_brut_paiement(paiement)
     if ech:
-        restes = remaining_balances(ech)
-        allocation_recu, _, _ = allocate_amount_sequentially(paiement.montant, restes)
+        restes = calculer_situation_echeancier(ech)['restes_par_poste']
+        allocation_recu, _, _ = allocate_amount_sequentially(montant_brut, restes)
     else:
         restes = {"tranche_1": Decimal('0'), "tranche_2": Decimal('0'), "tranche_3": Decimal('0')}
         allocation_recu = {"tranche_1": Decimal('0'), "tranche_2": Decimal('0'), "tranche_3": Decimal('0')}
@@ -4883,7 +4855,6 @@ def appliquer_remise_paiement(request, paiement_id:int):
     # Les tranches affichées ignorent les paiements en attente (les champs
     # *_payee ne bougent qu'à la validation). Sans ce plafond, l'écran propose
     # une base de remise que le contrôle final refusera systématiquement.
-    montant_brut = _montant_brut_paiement(paiement)
     plafond = _enveloppe_remise_disponible(paiement, ech, montant_brut)
 
     # Déduire la remise du reçu échange du cash contre de la remise : la

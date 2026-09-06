@@ -25,8 +25,7 @@ from ecole_moderne.pdf_utils import draw_logo_watermark
 from ecole_moderne.branding import get_pdf_palette
 
 from .allocation import (
-    allocate_amount_sequentially,
-    allocate_discounts,
+    allocate_cash_and_discounts,
     due_balances,
 )
 from .calculs import filtre_types_scolarite
@@ -83,22 +82,17 @@ def collecter_carnet_paiement(paiement):
     lignes = []
     total_encaisse = Decimal('0')
     total_remises = Decimal('0')
+    remises_cumulees = []
 
     for versement in paiements:
         total_encaisse += _decimal(versement.montant)
         reste = None
         if echeancier is not None:
-            allocation_remise, apres_remises = allocate_discounts(
-                echeancier,
-                list(versement.remises.all()),
-                balances=soldes,
+            remises_cumulees.extend(versement.remises.all())
+            _, allocation_remise, soldes, _ = allocate_cash_and_discounts(
+                echeancier, total_encaisse, remises_cumulees,
             )
-            total_remises += sum(
-                allocation_remise.values(), Decimal('0')
-            )
-            _, soldes, _ = allocate_amount_sequentially(
-                versement.montant, apres_remises
-            )
+            total_remises = sum(allocation_remise.values(), Decimal('0'))
             reste = sum(soldes.values(), Decimal('0'))
 
         lignes.append({
