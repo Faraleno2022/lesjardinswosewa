@@ -8,6 +8,7 @@
 {% endblock %}
 
 {% block page_actions %}
+    <a href="{% url 'eleves:repartir_eleves' %}" class="btn btn-outline-primary"><i class="fas fa-random me-1"></i>Répartir les élèves</a>
     <div>
         <a href="{% url 'eleves:liste_eleves' %}" class="btn btn-outline-secondary">
             <i class="fas fa-arrow-left me-1"></i>Retour aux élèves

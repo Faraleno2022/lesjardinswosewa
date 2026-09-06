@@ -11,6 +11,8 @@ from .views_nouvelle_annee import (
     changer_annee_active,
 )
 
+from .views_repartition import repartir_eleves
+
 app_name = 'eleves'
 
 urlpatterns = [
@@ -79,6 +81,7 @@ urlpatterns = [
     path('ajax/modifier-telephone-responsable/', views.ajax_modifier_telephone_responsable, name='ajax_modifier_telephone_responsable'),
     
     # Import/Export d'élèves
+    path('repartir/', repartir_eleves, name='repartir_eleves'),
     path('importer/', importer_eleves, name='importer_eleves'),
     path('template-eleves/', telecharger_template_eleves, name='telecharger_template_eleves'),
     path('exporter/classe/<int:classe_id>/', exporter_eleves_classe, name='exporter_eleves_classe'),

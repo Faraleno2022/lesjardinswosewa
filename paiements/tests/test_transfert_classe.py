@@ -3,7 +3,8 @@ from decimal import Decimal
 
 from django.db.models import Sum
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
+from django.urls import reverse
 
 from eleves.models import Classe, Ecole, Eleve, GrilleTarifaire
 from paiements.models import (
@@ -14,6 +15,7 @@ from paiements.models import (
     RemiseReduction,
     TypePaiement,
 )
+from paiements.tests.support import TEST_MIDDLEWARE
 from utilisateurs.models import Profil
 from utilisateurs.utils import filter_by_user_school
 
@@ -281,3 +283,118 @@ class TransfertClassePaiementTests(TestCase):
             Paiement.objects.all(), utilisateur, 'eleve__classe__ecole'
         )
         self.assertTrue(visibles.filter(pk=paiement.pk).exists())
+
+
+    def preparer_transfert_a_b_avec_remise(self):
+        classe_b = Classe.objects.create(
+            ecole=self.ecole, nom='7eme B', niveau='COLLEGE_7',
+            annee_scolaire='2025-2026',
+        )
+        premier = self.creer_paiement_valide('600000')
+        remise = RemiseReduction.objects.create(
+            nom='Bourse première tranche', type_remise='MONTANT_FIXE',
+            valeur=100000, motif='SOCIALE', date_debut=date(2025, 9, 1),
+            date_fin=date(2026, 8, 31),
+        )
+        ligne = PaiementRemise.objects.create(
+            paiement=premier, remise=remise, montant_remise=100000,
+            tranches_concernees='1', deduite_du_paiement=True,
+        )
+        second = self.creer_paiement_valide('400000')
+        return classe_b, premier, second, ligne
+
+    @override_settings(MIDDLEWARE=TEST_MIDDLEWARE)
+    def test_transfert_a_b_par_interface_conserve_solde_remise_et_actualise_cartes(self):
+        from paiements.services import calculer_situation_echeancier
+        from paiements.carnet_paiement import collecter_carnet_paiement
+        classe_b, premier, second, remise = self.preparer_transfert_a_b_avec_remise()
+        echeancier_id = self.echeancier.pk
+        numero_recu = premier.numero_recu
+        self.client.force_login(get_user_model().objects.create_superuser(
+            'transfert-a-b', 'transfert@example.test', 'secret',
+        ))
+        # Un autre élève de A ne doit pas changer de classe.
+        autre = Eleve.objects.create(
+            matricule='CN7-901', prenom='Moussa', nom='Bah', sexe='M',
+            classe=self.ancienne_classe,
+        )
+        response = self.client.post(reverse('eleves:repartir_eleves'), {
+            'eleve_id': self.eleve.pk, 'ancienne_classe_id': self.ancienne_classe.pk,
+            'classe_id': classe_b.pk, 'action': 'enregistrer',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.eleve.refresh_from_db()
+        autre.refresh_from_db()
+        self.echeancier.refresh_from_db()
+        premier.refresh_from_db()
+        remise.refresh_from_db()
+        self.assertEqual(self.eleve.classe_id, classe_b.pk)
+        self.assertEqual(autre.classe_id, self.ancienne_classe.pk)
+        self.assertEqual(self.eleve.echeanciers.count(), 1)
+        self.assertEqual(self.echeancier.pk, echeancier_id)
+        self.assertEqual(self.echeancier.total_du, 1500000)
+        self.assertEqual(self.echeancier.total_paye, 1000000)
+        self.assertEqual(self.echeancier.total_remises_valides, 100000)
+        self.assertEqual(self.echeancier.solde_restant, 400000)
+        self.assertEqual(premier.montant, 600000)
+        self.assertEqual(premier.numero_recu, numero_recu)
+        self.assertEqual(premier.classe_encaissement_id, self.ancienne_classe.pk)
+        self.assertEqual(remise.montant_remise, 100000)
+        self.assertEqual(calculer_situation_echeancier(self.echeancier)['reste'], 400000)
+        self.assertEqual(collecter_carnet_paiement(second)['reste_final'], 400000)
+        fiche = self.client.get(reverse('paiements:echeancier_eleve', args=[self.eleve.pk]))
+        self.assertEqual(fiche.context['finance_eleve']['reste_a_payer'], 400000)
+        dashboard = self.client.get(reverse('paiements:tableau_bord'))
+        classes = {c['classe_id']: c for c in dashboard.context['classes_a_risque']}
+        self.assertIn(classe_b.pk, classes)
+        self.assertNotIn(self.ancienne_classe.pk, classes)
+        self.assertEqual(classes[classe_b.pk]['total_encaisse'], 1000000)
+        self.assertEqual(classes[classe_b.pk]['reste'], 400000)
+        # Le retour B vers A ne doit rejouer ni l'admission ni la remise.
+        self.eleve.classe = self.ancienne_classe
+        self.eleve.save()
+        self.echeancier.refresh_from_db()
+        self.assertEqual(self.echeancier.solde_restant, 400000)
+        self.assertEqual(self.eleve.paiements.count(), 2)
+
+    def test_corrections_apres_transfert_a_b_recalculent_le_dossier_courant(self):
+        classe_b, premier, second, remise = self.preparer_transfert_a_b_avec_remise()
+        self.eleve.classe = classe_b
+        self.eleve.save()
+        second.montant = 300000
+        second.save()
+        self.echeancier.refresh_from_db()
+        self.assertEqual(self.echeancier.total_paye, 900000)
+        self.assertEqual(self.echeancier.total_remises_valides, 100000)
+        self.assertEqual(self.echeancier.solde_restant, 500000)
+        premier.statut = 'ANNULE'
+        premier.save()
+        self.echeancier.refresh_from_db()
+        self.assertEqual(self.echeancier.total_paye, 300000)
+        self.assertEqual(self.echeancier.total_remises_valides, 0)
+        self.assertEqual(self.echeancier.solde_restant, 1200000)
+        premier.statut = 'VALIDE'
+        premier.save()
+        second.delete()
+        self.echeancier.refresh_from_db()
+        self.assertEqual(self.echeancier.total_paye, 600000)
+        self.assertEqual(self.echeancier.total_remises_valides, 100000)
+        self.assertEqual(self.echeancier.solde_restant, 800000)
+        self.eleve.refresh_from_db()
+        self.assertEqual(self.eleve.classe_id, classe_b.pk)
+
+    def test_transfert_a_b_conserve_le_tarif_de_reinscription(self):
+        classe_b, premier, second, remise = self.preparer_transfert_a_b_avec_remise()
+        premier.type_paiement = TypePaiement.objects.create(
+            nom='Réinscription et scolarité', categorie='SCOLARITE',
+        )
+        premier.save()
+        self.eleve.classe = classe_b
+        self.eleve.save()
+        self.echeancier.refresh_from_db()
+        self.assertEqual(self.echeancier.nature_frais, 'REINSCRIPTION')
+        self.assertEqual(self.echeancier.frais_inscription_du, 75000)
+        self.assertEqual(self.echeancier.total_du, 1475000)
+        self.assertEqual(self.echeancier.total_paye, 1000000)
+        self.assertEqual(self.echeancier.total_remises_valides, 100000)
+        self.assertEqual(self.echeancier.solde_restant, 375000)

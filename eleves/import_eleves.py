@@ -305,7 +305,7 @@ class ImportElevesProcessor:
                         if resultat['type'] == 'creer':
                             eleves_a_creer.append(resultat['eleve'])
                             if 'responsables' in resultat:
-                                responsables_a_creer.extend(resultat['responsables'])
+                                responsables_a_creer.extend(resultat['responsables'] or [])
                         elif resultat['type'] == 'modifier':
                             eleves_a_modifier.append(resultat['eleve'])
                     
@@ -343,6 +343,12 @@ class ImportElevesProcessor:
                 )
                 self.stats['modifies'] += len(eleves_a_modifier)
         
+        # Relire les identifiants : certains moteurs ne les renvoient pas
+        # directement après bulk_create.
+        matricules = [e.matricule for e in eleves_a_creer + eleves_a_modifier]
+        self.eleves_importes = list(Eleve.objects.filter(
+            classe=classe, matricule__in=matricules,
+        ).values_list('pk', flat=True))
         return self.stats
     
     def _preparer_eleve(self, row, classe, numero_ordre, matricules_existants, responsables_dict, eleves_existants):
@@ -396,7 +402,7 @@ class ImportElevesProcessor:
             eleve_existant.lieu_naissance = lieu_naissance
             eleve_existant.responsable_principal = responsable
             eleve_existant.responsable_secondaire = responsable_secondaire
-            eleve_existant.statut = 'ACTIF'
+            # Une réimportation conserve le statut du dossier existant.
             
             return {'type': 'modifier', 'eleve': eleve_existant}
         else:
@@ -410,7 +416,7 @@ class ImportElevesProcessor:
                 lieu_naissance=lieu_naissance,
                 classe=classe,
                 date_inscription=datetime.now().date(),
-                statut='ACTIF'
+                statut='EN_ATTENTE'
             )
             
             # Stocker les téléphones pour lier après bulk_create des responsables

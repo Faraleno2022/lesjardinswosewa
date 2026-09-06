@@ -653,7 +653,7 @@ class EcheancierPaiement(SyncTrackedModel):
         dépasser le reste dû de ses tranches cibles. Cette propriété conserve
         ainsi la même règle que les vues, reçus, exports et relances.
         """
-        from .allocation import allocate_discounts
+        from .allocation import allocate_cash_and_discounts
         from .calculs import filtre_types_scolarite
 
         remises = (
@@ -667,7 +667,7 @@ class EcheancierPaiement(SyncTrackedModel):
             .select_related('paiement')
             .order_by('paiement__date_paiement', 'paiement_id', 'id')
         )
-        allocation, _ = allocate_discounts(self, remises)
+        _, allocation, _, _ = allocate_cash_and_discounts(self, self.total_paye, remises)
         return sum(allocation.values(), Decimal('0'))
 
     @property

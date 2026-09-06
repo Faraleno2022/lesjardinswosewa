@@ -449,6 +449,7 @@ class Eleve(SyncTrackedModel):
     ]
     
     STATUT_CHOICES = [
+        ('EN_ATTENTE', 'En attente du premier paiement'),
         ('ACTIF', 'Actif'),
         ('SUSPENDU', 'Suspendu'),
         ('EXCLU', 'Exclu'),

@@ -247,3 +247,35 @@ class RecalculApresSuppressionEtModificationTests(TestCase):
             "une suppression recue par synchronisation doit recalculer le solde "
             "exactement comme une suppression locale",
         )
+
+    def test_reaffecter_une_remise_recalcule_ancienne_et_nouvelle_annee(self):
+        autre = EcheancierPaiement.objects.get(pk=self.echeancier.pk)
+        import uuid
+        autre.pk = None
+        autre.sync_uuid = uuid.uuid4()
+        autre.annee_scolaire = '2027-2028'
+        autre.save()
+        premier = self._payer(900000)
+        second = Paiement.objects.create(
+            eleve=self.eleve, type_paiement=self.type_scolarite,
+            mode_paiement=self.mode, montant=900000,
+            date_paiement=date.today(), annee_scolaire='2027-2028', statut='VALIDE',
+        )
+        remise = RemiseReduction.objects.create(
+            nom='Remise à réaffecter', type_remise='MONTANT_FIXE', valeur=100000,
+            motif='SOCIALE', date_debut=date.today(),
+            date_fin=date.today() + timedelta(days=365),
+        )
+        ligne = PaiementRemise.objects.create(
+            paiement=premier, remise=remise, montant_remise=100000,
+        )
+        self.assertEqual(self._rafraichir().statut, 'PAYE_COMPLET')
+        ligne.paiement = second
+        ligne.save(update_fields=['paiement'])
+        ancien = self._rafraichir()
+        autre.refresh_from_db()
+        self.assertEqual(ancien.total_paye, Decimal('900000'))
+        self.assertEqual(ancien.solde_restant, Decimal('100000'))
+        self.assertEqual(ancien.statut, 'PAYE_PARTIEL')
+        self.assertEqual(autre.solde_restant, 0)
+        self.assertEqual(autre.statut, 'PAYE_COMPLET')

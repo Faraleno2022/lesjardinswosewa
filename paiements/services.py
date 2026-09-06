@@ -8,7 +8,7 @@ from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 
-from .allocation import allocate_amount_sequentially, allocate_discounts, due_balances
+from .allocation import allocate_cash_and_discounts, due_balances
 from .calculs import filtre_types_scolarite, normaliser_libelle
 from .models import EcheancierPaiement, Paiement, PaiementRemise
 
@@ -23,11 +23,8 @@ def _situation(echeancier, cash_total, remises, date_reference, date_limite):
             Decimal(str(cash_total)),
             Decimal(str(echeancier.total_paye or 0)),
         )
-    cash_allocation, balances_after_cash, _ = allocate_amount_sequentially(
-        cash_total, due_balances(echeancier)
-    )
-    discount_allocation, net_balances = allocate_discounts(
-        echeancier, remises, balances=balances_after_cash
+    cash_allocation, discount_allocation, net_balances, _ = allocate_cash_and_discounts(
+        echeancier, cash_total, remises,
     )
 
     dates = {
@@ -240,14 +237,6 @@ def _synchroniser_couverture_transfert(echeancier, *, conserver_saisie_manuelle)
         if conserver_saisie_manuelle
         else total_valide
     )
-    allocation, soldes_apres_encaissement, credit = allocate_amount_sequentially(
-        encaissement, due_balances(echeancier)
-    )
-    echeancier.frais_inscription_paye = allocation['inscription']
-    echeancier.tranche_1_payee = allocation['tranche_1']
-    echeancier.tranche_2_payee = allocation['tranche_2']
-    echeancier.tranche_3_payee = allocation['tranche_3']
-
     remises = (
         PaiementRemise.objects.filter(
             paiement__eleve_id=echeancier.eleve_id,
@@ -258,9 +247,13 @@ def _synchroniser_couverture_transfert(echeancier, *, conserver_saisie_manuelle)
         .select_related('paiement')
         .order_by('paiement__date_paiement', 'paiement_id', 'pk')
     )
-    allocation_remises, soldes_nets = allocate_discounts(
-        echeancier, remises, balances=soldes_apres_encaissement
+    allocation, allocation_remises, soldes_nets, credit = allocate_cash_and_discounts(
+        echeancier, encaissement, remises,
     )
+    echeancier.frais_inscription_paye = allocation['inscription']
+    echeancier.tranche_1_payee = allocation['tranche_1']
+    echeancier.tranche_2_payee = allocation['tranche_2']
+    echeancier.tranche_3_payee = allocation['tranche_3']
 
     total_du = sum(due_balances(echeancier).values(), Decimal('0'))
     couverture = sum(allocation.values(), Decimal('0')) + sum(
