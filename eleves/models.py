@@ -237,33 +237,8 @@ def _code_classe_from_nom_ou_niveau(classe: "Classe") -> str:
         except Exception:
             return ""
 
-# --- Helper: Normalize school prefix like 'AL-FUR/' and avoid duplicates 'AL-FUR/AL-FUR/' ---
-def _normalize_code_prefixe(value: str) -> str:
-    """Normalize a school code prefix:
-    - Trim spaces
-    - Split on '/'
-    - Remove empty parts
-    - Collapse immediate duplicate segments (e.g., ['AL-FUR','AL-FUR'] -> ['AL-FUR'])
-    - Join back with one '/'
-    - Ensure trailing '/'
-    """
-    try:
-        s = (value or "").strip()
-        if not s:
-            return ""
-        parts = [p.strip() for p in s.split('/') if p.strip()]
-        # Collapse duplicates
-        normalized_parts = []
-        for p in parts:
-            if not normalized_parts or normalized_parts[-1] != p:
-                normalized_parts.append(p)
-        if not normalized_parts:
-            return ""
-        return "/".join(normalized_parts).rstrip('/') + "/"
-    except Exception:
-        return ""
-
     nom_norm = _normalize_nom(getattr(classe, 'nom', ''))
+    mapping_nom = {_normalize_nom(nom): code for nom, code in mapping_nom.items()}
     code = mapping_nom.get(nom_norm, "")
     if code:
         return code
@@ -334,6 +309,34 @@ def _normalize_code_prefixe(value: str) -> str:
 
     # Dernier recours: vide → le save() appliquera le fallback CL{id}
     return ""
+
+
+# --- Helper: Normalize school prefix like 'AL-FUR/' and avoid duplicates 'AL-FUR/AL-FUR/' ---
+def _normalize_code_prefixe(value: str) -> str:
+    """Normalize a school code prefix:
+    - Trim spaces
+    - Split on '/'
+    - Remove empty parts
+    - Collapse immediate duplicate segments (e.g., ['AL-FUR','AL-FUR'] -> ['AL-FUR'])
+    - Join back with one '/'
+    - Ensure trailing '/'
+    """
+    try:
+        s = (value or "").strip()
+        if not s:
+            return ""
+        parts = [p.strip() for p in s.split('/') if p.strip()]
+        # Collapse duplicates
+        normalized_parts = []
+        for p in parts:
+            if not normalized_parts or normalized_parts[-1] != p:
+                normalized_parts.append(p)
+        if not normalized_parts:
+            return ""
+        return "/".join(normalized_parts).rstrip('/') + "/"
+    except Exception:
+        return ""
+
 
 class Responsable(SyncTrackedModel):
     """Modèle pour représenter un responsable d'élève"""

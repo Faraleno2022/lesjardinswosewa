@@ -7,10 +7,14 @@ proposait malgré tout une base de 1 200 000 GNF avant de se faire refuser par
 le contrôle final.
 """
 
+from unittest.mock import patch
+from urllib.parse import quote
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import escape
 
 from eleves.models import Ecole, Classe, Responsable, Eleve
 from paiements.models import (
@@ -19,8 +23,11 @@ from paiements.models import (
     ModePaiement,
     Paiement,
     PaiementRemise,
+    RemiseReduction,
     TypePaiement,
 )
+from paiements.services import calculer_situation_echeancier
+from paiements.views import _enveloppe_remise_disponible
 from .support import TEST_MIDDLEWARE
 
 
@@ -104,7 +111,7 @@ class RemisePlafonneeParLesEncaissementsTests(TestCase):
         )
         return paiement
 
-    def _poster_remise(self, paiement, pourcentage, tranches=("1", "2"), reduire=False):
+    def _poster_remise(self, paiement, pourcentage, tranches=("1", "2"), reduire=False, next_url=""):
         donnees = {
             "montant_original": paiement.montant,
             "pourcentage_scolarite": str(pourcentage),
@@ -114,6 +121,7 @@ class RemisePlafonneeParLesEncaissementsTests(TestCase):
         }
         if reduire:
             donnees["reduire_paiement"] = "1"
+        donnees["next"] = next_url
         return self.client.post(self.url, donnees)
 
     # --- Reçu au montant brut : l'année est déjà soldée ---------------------
@@ -323,3 +331,73 @@ class RemisePlafonneeParLesEncaissementsTests(TestCase):
             for ligne in PaiementRemise.objects.filter(paiement=second)
         )
         self.assertEqual(int(total), 20000)
+
+    def _etat_financier(self):
+        """Comparer aussi les remises existantes, les soldes et l'historique."""
+        self.echeancier.refresh_from_db()
+        return {
+            "tables": {
+                model._meta.label: list(model.objects.order_by("pk").values())
+                for model in (
+                    Paiement, PaiementRemise, RemiseReduction,
+                    EcheancierPaiement, HistoriqueModificationPaiement, Eleve,
+                )
+            },
+            "situation": calculer_situation_echeancier(self.echeancier),
+        }
+
+    def test_refus_final_conserve_tous_les_montants_et_le_retour(self):
+        paiement = self._creer_paiement(600000)
+        initiale = self._poster_remise(paiement, 10, reduire=True)
+        self.assertRedirects(initiale, reverse("paiements:detail_paiement", args=[paiement.pk]))
+        self.client.get(initiale.url)  # Consommer le message de la remise initiale.
+        paiement.refresh_from_db()
+        self.assertEqual(paiement.montant, 480000)
+        ancien_plafond = _enveloppe_remise_disponible(paiement, self.echeancier, 600000)
+
+        # Un autre encaissement rend le plafond initial obsolete. Le controle
+        # final doit refuser et annuler toutes les ecritures deja tentees.
+        self._creer_paiement(700000)
+        self.url = reverse("paiements:appliquer_remise", args=[paiement.pk])
+        avant = self._etat_financier()
+        destination = "/eleves/ajouter/?classe=1&origine=import"
+        for reduire in (False, True):
+            with self.subTest(reduire=reduire):
+                with patch("paiements.views._enveloppe_remise_disponible", return_value=ancien_plafond):
+                    resp = self._poster_remise(paiement, 5, reduire=reduire, next_url=destination)
+                self.assertRedirects(
+                    resp,
+                    reverse("paiements:detail_paiement", args=[paiement.pk])
+                    + "?next=" + quote(destination),
+                    fetch_redirect_response=False,
+                )
+                self.assertEqual(self._etat_financier(), avant)
+                page = self.client.get(resp.url)
+                self.assertContains(page, "Remise refusée : paiements et remises dépasseraient")
+                self.assertNotContains(page, "Remises appliquées:")
+
+    def test_refus_recu_a_zero_preserve_la_remise_existante(self):
+        paiement = self._creer_paiement(600000)
+        initiale = self._poster_remise(paiement, 10, reduire=True)
+        self.assertRedirects(initiale, reverse("paiements:detail_paiement", args=[paiement.pk]))
+        self.client.get(initiale.url)  # Consommer le message de la remise initiale.
+        paiement.refresh_from_db()
+        avant = self._etat_financier()
+        resp = self._poster_remise(paiement, 100, reduire=True)
+        self.assertRedirects(
+            resp, reverse("paiements:detail_paiement", args=[paiement.pk]),
+            fetch_redirect_response=False,
+        )
+        self.assertEqual(self._etat_financier(), avant)
+        self.assertContains(self.client.get(resp.url), "La remise couvre la totalité du reçu")
+
+    def test_refus_sans_marge_preserve_tous_les_montants(self):
+        paiement = self._creer_paiement(1250000)
+        initiale = self._poster_remise(paiement, 10, reduire=True)
+        self.assertRedirects(initiale, reverse("paiements:detail_paiement", args=[paiement.pk]))
+        self.client.get(initiale.url)  # Consommer le message de la remise initiale.
+        paiement.refresh_from_db()
+        avant = self._etat_financier()
+        resp = self._poster_remise(paiement, 20, reduire=False)
+        self.assertContains(resp, escape("Aucune remise ne peut s'ajouter à ce reçu"))
+        self.assertEqual(self._etat_financier(), avant)

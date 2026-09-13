@@ -413,7 +413,7 @@
         
         const formData = new FormData(this);
         
-        fetch('{% url "depenses:gestion_fournisseurs" %}', {
+        fetch(this.action, {
             method: 'POST',
             body: formData,
             headers: {

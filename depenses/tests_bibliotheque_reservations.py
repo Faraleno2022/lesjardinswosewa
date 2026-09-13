@@ -104,6 +104,9 @@ class ReservationsBibliothequeTests(TestCase):
             },
         )
         self.client.force_login(self.user)
+        session = self.client.session
+        session["phone_verified"] = True
+        session.save()
 
         self.categorie = CategorieLivre.objects.create(
             nom='Romans', code='ROM-BIB'
