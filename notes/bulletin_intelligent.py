@@ -34,6 +34,7 @@ from eleves.models import Eleve, Classe
 from .models import ClasseNote, MatiereNote, Evaluation, NoteEleve
 # Import du module centralisé pour garantir la cohérence
 from .calculs_moyennes import (
+    detecter_niveau_scolaire,
     calculer_moyenne_generale_eleve,
     calculer_classement_classe,
     obtenir_mention_intelligente,
@@ -1490,7 +1491,10 @@ def generer_excel(bulletin_data):
 def bulletin_intelligent_view(request, eleve_id, classe_note_id, periode):
     """Vue pour afficher le bulletin intelligent"""
     eleve = get_object_or_404(Eleve, pk=eleve_id)
-    classe_note = get_object_or_404(ClasseNote, pk=classe_note_id)
+    classe_note = get_object_or_404(
+        filter_by_user_school(ClasseNote.objects.all(), request.user),
+        pk=classe_note_id,
+    )
     
     # Déterminer le système
     systeme = 'SEMESTRE' if 'SEMESTRE' in periode else 'TRIMESTRE'
@@ -1519,7 +1523,10 @@ def bulletin_intelligent_view(request, eleve_id, classe_note_id, periode):
 def bulletin_intelligent_pdf(request, eleve_id, classe_note_id, periode):
     """Génère le bulletin en PDF avec filigrane"""
     eleve = get_object_or_404(Eleve, pk=eleve_id)
-    classe_note = get_object_or_404(ClasseNote, pk=classe_note_id)
+    classe_note = get_object_or_404(
+        filter_by_user_school(ClasseNote.objects.all(), request.user),
+        pk=classe_note_id,
+    )
     
     # Déterminer le système et le type de système pour l'affichage
     systeme = 'SEMESTRE' if 'SEMESTRE' in periode else 'TRIMESTRE'
@@ -1654,7 +1661,10 @@ def bulletin_intelligent_excel(request, eleve_id, classe_note_id, periode):
         return HttpResponse("Excel export n'est pas disponible", status=500)
     
     eleve = get_object_or_404(Eleve, pk=eleve_id)
-    classe_note = get_object_or_404(ClasseNote, pk=classe_note_id)
+    classe_note = get_object_or_404(
+        filter_by_user_school(ClasseNote.objects.all(), request.user),
+        pk=classe_note_id,
+    )
     
     # Déterminer le système
     systeme = 'SEMESTRE' if 'SEMESTRE' in periode else 'TRIMESTRE'
@@ -1685,7 +1695,10 @@ def bulletins_classe_pdf(request, classe_note_id, periode):
     """Génère tous les bulletins d'une classe en un seul PDF - VERSION OPTIMISÉE"""
     import re
     
-    classe_note = get_object_or_404(ClasseNote, pk=classe_note_id)
+    classe_note = get_object_or_404(
+        filter_by_user_school(ClasseNote.objects.all(), request.user),
+        pk=classe_note_id,
+    )
     
     # Récupérer tous les élèves de la classe
     classe_eleve = Classe.objects.filter(

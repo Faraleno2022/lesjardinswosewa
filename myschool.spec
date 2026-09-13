@@ -2,6 +2,7 @@
 """Construction PyInstaller de l'application Windows MySchoolGN."""
 
 import os
+from importlib.metadata import distribution
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
@@ -25,6 +26,15 @@ PROJECT_PACKAGES = [
 ]
 
 datas = []
+# Les roues recentes de charset-normalizer placent le module mypyc partage
+# a la racine de site-packages, sous un nom calcule. Le hook standard ne le
+# trouve pas : les extensions cd/md echouent alors au demarrage de Requests.
+binaries = []
+charset_distribution = distribution('charset-normalizer')
+for entry in charset_distribution.files or []:
+    if '__mypyc' in entry.name and entry.suffix in {'.pyd', '.so'}:
+        binaries.append((str(charset_distribution.locate_file(entry)), '.'))
+
 for source, destination in [
     ('templates', 'templates'),
     ('static', 'static'),
@@ -74,7 +84,7 @@ icon = icon_path if os.path.exists(icon_path) else None
 a = Analysis(
     [os.path.join(PROJECT_DIR, 'run_server.py')],
     pathex=[PROJECT_DIR],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],

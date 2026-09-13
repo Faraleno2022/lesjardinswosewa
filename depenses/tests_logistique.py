@@ -60,6 +60,9 @@ class LogistiqueSimplifieeTests(TestCase):
             },
         )
         self.client.force_login(self.user)
+        session = self.client.session
+        session["phone_verified"] = True
+        session.save()
 
     def test_bien_calcule_disponible_et_valeur_achat(self):
         bien = BienEtablissement.objects.create(

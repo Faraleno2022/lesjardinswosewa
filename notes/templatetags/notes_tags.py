@@ -62,3 +62,10 @@ def get_commentaire(note_obj):
     if note_obj is None:
         return ''
     return note_obj.commentaire if hasattr(note_obj, 'commentaire') else ''
+
+
+@register.filter
+def split(value, separator=","):
+    """Liste de valeurs utilisée par les périodes de saisie."""
+    text = str(value or "")
+    return text.split(separator) if separator else [text]

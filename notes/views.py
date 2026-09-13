@@ -1,7 +1,8 @@
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib import messages
-from django.http import HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Q, Avg, Count, Sum
 from django.core.paginator import Paginator
 from django.core.cache import cache
@@ -11,6 +12,9 @@ from django.db import IntegrityError
 from django.views.decorators.http import require_POST
 from decimal import Decimal, InvalidOperation
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 import os
 import io
 from datetime import datetime
@@ -30,6 +34,10 @@ from .calculs_intelligent import (
     formater_rang_intelligent,
 )
 from .classes_utils import trouver_classe_eleve
+from .saisie_services import (
+    enregistrer_appreciations, enregistrer_notes_en_lot,
+    enregistrer_notes_guineennes, verifier_cible_saisie,
+)
 
 # Import centralisé du filigrane - chargé une seule fois
 try:
@@ -5585,22 +5593,8 @@ def saisir_notes(request):
             # Récupérer les élèves
             try:
                 # Mapping spécial pour les classes avec noms différents (même que consulter_notes)
-                mapping_classes = {
-                    61: 56,  # ClasseNote '12ème Année' -> ClasseEleve '12ÈME ANNÉE'
-                    59: 8,   # ClasseNote '11ème Série littéraire' -> ClasseEleve '11ème série littéraire'
-                }
                 
-                if classe_selectionnee.id in mapping_classes:
-                    classe_eleve = ClasseEleve.objects.filter(
-                        id=mapping_classes[classe_selectionnee.id]
-                    ).first()
-                else:
-                    # Utiliser filter().first() au lieu de get() pour éviter MultipleObjectsReturned
-                    classe_eleve = ClasseEleve.objects.filter(
-                        nom=classe_selectionnee.nom,
-                        annee_scolaire=classe_selectionnee.annee_scolaire,
-                        ecole=classe_selectionnee.ecole  # Filtrer par l'école de la classe
-                    ).first()
+                classe_eleve = trouver_classe_eleve(classe_selectionnee)
                 
                 if classe_eleve:
                     eleves = Eleve.objects.filter(
@@ -5846,21 +5840,8 @@ def liste_saisie_pdf(request):
         note_sur = 20
     
     # Récupérer les élèves avec mapping spécial (même logique que saisir_notes et consulter_notes)
-    mapping_classes = {
-        61: 56,  # ClasseNote '12ème Année' -> ClasseEleve '12ÈME ANNÉE'
-        59: 8,   # ClasseNote '11ème Série littéraire' -> ClasseEleve '11ème série littéraire'
-    }
     
-    if classe.id in mapping_classes:
-        classe_eleve = ClasseEleve.objects.filter(
-            id=mapping_classes[classe.id]
-        ).first()
-    else:
-        classe_eleve = ClasseEleve.objects.filter(
-            nom=classe.nom,
-            annee_scolaire=classe.annee_scolaire,
-            ecole=classe.ecole
-        ).first()
+    classe_eleve = trouver_classe_eleve(classe)
     
     if classe_eleve:
         eleves = Eleve.objects.filter(classe=classe_eleve, statut='ACTIF').order_by('prenom', 'nom')
@@ -5982,25 +5963,8 @@ def fiche_saisie_notes_pdf(request):
         except Exception:
             pass
 
-    mapping_classes = {
-        61: 56,
-        59: 8,
-    }
 
-    if classe.id in mapping_classes:
-        classe_eleve = ClasseEleve.objects.filter(id=mapping_classes[classe.id]).first()
-    else:
-        classe_eleve = ClasseEleve.objects.filter(
-            nom=classe.nom,
-            annee_scolaire=classe.annee_scolaire,
-            ecole=classe.ecole
-        ).first()
-
-        if not classe_eleve:
-            classe_eleve = ClasseEleve.objects.filter(
-                nom__iexact=classe.nom,
-                annee_scolaire=classe.annee_scolaire
-            ).first()
+    classe_eleve = trouver_classe_eleve(classe)
 
     eleves = []
     if classe_eleve:
@@ -6089,25 +6053,8 @@ def fiche_report_notes_pdf(request):
 
     matieres = list(MatiereNote.objects.filter(classe=classe, actif=True).order_by('nom'))
 
-    mapping_classes = {
-        61: 56,
-        59: 8,
-    }
 
-    if classe.id in mapping_classes:
-        classe_eleve = ClasseEleve.objects.filter(id=mapping_classes[classe.id]).first()
-    else:
-        classe_eleve = ClasseEleve.objects.filter(
-            nom=classe.nom,
-            annee_scolaire=classe.annee_scolaire,
-            ecole=classe.ecole
-        ).first()
-
-        if not classe_eleve:
-            classe_eleve = ClasseEleve.objects.filter(
-                nom__iexact=classe.nom,
-                annee_scolaire=classe.annee_scolaire
-            ).first()
+    classe_eleve = trouver_classe_eleve(classe)
 
     eleves = []
     if classe_eleve:
@@ -6261,294 +6208,27 @@ def imprimer_tableau_notes_pdf(request):
         return HttpResponse(f"Erreur: {str(e)}", status=500)
 
 @login_required
+@can_manage_notes
 def sauvegarder_notes(request):
-    """Sauvegarder les notes saisies avec support des transactions"""
-    from django.http import JsonResponse
-    from eleves.models import Eleve
-    from django.db import transaction
-    import json
-    from decimal import Decimal, InvalidOperation
-    import logging
-    
-    logger = logging.getLogger(__name__)
-    
+    """Valide la saisie complète avant de l'enregistrer."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Méthode non autorisée'}, status=405)
-    
     try:
-        data = json.loads(request.body)
-        notes_data = data.get('notes', [])
-        evaluation_id = data.get('evaluation_id')
-        matiere_id = data.get('matiere_id')
-        periode = data.get('periode')
-        
-        # Validation des paramètres
-        if not all([matiere_id, periode]):
-            return JsonResponse({'success': False, 'error': 'Paramètres manquants (matière ou période)'}, status=400)
-        
-        # Récupérer la matière
-        matiere = get_object_or_404(MatiereNote, pk=matiere_id)
-        
-        # Sécurité : Vérifier que la matière appartient à l'école de l'utilisateur
-        user_profil = getattr(request.user, 'profil', None)
-        ecole = user_profil.ecole if user_profil else None
-        if ecole and matiere.classe.ecole != ecole:
-            return JsonResponse({'success': False, 'error': 'Accès non autorisé'}, status=403)
-        
-        # Détecter si c'est une classe de maternelle (appréciations uniquement)
-        from .calculs_moyennes import detecter_niveau_scolaire
-        niveau_detecte = detecter_niveau_scolaire(matiere.classe.nom)
-        est_maternelle = (niveau_detecte == 'MATERNELLE')
-        
-        # Vérifier si c'est une sauvegarde d'appréciations
-        est_appreciation = any('appreciation' in note_data for note_data in notes_data)
-        
-        # Pour les appréciations (maternelle), on n'a pas besoin d'évaluation
-        evaluation = None
-        if not est_appreciation and not est_maternelle:
-            # Créer l'évaluation si elle n'existe pas (pour les notes numériques uniquement)
-            if not evaluation_id:
-                # Déterminer le type d'évaluation selon la période
-                if periode in ['OCTOBRE', 'NOVEMBRE', 'DECEMBRE', 'JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN']:
-                    type_eval = 'DEVOIR'
-                    titre_eval = f"Note {periode.capitalize()} - {matiere.nom}"
-                elif periode.startswith('TRIMESTRE'):
-                    type_eval = 'COMPOSITION'
-                    titre_eval = f"Composition {periode.replace('_', ' ')} - {matiere.nom}"
-                else:
-                    type_eval = 'COMPOSITION'
-                    titre_eval = f"Composition {periode.replace('_', ' ')} - {matiere.nom}"
-                
-                # Utiliser le coefficient de la matière, ou 1 par défaut si None
-                coef = matiere.coefficient if matiere.coefficient is not None else 1
-                
-                # Utiliser filter().first() pour éviter MultipleObjectsReturned
-                evaluation = Evaluation.objects.filter(
-                    matiere=matiere,
-                    periode=periode
-                ).first()
-                if not evaluation:
-                    evaluation = Evaluation.objects.create(
-                        matiere=matiere,
-                        periode=periode,
-                        titre=titre_eval,
-                        type_evaluation=type_eval,
-                        date_evaluation=timezone.now().date(),
-                        note_sur=20 if matiere.classe.niveau_enseignement == 'SECONDAIRE' else 10,
-                        coefficient=coef,
-                        cree_par=request.user,
-                    )
-                    logger.info(f"Évaluation créée: {evaluation.id}")
-                else:
-                    logger.info(f"Évaluation récupérée: {evaluation.id}")
-            else:
-                evaluation = get_object_or_404(Evaluation, pk=evaluation_id)
-        
-        notes_sauvegardees = 0
-        notes_modifiees = 0
-        erreurs = []
-        notes_details = []
-        
-        # Utiliser une transaction pour garantir l'intégrité des données
-        with transaction.atomic():
-            for note_data in notes_data:
-                try:
-                    eleve_id = note_data.get('eleve_id')
-                    absent = note_data.get('absent', False)
-                    
-                    if not eleve_id:
-                        continue
-                    
-                    # Nettoyer l'ID des caractères non numériques (espaces insécables, etc.)
-                    import re
-                    eleve_id_clean = re.sub(r'[^\d]', '', str(eleve_id))
-                    if not eleve_id_clean:
-                        erreurs.append(f"ID élève invalide: {eleve_id}")
-                        continue
-                    
-                    eleve = Eleve.objects.get(pk=int(eleve_id_clean))
-                    
-                    # Traiter selon le type de note
-                    if 'appreciation' in note_data:
-                        # Appréciation (pour maternelle) - utiliser AppreciationMaternelle
-                        from notes.models import AppreciationMaternelle
-                        
-                        appreciation = note_data.get('appreciation', '').strip()
-                        commentaire = note_data.get('commentaire', '').strip()
-                        
-                        if not appreciation and not absent:
-                            continue
-                        
-                        # Déterminer le trimestre depuis la période
-                        trimestre = periode if periode.startswith('TRIMESTRE') else 'TRIMESTRE_1'
-                        
-                        note_obj, created = AppreciationMaternelle.objects.update_or_create(
-                            eleve=eleve,
-                            matiere=matiere,
-                            trimestre=trimestre,
-                            annee_scolaire=matiere.classe.annee_scolaire,
-                            defaults={
-                                'appreciation': appreciation if appreciation else None,
-                                'commentaire': commentaire if commentaire else None,
-                                'absent': absent,
-                                'cree_par': request.user,
-                            }
-                        )
-                    else:
-                        # Note numérique
-                        note_value = str(note_data.get('note', '')).strip()
-                        
-                        # Définir les périodes par type
-                        periodes_mensuelles = ['OCTOBRE', 'NOVEMBRE', 'DECEMBRE', 'JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN']
-                        periodes_trimestrielles = ['TRIMESTRE_1', 'TRIMESTRE_2', 'TRIMESTRE_3']
-                        periodes_semestrielles = ['SEMESTRE_1', 'SEMESTRE_2']
-                        
-                        # Déterminer la note maximale
-                        note_sur = 20
-                        if matiere.classe.niveau_enseignement == 'PRIMAIRE':
-                            note_sur = 10
-                        
-                        # Valider la note
-                        note_decimal = None
-                        if note_value and not absent:
-                            try:
-                                note_decimal = Decimal(note_value.replace(',', '.'))
-                                if note_decimal < 0 or note_decimal > note_sur:
-                                    erreurs.append(f"{eleve.nom} {eleve.prenom}: Note invalide (doit être entre 0 et {note_sur})")
-                                    continue
-                            except (InvalidOperation, ValueError, TypeError):
-                                erreurs.append(f"{eleve.nom} {eleve.prenom}: Format de note invalide")
-                                continue
-                        elif not absent:
-                            # Pas de note et pas absent, on ignore
-                            continue
-                        
-                        # Sauvegarder dans le bon modèle selon la période
-                        annee_scolaire = matiere.classe.annee_scolaire
-                        
-                        if periode.upper() in periodes_mensuelles:
-                            # Sauvegarder dans NoteMensuelle
-                            note_obj, created = NoteMensuelle.objects.update_or_create(
-                                eleve=eleve,
-                                matiere=matiere,
-                                mois=periode.upper(),
-                                annee_scolaire=annee_scolaire,
-                                defaults={
-                                    'note': note_decimal if not absent else Decimal('0'),
-                                    'absent': absent,
-                                    'cree_par': request.user,
-                                }
-                            )
-                        elif periode.upper() in periodes_trimestrielles or periode.upper() in periodes_semestrielles:
-                            # Sauvegarder dans CompositionNote
-                            note_obj, created = CompositionNote.objects.update_or_create(
-                                eleve=eleve,
-                                matiere=matiere,
-                                periode=periode.upper(),
-                                annee_scolaire=annee_scolaire,
-                                defaults={
-                                    'note': note_decimal if not absent else Decimal('0'),
-                                    'absent': absent,
-                                    'cree_par': request.user,
-                                }
-                            )
-                        else:
-                            # Fallback: Sauvegarder dans NoteEleve via Evaluation
-                            if evaluation is None:
-                                erreurs.append(f"{eleve.nom} {eleve.prenom}: Période non reconnue et pas d'évaluation")
-                                continue
-                            note_obj, created = NoteEleve.objects.update_or_create(
-                                eleve=eleve,
-                                evaluation=evaluation,
-                                defaults={
-                                    'note': note_decimal if not absent else Decimal('0'),
-                                    'absent': absent,
-                                    'cree_par': request.user,
-                                }
-                            )
-                    
-                    if created:
-                        notes_sauvegardees += 1
-                    else:
-                        notes_modifiees += 1
-                    
-                    # Ajouter les détails de la note sauvegardée
-                    note_detail = {
-                        'eleve_id': eleve_id,
-                        'eleve_nom': f"{eleve.nom} {eleve.prenom}",
-                        'absent': note_obj.absent,
-                        'created': created
-                    }
-                    
-                    # Ajouter les champs spécifiques selon le type d'objet
-                    if hasattr(note_obj, 'appreciation'):
-                        # AppreciationMaternelle
-                        note_detail['appreciation'] = note_obj.appreciation
-                        note_detail['note'] = None
-                    else:
-                        # NoteEleve
-                        note_detail['note'] = float(note_obj.note) if note_obj.note else None
-                        note_detail['appreciation'] = None
-                    
-                    notes_details.append(note_detail)
-                    
-                except Eleve.DoesNotExist:
-                    erreurs.append(f"Élève ID {eleve_id} introuvable")
-                except Exception as e:
-                    logger.error(f"Erreur lors de la sauvegarde de la note pour l'élève {eleve_id}: {str(e)}")
-                    erreurs.append(f"Erreur: {str(e)}")
-        
-        # Préparer la réponse
-        total_notes = notes_sauvegardees + notes_modifiees
-        message_parts = []
-        
-        if notes_sauvegardees > 0:
-            message_parts.append(f"{notes_sauvegardees} nouvelle(s) note(s) ajoutée(s)")
-        if notes_modifiees > 0:
-            message_parts.append(f"{notes_modifiees} note(s) modifiée(s)")
-        
-        message = " et ".join(message_parts) if message_parts else "Aucune note à sauvegarder"
-        
-        response_data = {
-            'success': True,
-            'notes_sauvegardees': notes_sauvegardees,
-            'notes_modifiees': notes_modifiees,
-            'total': total_notes,
-            'message': f'✅ {message}',
-            'notes_details': notes_details,
-            'evaluation_id': evaluation.id if evaluation else None
-        }
-        
-        if erreurs:
-            response_data['erreurs'] = erreurs
-            response_data['message'] += f' ⚠️ {len(erreurs)} erreur(s) détectée(s)'
-        
-        logger.info(f"Sauvegarde terminée: {total_notes} notes traitées, {len(erreurs)} erreurs")
-        
-        # Invalider le cache des rangs/classements et des moyennes
-        if total_notes > 0:
-            try:
-                from .utils_rangs import invalider_cache_rangs
-                invalider_cache_rangs(matiere.classe, periode)
-                # Invalider aussi le cache calculer_moyennes_classe_optimise
-                # (pattern: moy_classe_<id>_<periode>_<system_type>_*)
-                # Django locmem cache ne supporte pas delete_pattern,
-                # on vide tout le préfixe via une clé sentinelle incrémentale
-                _version_key = f"moy_version_classe_{matiere.classe.id}"
-                cache.set(_version_key, cache.get(_version_key, 0) + 1, 86400)
-                logger.info(f"Cache invalidé pour classe {matiere.classe.id}, période {periode}")
-            except Exception as e:
-                logger.warning(f"Erreur invalidation cache: {e}")
-        
-        return JsonResponse(response_data)
-        
-    except json.JSONDecodeError:
-        return JsonResponse({'success': False, 'error': 'Données JSON invalides'}, status=400)
-    except Exception as e:
-        logger.error(f"Erreur lors de la sauvegarde des notes: {str(e)}")
-        return JsonResponse({'success': False, 'error': f'Erreur serveur: {str(e)}'}, status=500)
+        return JsonResponse(enregistrer_notes_en_lot(request.user, json.loads(request.body)))
+    except PermissionDenied as exc:
+        return JsonResponse({'success': False, 'error': str(exc)}, status=403)
+    except (Eleve.DoesNotExist, MatiereNote.DoesNotExist, Evaluation.DoesNotExist):
+        return JsonResponse({'success': False, 'error': 'Élève, matière ou évaluation introuvable'}, status=404)
+    except ValidationError as exc:
+        return JsonResponse({'success': False, 'error': ' '.join(exc.messages)}, status=400)
+    except (ValueError, TypeError, UnicodeDecodeError):
+        return JsonResponse({'success': False, 'error': 'Données de saisie invalides'}, status=400)
+    except Exception:
+        logger.exception("Erreur lors de l'enregistrement des notes")
+        return JsonResponse({'success': False, 'error': "Impossible d'enregistrer la saisie."}, status=500)
 
 @login_required
+@can_manage_notes
 def supprimer_notes(request):
     """Supprimer les notes d'une évaluation ou d'une période spécifique.
     
@@ -6584,11 +6264,9 @@ def supprimer_notes(request):
         # Récupérer la matière
         matiere = get_object_or_404(MatiereNote, pk=matiere_id)
 
-        # ── Sécurité: vérifier que la matière appartient à l'école de l'utilisateur ──
-        user_profil = getattr(request.user, 'profil', None)
-        ecole_user = user_profil.ecole if user_profil else None
-        if ecole_user and matiere.classe.ecole != ecole_user:
-            return JsonResponse({'success': False, 'error': 'Accès non autorisé'}, status=403)
+        annee_scolaire = verifier_cible_saisie(
+            request.user, matiere, annee_scolaire=data.get('annee_scolaire'),
+        )
 
         # Définir les périodes par type
         periodes_mensuelles = ['OCTOBRE', 'NOVEMBRE', 'DECEMBRE', 'JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN']
@@ -6602,7 +6280,7 @@ def supprimer_notes(request):
         with transaction.atomic():
             # 1. Supprimer les notes mensuelles si période mensuelle
             if periode.upper() in periodes_mensuelles:
-                query = NoteMensuelle.objects.filter(matiere=matiere, mois=periode.upper())
+                query = NoteMensuelle.objects.filter(matiere=matiere, mois=periode.upper(), annee_scolaire=annee_scolaire)
                 if eleve_ids:
                     query = query.filter(eleve_id__in=eleve_ids)
                 count = query.count()
@@ -6614,7 +6292,7 @@ def supprimer_notes(request):
             
             # 2. Supprimer les compositions si période trimestrielle/semestrielle
             if periode.upper() in periodes_trimestrielles or periode.upper() in periodes_semestrielles:
-                query = CompositionNote.objects.filter(matiere=matiere, periode=periode.upper())
+                query = CompositionNote.objects.filter(matiere=matiere, periode=periode.upper(), annee_scolaire=annee_scolaire)
                 if eleve_ids:
                     query = query.filter(eleve_id__in=eleve_ids)
                 count = query.count()
@@ -6626,7 +6304,7 @@ def supprimer_notes(request):
             
             # 3. Supprimer les appréciations maternelle si période trimestrielle
             if periode.upper() in periodes_trimestrielles:
-                query = AppreciationMaternelle.objects.filter(matiere=matiere, trimestre=periode.upper())
+                query = AppreciationMaternelle.objects.filter(matiere=matiere, trimestre=periode.upper(), annee_scolaire=annee_scolaire)
                 if eleve_ids:
                     query = query.filter(eleve_id__in=eleve_ids)
                 count = query.count()
@@ -6655,6 +6333,9 @@ def supprimer_notes(request):
                 'error': f'Aucune note trouvée pour la matière "{matiere.nom}" et la période "{periode}"'
             }, status=404)
         
+        from .utils_rangs import invalider_cache_rangs
+        invalider_cache_rangs(matiere.classe)
+
         return JsonResponse({
             'success': True,
             'message': f'✅ {notes_supprimees} note(s) supprimée(s) avec succès',
@@ -6662,11 +6343,18 @@ def supprimer_notes(request):
             'details': details
         })
         
-    except json.JSONDecodeError:
+    except Http404:
+        return JsonResponse({'success': False, 'error': 'Matière introuvable'}, status=404)
+    except PermissionDenied as exc:
+        return JsonResponse({'success': False, 'error': str(exc)}, status=403)
+    except ValidationError as exc:
+        return JsonResponse({'success': False, 'error': ' '.join(exc.messages)}, status=400)
+    except (json.JSONDecodeError, TypeError, ValueError, AttributeError):
         return JsonResponse({'success': False, 'error': 'Données JSON invalides'}, status=400)
     except Exception as e:
         logger.error(f"Erreur lors de la suppression des notes: {str(e)}")
         return JsonResponse({'success': False, 'error': f'Erreur serveur: {str(e)}'}, status=500)
+
 
 @login_required
 def consulter_notes(request):
@@ -6746,22 +6434,8 @@ def consulter_notes(request):
         # Récupérer les élèves
         try:
             # Mapping spécial pour les classes avec noms différents
-            mapping_classes = {
-                61: 56,  # ClasseNote '12ème Année' -> ClasseEleve '12ÈME ANNÉE'
-                59: 8,   # ClasseNote '11ème Série littéraire' -> ClasseEleve '11ème série littéraire'
-            }
             
-            if classe_selectionnee.id in mapping_classes:
-                classe_eleve = ClasseEleve.objects.filter(
-                    id=mapping_classes[classe_selectionnee.id]
-                ).first()
-            else:
-                # Utiliser filter().first() au lieu de get() pour éviter MultipleObjectsReturned
-                classe_eleve = ClasseEleve.objects.filter(
-                    nom=classe_selectionnee.nom,
-                    annee_scolaire=classe_selectionnee.annee_scolaire,
-                    ecole=classe_selectionnee.ecole  # Filtrer par l'école de la classe
-                ).first()
+            classe_eleve = trouver_classe_eleve(classe_selectionnee)
             
             if classe_eleve:
                 # OPTIMISATION: Pré-charger les relations pour éviter N+1
@@ -7730,176 +7404,24 @@ def bulletin_dynamique(request):
     return render(request, 'notes/bulletin_dynamique.html', context)
 
 @login_required
+@can_manage_notes
 def sauvegarder_appreciations_maternelle(request):
-    """Sauvegarder les appréciations pour la maternelle/garderie"""
-    from django.http import JsonResponse
-    import json
-    
+    """Valide la saisie complète avant de l'enregistrer."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Méthode non autorisée'}, status=405)
-    
     try:
-        data = json.loads(request.body)
-        
-        from .models import AppreciationMaternelle, MatiereNote
-        from eleves.models import Eleve
-        
-        # Format 1: Liste d'appréciations (pour import en masse)
-        if 'appreciations' in data and isinstance(data['appreciations'], list):
-            appreciations_data = data.get('appreciations', [])
-            
-            if not appreciations_data:
-                return JsonResponse({'success': False, 'error': 'Aucune appréciation à sauvegarder'})
-            
-            saved_count = 0
-            errors = []
-            
-            for item in appreciations_data:
-                try:
-                    eleve_id = item.get('eleve_id')
-                    matiere_id = item.get('matiere_id')
-                    trimestre = item.get('trimestre')
-                    appreciation = item.get('appreciation')
-                    commentaire = item.get('commentaire', '')
-                    absent = item.get('absent', False)
-                    
-                    if not all([eleve_id, matiere_id, trimestre]):
-                        continue
-
-                    eleve = Eleve.objects.get(pk=eleve_id)
-                    matiere = MatiereNote.objects.get(pk=matiere_id)
-                    # ── Sécurité: vérifier école ──
-                    user_profil = getattr(request.user, 'profil', None)
-                    ecole_user = user_profil.ecole if user_profil else None
-                    if ecole_user and matiere.classe.ecole != ecole_user:
-                        errors.append(f"Accès non autorisé à la matière {matiere_id}")
-                        continue
-
-                    annee_scolaire = matiere.classe.annee_scolaire
-                    
-                    obj, created = AppreciationMaternelle.objects.update_or_create(
-                        eleve=eleve,
-                        matiere=matiere,
-                        trimestre=trimestre,
-                        annee_scolaire=annee_scolaire,
-                        defaults={
-                            'appreciation': appreciation if not absent else '',
-                            'commentaire': commentaire,
-                            'absent': absent,
-                            'cree_par': request.user,
-                        }
-                    )
-                    saved_count += 1
-                    
-                except Eleve.DoesNotExist:
-                    errors.append(f"Élève {eleve_id} non trouvé")
-                except MatiereNote.DoesNotExist:
-                    errors.append(f"Matière {matiere_id} non trouvée")
-                except Exception as e:
-                    errors.append(str(e))
-            
-            if errors:
-                return JsonResponse({
-                    'success': True,
-                    'message': f'{saved_count} appréciations sauvegardées avec {len(errors)} erreurs',
-                    'errors': errors[:5]
-                })
-            
-            return JsonResponse({
-                'success': True,
-                'message': f'{saved_count} appréciations sauvegardées avec succès'
-            })
-        
-        # Format 2: Appréciations par trimestre (depuis le template)
-        else:
-            eleve_id = data.get('eleve_id')
-            matiere_id = data.get('matiere_id')
-            annee_scolaire = data.get('annee_scolaire')
-            appreciations = data.get('appreciations', {})
-            
-            if not all([eleve_id, matiere_id]):
-                return JsonResponse({'success': False, 'error': 'Élève et matière requis'})
-            
-            try:
-                eleve = Eleve.objects.get(pk=eleve_id)
-                matiere = MatiereNote.objects.get(pk=matiere_id)
-
-                # ── Sécurité: vérifier école ──
-                user_profil = getattr(request.user, 'profil', None)
-                ecole_user = user_profil.ecole if user_profil else None
-                if ecole_user and matiere.classe.ecole != ecole_user:
-                    return JsonResponse({'success': False, 'error': 'Accès non autorisé'}, status=403)
-
-                if not annee_scolaire:
-                    annee_scolaire = matiere.classe.annee_scolaire
-
-                saved_count = 0
-
-                # Trimestre 1
-                if 'trimestre1' in appreciations:
-                    t1 = appreciations['trimestre1']
-                    obj, created = AppreciationMaternelle.objects.update_or_create(
-                        eleve=eleve,
-                        matiere=matiere,
-                        trimestre='TRIMESTRE_1',
-                        annee_scolaire=annee_scolaire,
-                        defaults={
-                            'appreciation': t1.get('appreciation', ''),
-                            'commentaire': t1.get('commentaire', ''),
-                            'absent': t1.get('absent', False),
-                            'cree_par': request.user,
-                        }
-                    )
-                    saved_count += 1
-                
-                # Trimestre 2
-                if 'trimestre2' in appreciations:
-                    t2 = appreciations['trimestre2']
-                    obj, created = AppreciationMaternelle.objects.update_or_create(
-                        eleve=eleve,
-                        matiere=matiere,
-                        trimestre='TRIMESTRE_2',
-                        annee_scolaire=annee_scolaire,
-                        defaults={
-                            'appreciation': t2.get('appreciation', ''),
-                            'commentaire': t2.get('commentaire', ''),
-                            'absent': t2.get('absent', False),
-                            'cree_par': request.user,
-                        }
-                    )
-                    saved_count += 1
-                
-                # Trimestre 3
-                if 'trimestre3' in appreciations:
-                    t3 = appreciations['trimestre3']
-                    obj, created = AppreciationMaternelle.objects.update_or_create(
-                        eleve=eleve,
-                        matiere=matiere,
-                        trimestre='TRIMESTRE_3',
-                        annee_scolaire=annee_scolaire,
-                        defaults={
-                            'appreciation': t3.get('appreciation', ''),
-                            'commentaire': t3.get('commentaire', ''),
-                            'absent': t3.get('absent', False),
-                            'cree_par': request.user,
-                        }
-                    )
-                    saved_count += 1
-                
-                return JsonResponse({
-                    'success': True,
-                    'message': f'{saved_count} appréciations sauvegardées avec succès'
-                })
-                
-            except Eleve.DoesNotExist:
-                return JsonResponse({'success': False, 'error': 'Élève non trouvé'})
-            except MatiereNote.DoesNotExist:
-                return JsonResponse({'success': False, 'error': 'Matière non trouvée'})
-        
-    except json.JSONDecodeError:
-        return JsonResponse({'success': False, 'error': 'Données JSON invalides'}, status=400)
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+        return JsonResponse(enregistrer_appreciations(request.user, json.loads(request.body)))
+    except PermissionDenied as exc:
+        return JsonResponse({'success': False, 'error': str(exc)}, status=403)
+    except (Eleve.DoesNotExist, MatiereNote.DoesNotExist, Evaluation.DoesNotExist):
+        return JsonResponse({'success': False, 'error': 'Élève, matière ou évaluation introuvable'}, status=404)
+    except ValidationError as exc:
+        return JsonResponse({'success': False, 'error': ' '.join(exc.messages)}, status=400)
+    except (ValueError, TypeError, UnicodeDecodeError):
+        return JsonResponse({'success': False, 'error': 'Données de saisie invalides'}, status=400)
+    except Exception:
+        logger.exception("Erreur lors de l'enregistrement des notes")
+        return JsonResponse({'success': False, 'error': "Impossible d'enregistrer la saisie."}, status=500)
 
 @login_required
 def saisie_notes_simple(request):
@@ -8012,10 +7534,10 @@ def saisie_notes_simple(request):
     from .models import ClasseNote, MatiereNote, NoteMensuelle, CompositionNote, AppreciationMaternelle
     from .calculs_moyennes import detecter_niveau_scolaire
     
-    ecole = _get_ecole(request)
-    
     # Récupérer les classes disponibles
-    classes = ClasseNote.objects.filter(ecole=ecole, actif=True).order_by('nom') if ecole else ClasseNote.objects.none()
+    classes = filter_by_user_school(
+        ClasseNote.objects.filter(actif=True), request.user,
+    ).order_by('nom')
     
     # Paramètres de recherche
     classe_id = request.GET.get('classe_id')
@@ -8025,7 +7547,7 @@ def saisie_notes_simple(request):
     classe_selectionnee = None
     eleve_selectionne = None
     matiere_selectionnee = None
-    eleves = []
+    eleves = Eleve.objects.none()
     matieres = []
     notes_mensuelles = {}
     compositions = {}
@@ -8047,18 +7569,14 @@ def saisie_notes_simple(request):
     ]
     
     if classe_id:
-        classe_selectionnee = ClasseNote.objects.filter(id=classe_id, ecole=ecole).first()
+        classe_selectionnee = get_object_or_404(classes, pk=classe_id)
         
         if classe_selectionnee:
             # Détecter le niveau d'enseignement
             niveau_enseignement = detecter_niveau_scolaire(classe_selectionnee.nom)
             
             # Récupérer les élèves de la classe
-            classe_eleve = ClasseEleve.objects.filter(
-                nom=classe_selectionnee.nom,
-                annee_scolaire=classe_selectionnee.annee_scolaire,
-                ecole=ecole
-            ).first()
+            classe_eleve = trouver_classe_eleve(classe_selectionnee)
             
             if classe_eleve:
                 eleves = Eleve.objects.filter(classe=classe_eleve, statut='ACTIF').order_by('prenom', 'nom')
@@ -8067,10 +7585,10 @@ def saisie_notes_simple(request):
             matieres = MatiereNote.objects.filter(classe=classe_selectionnee, actif=True).order_by('nom')
     
     if eleve_id and classe_selectionnee:
-        eleve_selectionne = Eleve.objects.filter(id=eleve_id).first()
+        eleve_selectionne = get_object_or_404(eleves, pk=eleve_id)
     
     if matiere_id and classe_selectionnee:
-        matiere_selectionnee = MatiereNote.objects.filter(id=matiere_id, classe=classe_selectionnee).first()
+        matiere_selectionnee = get_object_or_404(matieres, pk=matiere_id)
     
     # Charger les notes existantes (importées ou saisies)
     if eleve_selectionne and matiere_selectionnee:
@@ -8155,142 +7673,25 @@ def saisie_notes_simple(request):
     return render(request, 'notes/saisie_notes_simple.html', context)
 
 @login_required
+@can_manage_notes
 def sauvegarder_notes_guineen(request):
-    """Sauvegarder notes guinéen - Notes mensuelles et compositions"""
-    from django.http import JsonResponse
-    from .models import ClasseNote, MatiereNote, NoteMensuelle, CompositionNote
-    from eleves.models import Eleve
-    import json
-    
+    """Valide toute la saisie avant d'enregistrer les notes et compositions."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Méthode non autorisée'}, status=405)
-    
     try:
         data = json.loads(request.body)
-        eleve_id = data.get('eleve_id')
-        matiere_id = data.get('matiere_id')
-        annee_scolaire = data.get('annee_scolaire')
-        notes_mois = data.get('notes_mois', {})  # Format: {mois: {note: X, absent: bool}}
-        compositions = data.get('compositions', {})  # Format: {compositionX: {note: X, absent: bool}}
-        
-        eleve = Eleve.objects.get(id=eleve_id)
-        matiere = MatiereNote.objects.get(id=matiere_id)
-
-        # ── Sécurité: vérifier que l'élève et la matière appartiennent à l'école ──
-        user_profil = getattr(request.user, 'profil', None)
-        ecole_user = user_profil.ecole if user_profil else None
-        if ecole_user and matiere.classe.ecole != ecole_user:
-            return JsonResponse({'success': False, 'error': 'Accès non autorisé à cette matière'}, status=403)
-        if ecole_user and eleve.classe and eleve.classe.ecole != ecole_user:
-            return JsonResponse({'success': False, 'error': 'Accès non autorisé à cet élève'}, status=403)
-
-        # Utiliser l'année scolaire de la matière si non fournie
-        if not annee_scolaire:
-            annee_scolaire = matiere.classe.annee_scolaire
-
-        from .calculs_moyennes import detecter_niveau_scolaire
-        niveau_note = detecter_niveau_scolaire(matiere.classe.nom)
-        note_max = Decimal('10') if niveau_note == 'PRIMAIRE' else Decimal('20')
-
-        saved_count = 0
-        updated_count = 0
-
-        # Sauvegarder les notes mensuelles
-        for mois, note_data in notes_mois.items():
-            if note_data is not None:
-                try:
-                    note_value = note_data.get('note') if isinstance(note_data, dict) else note_data
-                    absent = note_data.get('absent', False) if isinstance(note_data, dict) else False
-                    
-                    if absent or (note_value is not None and note_value != ''):
-                        note_decimal = Decimal('0') if absent else Decimal(str(note_value).replace(',', '.'))
-                        if note_decimal < 0 or note_decimal > note_max:
-                            return JsonResponse({
-                                'success': False,
-                                'error': f'Note invalide: elle doit être entre 0 et {note_max}'
-                            }, status=400)
-                        obj, created = NoteMensuelle.objects.update_or_create(
-                            eleve=eleve,
-                            matiere=matiere,
-                            mois=mois.upper(),
-                            annee_scolaire=annee_scolaire,
-                            defaults={
-                                'note': note_decimal,
-                                'absent': absent
-                            }
-                        )
-                        if created:
-                            saved_count += 1
-                        else:
-                            updated_count += 1
-                except (ValueError, InvalidOperation):
-                    continue
-        
-        # Sauvegarder les compositions
-        periode_mapping = {
-            'composition1': 'TRIMESTRE_1',
-            'composition2': 'TRIMESTRE_2',
-            'composition3': 'TRIMESTRE_3',
-        }
-        
-        for key, comp_data in compositions.items():
-            if comp_data is not None and key in periode_mapping:
-                try:
-                    note_value = comp_data.get('note') if isinstance(comp_data, dict) else comp_data
-                    absent = comp_data.get('absent', False) if isinstance(comp_data, dict) else False
-                    
-                    if absent or (note_value is not None and note_value != ''):
-                        note_decimal = Decimal('0') if absent else Decimal(str(note_value).replace(',', '.'))
-                        if note_decimal < 0 or note_decimal > note_max:
-                            return JsonResponse({
-                                'success': False,
-                                'error': f'Note invalide: elle doit être entre 0 et {note_max}'
-                            }, status=400)
-                        obj, created = CompositionNote.objects.update_or_create(
-                            eleve=eleve,
-                            matiere=matiere,
-                            periode=periode_mapping[key],
-                            annee_scolaire=annee_scolaire,
-                            defaults={
-                                'note': note_decimal,
-                                'absent': absent
-                            }
-                        )
-                        if created:
-                            saved_count += 1
-                        else:
-                            updated_count += 1
-                except (ValueError, InvalidOperation):
-                    continue
-        
-        # Invalider le cache des rangs
-        try:
-            # Essayer d'invalider le cache avec pattern
-            cache_key = f"rangs_classe_{matiere.classe.id}_*"
-            if hasattr(cache, 'delete_pattern'):
-                cache.delete_pattern(cache_key)
-            else:
-                # Sinon, invalider les clés connues
-                for periode in ['OCTOBRE', 'NOVEMBRE', 'DECEMBRE', 'JANVIER', 'FEVRIER', 'MARS', 'AVRIL', 'MAI', 'JUIN']:
-                    cache.delete(f"rangs_classe_{matiere.classe.id}_periode_{periode}")
-        except Exception:
-            pass
-        
-        return JsonResponse({
-            'success': True,
-            'message': f'{saved_count} note(s) créée(s), {updated_count} mise(s) à jour',
-            'saved': saved_count,
-            'updated': updated_count
-        })
-        
-    except Eleve.DoesNotExist:
-        return JsonResponse({'success': False, 'error': 'Élève non trouvé'}, status=404)
-    except MatiereNote.DoesNotExist:
-        return JsonResponse({'success': False, 'error': 'Matière non trouvée'}, status=404)
-    except json.JSONDecodeError:
-        return JsonResponse({'success': False, 'error': 'Données JSON invalides'}, status=400)
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+        return JsonResponse(enregistrer_notes_guineennes(request.user, data))
+    except PermissionDenied as exc:
+        return JsonResponse({'success': False, 'error': str(exc)}, status=403)
+    except (Eleve.DoesNotExist, MatiereNote.DoesNotExist):
+        return JsonResponse({'success': False, 'error': 'Élève ou matière introuvable'}, status=404)
+    except ValidationError as exc:
+        return JsonResponse({'success': False, 'error': ' '.join(exc.messages)}, status=400)
+    except (ValueError, TypeError, UnicodeDecodeError):
+        return JsonResponse({'success': False, 'error': 'Données de saisie invalides'}, status=400)
+    except Exception:
+        logger.exception("Erreur lors de l'enregistrement des notes")
+        return JsonResponse({'success': False, 'error': "Impossible d'enregistrer les notes."}, status=500)
 
 @login_required
 def imprimer_tableau_notes_pdf(request):
@@ -8670,45 +8071,13 @@ def bulletins_classe_maternelle_v2_pdf(request):
     classe_note = get_object_or_404(ClasseNote, id=classe_id)
     
     # Mapping des classes spéciales
-    mapping_classes = {
-        61: 56,
-        59: 8,
-    }
     
     # Récupérer les élèves de la classe avec logique améliorée
     classe_eleves = None
     eleves = []
     
     try:
-        if classe_note.id in mapping_classes:
-            classe_eleves = Classe.objects.filter(id=mapping_classes[classe_note.id]).first()
-        else:
-            # Essayer avec nom exact, année et école
-            classe_eleves = Classe.objects.filter(
-                nom=classe_note.nom,
-                annee_scolaire=classe_note.annee_scolaire,
-                ecole=classe_note.ecole
-            ).first()
-            
-            if not classe_eleves:
-                # Essayer sans le filtre école
-                classe_eleves = Classe.objects.filter(
-                    nom__iexact=classe_note.nom,
-                    annee_scolaire=classe_note.annee_scolaire
-                ).first()
-            
-            if not classe_eleves:
-                # Essayer avec une correspondance partielle du nom
-                classe_eleves = Classe.objects.filter(
-                    nom__icontains=classe_note.nom.split()[0] if classe_note.nom else '',
-                    annee_scolaire=classe_note.annee_scolaire
-                ).first()
-            
-            if not classe_eleves:
-                # Dernier essai: chercher par nom uniquement (toutes années)
-                classe_eleves = Classe.objects.filter(
-                    nom__iexact=classe_note.nom
-                ).order_by('-annee_scolaire').first()
+        classe_eleves = trouver_classe_eleve(classe_note)
         
         if classe_eleves:
             eleves = list(Eleve.objects.filter(
@@ -8894,45 +8263,13 @@ def fiches_recommandations_pdf(request):
     classe_note = get_object_or_404(ClasseNote, id=classe_id)
     
     # Mapping des classes spéciales
-    mapping_classes = {
-        61: 56,
-        59: 8,
-    }
     
     # Récupérer les élèves de la classe
     classe_eleves = None
     eleves = []
     
     try:
-        if classe_note.id in mapping_classes:
-            classe_eleves = Classe.objects.filter(id=mapping_classes[classe_note.id]).first()
-        else:
-            # Essayer avec nom exact, année et école
-            classe_eleves = Classe.objects.filter(
-                nom=classe_note.nom,
-                annee_scolaire=classe_note.annee_scolaire,
-                ecole=classe_note.ecole
-            ).first()
-            
-            if not classe_eleves:
-                # Essayer sans le filtre école
-                classe_eleves = Classe.objects.filter(
-                    nom__iexact=classe_note.nom,
-                    annee_scolaire=classe_note.annee_scolaire
-                ).first()
-            
-            if not classe_eleves:
-                # Essayer avec une correspondance partielle du nom
-                classe_eleves = Classe.objects.filter(
-                    nom__icontains=classe_note.nom.split()[0] if classe_note.nom else '',
-                    annee_scolaire=classe_note.annee_scolaire
-                ).first()
-            
-            if not classe_eleves:
-                # Dernier essai: chercher par nom uniquement (toutes années)
-                classe_eleves = Classe.objects.filter(
-                    nom__iexact=classe_note.nom
-                ).order_by('-annee_scolaire').first()
+        classe_eleves = trouver_classe_eleve(classe_note)
         
         if classe_eleves:
             eleves = list(Eleve.objects.filter(
