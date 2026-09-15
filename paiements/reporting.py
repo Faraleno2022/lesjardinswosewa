@@ -30,6 +30,8 @@ def ventiler_encaissements_par_paiement(paiements):
     }
     groupes = defaultdict(list)
     for paiement in paiements:
+        if paiement.statut != 'VALIDE':
+            continue
         if est_type_scolarite(paiement.type_paiement):
             groupes[(paiement.eleve_id, paiement.annee_scolaire)].append(paiement)
         else:
@@ -92,11 +94,19 @@ def ventiler_encaissements_par_paiement(paiements):
             allocation = allocations.get(paiement.pk)
             if not allocation:
                 continue
+            # Un transfert vers un tarif inférieur ne diminue pas les recettes.
+            # Le surplus est encaissé au titre de la scolarité même s'il ne
+            # couvre plus de poste de l'échéancier.
+            surplus = max(
+                Decimal('0'), Decimal(str(paiement.montant or 0))
+                - sum(allocation.values(), Decimal('0')),
+            )
             resultat[paiement.pk][admission_key] += allocation['inscription']
             resultat[paiement.pk]['scolarite'] += (
                 allocation['tranche_1']
                 + allocation['tranche_2']
                 + allocation['tranche_3']
+                + surplus
             )
 
     return resultat

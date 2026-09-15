@@ -7,7 +7,7 @@ pendant la période. Les affectations servent à ventiler ces heures par classe.
 
 from calendar import monthrange
 from datetime import date
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 
 from django.db import transaction
 from django.db.models import Q, Sum
@@ -30,11 +30,11 @@ STATUTS_HEURES_PAYEES = ('PRESENT', 'RETARD', 'PERMISSION')
 
 
 def arrondir_heures(valeur):
-    return Decimal(valeur or 0).quantize(HEURE, rounding=ROUND_HALF_UP)
+    return Decimal(str(valeur or 0)).quantize(HEURE, rounding=ROUND_HALF_UP)
 
 
 def arrondir_montant(valeur):
-    return Decimal(valeur or 0).quantize(MONTANT, rounding=ROUND_HALF_UP)
+    return Decimal(str(valeur or 0)).quantize(MONTANT, rounding=ROUND_HALF_UP)
 
 
 def bornes_periode(periode):
@@ -137,31 +137,31 @@ def heures_prevues_par_affectation(enseignant, periode):
 
 
 def repartir_heures(total_heures, lignes_prevues):
-    """Ventile le total réel proportionnellement aux heures prévues.
+    """Répartit les centièmes d'heure sans perte ni durée négative.
 
-    Le reliquat d'arrondi est placé sur la dernière affectation afin que la
-    somme des détails reste exactement égale au total de l'état de salaire.
+    Après arrondi inférieur des parts proportionnelles, les centièmes restants
+    vont aux plus grands restes. Une affectation de poids nul reste à zéro.
     """
-    total_heures = arrondir_heures(total_heures)
-    total_prevu = sum((heures for _, heures in lignes_prevues), Decimal('0'))
+    total_heures = max(Decimal("0"), arrondir_heures(total_heures))
+    lignes_prevues = list(lignes_prevues)
+    poids = [max(Decimal("0"), Decimal(str(h))) for _, h in lignes_prevues]
+    total_prevu = sum(poids, Decimal("0"))
     if not lignes_prevues or total_prevu <= 0:
         return []
 
-    reste = total_heures
-    repartition = []
-    for index, (affectation, heures_prevues) in enumerate(lignes_prevues):
-        if index == len(lignes_prevues) - 1:
-            heures_realisees = reste
-        else:
-            heures_realisees = arrondir_heures(
-                total_heures * heures_prevues / total_prevu
-            )
-            reste -= heures_realisees
-        repartition.append(
-            (affectation, arrondir_heures(heures_prevues), heures_realisees)
-        )
-
-    return repartition
+    parts = [total_heures * h / total_prevu for h in poids]
+    heures = [part.quantize(HEURE, rounding=ROUND_DOWN) for part in parts]
+    centiemes = int((total_heures - sum(heures, Decimal("0"))) / HEURE)
+    ordre = sorted(
+        (i for i, h in enumerate(poids) if h > 0),
+        key=lambda i: parts[i] - heures[i], reverse=True,
+    )
+    for i in ordre[:centiemes]:
+        heures[i] += HEURE
+    return [
+        (affectation, arrondir_heures(prevues), heures[i])
+        for i, (affectation, prevues) in enumerate(lignes_prevues)
+    ]
 
 
 def synchroniser_details_heures(etat):

@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 _cache_classes = {}
 _cache_matieres = {}
 CACHE_TIMEOUT = 600  # 10 minutes
-RANGS_CACHE_SCHEMA_VERSION = 2
+RANGS_CACHE_SCHEMA_VERSION = 3
 
 
 def calculer_rangs_classe_periode(classe_note, periode: str, use_cache: bool = True) -> Dict[int, dict]:
