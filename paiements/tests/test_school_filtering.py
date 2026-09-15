@@ -87,6 +87,7 @@ class SchoolFilteringTests(TestCase):
                 'ecole': self.ecole1,
                 'telephone': "+224620000021",
                 'peut_consulter_rapports': True,
+                'is_validated': True,
             },
         )
         Profil.objects.update_or_create(
@@ -96,16 +97,23 @@ class SchoolFilteringTests(TestCase):
                 'ecole': self.ecole2,
                 'telephone': "+224620000022",
                 'peut_consulter_rapports': True,
+                'is_validated': True,
             },
         )
 
     def login1(self):
         self.client.logout()
         self.client.force_login(self.user1)
+        session = self.client.session
+        session['phone_verified'] = True
+        session.save()
 
     def login2(self):
         self.client.logout()
         self.client.force_login(self.user2)
+        session = self.client.session
+        session['phone_verified'] = True
+        session.save()
 
     def test_api_paiements_list_filtered_by_school(self):
         self.login1()
@@ -116,6 +124,23 @@ class SchoolFilteringTests(TestCase):
         ids = [r["id"] for r in data.get("results", [])]
         self.assertIn(self.paiement1.id, ids)
         self.assertNotIn(self.paiement2.id, ids)
+
+    def test_tableau_modes_encaissement_isole_les_ecoles(self):
+        self.login1()
+        response = self.client.get(
+            reverse("paiements:modes_encaissement_eleves"),
+            {
+                "date_debut": "2024-09-01",
+                "date_fin": "2024-09-30",
+                "annee_scolaire": "2024-2025",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ALPHA A")
+        self.assertNotContains(response, "BRAVO B")
+        self.assertEqual(response.context["student_count"], 1)
+        self.assertEqual(response.context["total_amount"], 30000)
 
     def test_api_paiement_detail_for_other_school_is_404(self):
         self.login1()
@@ -199,10 +224,26 @@ class SchoolFilteringTests(TestCase):
         self.assertContains(resp, paiement_recent.numero_recu)
         self.assertNotContains(resp, paiement_autre_eleve.numero_recu)
         self.assertNotContains(resp, self.paiement2.numero_recu)
+        self.assertContains(
+            resp,
+            reverse(
+                'paiements:generer_carnet_paiement_pdf',
+                args=[self.paiement1.pk],
+            ),
+        )
 
     def test_generer_recu_pdf_other_school_is_404(self):
         self.login1()
         url = reverse("paiements:generer_recu_pdf", kwargs={"paiement_id": self.paiement2.id})
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 404)
+
+    def test_generer_carnet_paiement_other_school_is_404(self):
+        self.login1()
+        url = reverse(
+            "paiements:generer_carnet_paiement_pdf",
+            kwargs={"paiement_id": self.paiement2.id},
+        )
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 404)
 

@@ -68,6 +68,45 @@
                         </ul>
                     </div>
                     {% endif %}
+
+                    {% if plafond_actif %}
+                        {% if annee_sur_couverte %}
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-triangle me-1"></i>
+                            <strong>Aucune remise possible sur ce reçu.</strong>
+                            <span class="d-block small">
+                                Les encaissements enregistrés ({{ total_encaisse_annee|floatformat:0 }} GNF)
+                                dépassent déjà le total dû de l'année ({{ total_du_annee|floatformat:0 }} GNF).
+                                Déduire la remise du reçu n'y changerait rien : il faut d'abord corriger
+                                les montants encaissés.
+                            </span>
+                        </div>
+                        {% elif remise_max_disponible > 0 %}
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Remise maximale possible sans toucher au reçu :
+                            <strong>{{ remise_max_disponible|floatformat:0 }} GNF</strong>.
+                            <span class="d-block small">
+                                Total dû pour l'année : {{ total_du_annee|floatformat:0 }} GNF —
+                                déjà encaissé (en attente et validé) : {{ total_encaisse_annee|floatformat:0 }} GNF.
+                                Au-delà, cochez « Déduire la remise du montant du reçu » pour aller
+                                jusqu'à {{ remise_max_avec_reduction|floatformat:0 }} GNF.
+                            </span>
+                        </div>
+                        {% else %}
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle me-1"></i>
+                            <strong>Ce reçu solde déjà l'année : aucune remise ne peut s'y ajouter.</strong>
+                            <span class="d-block small">
+                                Les encaissements enregistrés ({{ total_encaisse_annee|floatformat:0 }} GNF)
+                                couvrent le total dû ({{ total_du_annee|floatformat:0 }} GNF). Pour accorder
+                                une remise malgré tout, cochez « Déduire la remise du montant du reçu » :
+                                le reçu sera ramené au net et la famille paiera d'autant moins.
+                            </span>
+                        </div>
+                        {% endif %}
+                    {% endif %}
+
                     <!-- Informations du paiement -->
                     <div class="row mb-4">
                         <div class="col-md-6">
@@ -107,7 +146,16 @@
                     </div>
                     
                     <!-- Formulaire d'application des remises -->
-                    <form method="post" id="remiseForm">
+                    {% if annee_sur_couverte %}
+                    <div class="d-grid gap-2 col-md-4">
+                        <a href="{% url 'paiements:detail_paiement' paiement.id %}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left me-1"></i>Retour au paiement
+                        </a>
+                    </div>
+                    {% else %}
+                    <form method="post" id="remiseForm"
+                          data-enveloppe="{% if plafond_actif %}{{ remise_max_disponible }}{% endif %}"
+                          data-enveloppe-reduction="{% if plafond_actif %}{{ remise_max_avec_reduction }}{% endif %}">
                         {% csrf_token %}
                         {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
                         
@@ -190,6 +238,25 @@
                                             {% endfor %}
                                             <div class="mt-2">
                                                 <strong>Base retenue : <span id="baseRetenueAffichage">0</span> GNF</strong>
+                                            </div>
+                                        </div>
+
+                                        <!-- Déduction de la remise sur le reçu -->
+                                        <div class="mb-3">
+                                            <div class="remise-card">
+                                                <div class="form-check">
+                                                    {{ form.reduire_paiement }}
+                                                    <label class="form-check-label" for="{{ form.reduire_paiement.id_for_label }}">
+                                                        <strong>Déduire la remise du montant du reçu</strong>
+                                                    </label>
+                                                </div>
+                                                <div class="small text-muted mt-1">
+                                                    Le reçu passera de {{ montant_paiement|floatformat:0 }} GNF à
+                                                    <span id="montantNetApercu">{{ montant_paiement|floatformat:0 }}</span> GNF.
+                                                    À cocher quand la remise a été décidée après la saisie du montant brut :
+                                                    la famille paie d'autant moins, au lieu que la remise s'ajoute à un
+                                                    encaissement qui couvre déjà la dette.
+                                                </div>
                                             </div>
                                         </div>
 
@@ -284,7 +351,7 @@
                                             <p class="mb-2">
                                                 <strong>Montant encaissé:</strong><br>
                                                 <span id="montantOriginal">{{ paiement.montant|floatformat:0 }} GNF</span>
-                                                <small class="text-muted d-block">Le reçu n'est pas modifié par la remise.</small>
+                                                <small class="text-muted d-block" id="effetSurRecu">Le reçu n'est pas modifié par la remise.</small>
                                             </p>
                                             <p class="mb-2">
                                                 <strong>Base de calcul:</strong><br>
@@ -316,6 +383,7 @@
                             </div>
                         </div>
                     </form>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -326,6 +394,23 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Le formulaire n'est pas rendu quand aucune remise n'est possible.
+    const remiseForm = document.getElementById('remiseForm');
+    if (!remiseForm) { return; }
+
+    // Plafond serveur : la remise ne peut pas dépasser ce que le total dû absorbe.
+    // Déduire la remise du reçu relève ce plafond, le reçu baissant d'autant.
+    const enveloppeBrute = parseFloat(remiseForm.dataset.enveloppe);
+    const enveloppeReduction = parseFloat(remiseForm.dataset.enveloppeReduction);
+    const checkReduire = document.getElementById('id_reduire_paiement');
+    const montantNetApercu = document.getElementById('montantNetApercu');
+    const montantRecu = parseFloat(document.getElementById('montantOriginal').textContent.replace(/[^\d]/g, '') || '0');
+
+    function enveloppeCourante() {
+        const brute = checkReduire && checkReduire.checked ? enveloppeReduction : enveloppeBrute;
+        return isNaN(brute) ? null : brute;
+    }
+
     const checkboxes = document.querySelectorAll('.remise-checkbox');
     const trancheCheckboxes = document.querySelectorAll('.tranche-checkbox');
     const baseCalculRadios = document.querySelectorAll('.base-calcul-radio');
@@ -412,6 +497,26 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
+        // Le serveur ramènera le total au plafond : l'aperçu doit le montrer.
+        const enveloppeMax = enveloppeCourante();
+        let plafonne = false;
+        if (enveloppeMax !== null && totalRemises > enveloppeMax) {
+            totalRemises = enveloppeMax;
+            plafonne = true;
+        }
+
+        const reduit = !!(checkReduire && checkReduire.checked);
+        const montantNet = reduit ? Math.max(0, montantRecu - totalRemises) : montantRecu;
+        if (montantNetApercu) {
+            montantNetApercu.textContent = montantNet.toLocaleString('fr-FR');
+        }
+        const effetSurRecu = document.getElementById('effetSurRecu');
+        if (effetSurRecu) {
+            effetSurRecu.textContent = reduit
+                ? `Sera ramené à ${montantNet.toLocaleString('fr-FR')} GNF.`
+                : "Le reçu n'est pas modifié par la remise.";
+        }
+
         const resteDu = Math.max(0, resteDuTranches() - totalRemises);
 
         // Mettre à jour l'affichage
@@ -427,6 +532,9 @@ document.addEventListener('DOMContentLoaded', function() {
             remisesDetails.forEach(detail => {
                 html += `<small class="text-muted">• ${detail.nom}: ${detail.montant.toLocaleString('fr-FR')} GNF</small><br>`;
             });
+            if (plafonne) {
+                html += `<small class="text-danger">Total ramené à ${enveloppeMax.toLocaleString('fr-FR')} GNF : plafond disponible sur ce reçu.</small><br>`;
+            }
             detailsDiv.innerHTML = html;
         } else {
             detailsDiv.innerHTML = '';
@@ -444,6 +552,9 @@ document.addEventListener('DOMContentLoaded', function() {
     baseCalculRadios.forEach(radio => radio.addEventListener('change', updatePreview));
     if (selectPct) {
         selectPct.addEventListener('change', updatePreview);
+    }
+    if (checkReduire) {
+        checkReduire.addEventListener('change', updatePreview);
     }
     if (selectMotif) {
         // « Ne paie rien » et « La moitié » désignent un montant : on propose le
@@ -487,7 +598,7 @@ document.addEventListener('DOMContentLoaded', function() {
     updatePreview();
 
     // Confirmation avant soumission
-    document.getElementById('remiseForm').addEventListener('submit', function(e) {
+    remiseForm.addEventListener('submit', function(e) {
         const selectedRemises = document.querySelectorAll('.remise-checkbox:checked');
         const pctValue = selectPct ? selectPct.value : '';
         if (selectedRemises.length === 0 && !pctValue) {
@@ -519,6 +630,10 @@ document.addEventListener('DOMContentLoaded', function() {
             `Total des remises: ${totalRemises.toLocaleString('fr-FR')} GNF\n` +
             `Reste dû sur tranches cochées: ${resteDu.toLocaleString('fr-FR')} GNF`
         );
+        if (checkReduire && checkReduire.checked) {
+            const net = Math.max(0, montantRecu - totalRemises);
+            message += `\n\nLe reçu sera ramené de ${montantRecu.toLocaleString('fr-FR')} à ${net.toLocaleString('fr-FR')} GNF.`;
+        }
         // Alerte spécifique 100%
         if (pctValue && parseFloat(pctValue) === 100) {
             message += `\n\nATTENTION: Vous appliquez 100% de remise scolarité sur les tranches cochées.`;

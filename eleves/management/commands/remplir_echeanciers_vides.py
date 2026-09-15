@@ -46,7 +46,7 @@ class Command(BaseCommand):
         eleves = (
             Eleve.objects
             .filter(statut='ACTIF')
-            .select_related('classe', 'classe__ecole', 'echeancier')
+            .select_related('classe', 'classe__ecole')
         )
         if options['ecole']:
             eleves = eleves.filter(classe__ecole__nom__icontains=options['ecole'])

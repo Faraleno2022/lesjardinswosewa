@@ -2,7 +2,7 @@
 """
 MySchoolGN - Lanceur autonome offline
 =======================================
-Auteur  : GS Hadja Kanfing Dian
+Édition : GS Les Jardins Wosewa
 Version : 1.0.0
 
 Ce script lance le serveur Django en mode autonome (offline).
@@ -72,6 +72,25 @@ if sys.stdin is None:
         def read(self, *_a, **_k):
             return ''
     sys.stdin = _NullReader()
+
+
+# ─── Certificats HTTPS : faire confiance au magasin de Windows ────────────────
+# Python embarque son propre lot de certificats racine (via son OpenSSL). Sur
+# un poste derriere un pare-feu ou un antivirus qui inspecte le trafic HTTPS
+# avec son propre certificat, Windows (et donc un navigateur) lui fait
+# confiance, mais Python non : toute connexion au serveur en ligne —
+# synchronisation ou mise a jour — echoue alors silencieusement des le depart.
+# `truststore` remplace la verification par celle du systeme d'exploitation,
+# ce qui aligne Python sur ce que voit deja Windows. Doit avoir lieu avant le
+# premier appel HTTPS de l'application, donc ici, au tout debut du module.
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except Exception:
+    # Environnement sans le module (ex. certains outils de build) : on
+    # retombe sur le comportement standard de Python plutot que d'empecher
+    # le demarrage pour un gain de robustesse qui n'est pas critique partout.
+    pass
 
 # ─── DLLs GTK pour WeasyPrint (Windows) ───────────────────────────────────────
 # Doit être fait AVANT tout import de Django / WeasyPrint
@@ -143,17 +162,23 @@ os.environ['MYSCHOOL_BASE_DIR'] = BASE_DIR
 # Chaque poste definit son serveur EN LIGNE et son appareil via un fichier JSON
 # local (jamais embarque dans le build). Cle attendues :
 #   MYSCHOOL_SYNC_SERVER_URL, MYSCHOOL_SYNC_ECOLE_ID,
-#   MYSCHOOL_SYNC_DEVICE_ID, MYSCHOOL_SYNC_TOKEN, MYSCHOOL_SYNC_INTERVAL
+#   MYSCHOOL_SYNC_DEVICE_ID, MYSCHOOL_SYNC_TOKEN, MYSCHOOL_SYNC_INTERVAL,
+#   MYSCHOOL_SYNC_FAST_INTERVAL
 def _load_sync_config():
     import json
     candidates = [
         os.path.join(BASE_DIR, 'sync_config.json'),
+        # Compatibilite avec les installations qui ont recu leur configuration
+        # dans le sous-dossier `sync` sous le nom `_config.json`.
+        os.path.join(BASE_DIR, 'sync', '_config.json'),
+        os.path.join(BASE_DIR, 'sync', 'config.json'),
         os.path.join(os.environ.get('APPDATA', ''), 'MySchoolGN', 'sync_config.json'),
     ]
     keys = (
         'MYSCHOOL_SYNC_SERVER_URL', 'MYSCHOOL_SYNC_ECOLE_ID',
         'MYSCHOOL_SYNC_DEVICE_ID', 'MYSCHOOL_SYNC_TOKEN',
-        'MYSCHOOL_SYNC_INTERVAL',
+        'MYSCHOOL_SYNC_INTERVAL', 'MYSCHOOL_SYNC_FAST_INTERVAL',
+        'MYSCHOOL_UPDATE_INTERVAL',
     )
     for path in candidates:
         try:
@@ -171,199 +196,6 @@ def _load_sync_config():
 _load_sync_config()
 
 
-# ─── Fenêtre d'activation de licence (tkinter) ────────────────────────────────
-def show_activation_window(mid: str, trial_days_left: int = 0, first_trial_prompt: bool = False) -> bool:
-    """
-    Affiche une fenêtre graphique d'activation de licence.
-    - Si trial_days_left > 0 : le bouton "Continuer l'essai" est affiché.
-    - Si first_trial_prompt=True : demande si l'utilisateur a deja une licence.
-    - Si trial_days_left <= 0 : l'utilisateur DOIT activer pour continuer.
-    Retourne True si l'application peut démarrer, False si l'utilisateur quitte.
-    """
-    try:
-        import tkinter as tk
-        from tkinter import filedialog, messagebox
-    except ImportError:
-        # tkinter non disponible (mode dev sans GUI) — accepter si essai actif
-        return trial_days_left > 0
-
-    result = [False]
-
-    root = tk.Tk()
-    root.title("MySchoolGN — Activation de la Licence")
-    root.resizable(False, False)
-    root.configure(bg='#ecf0f1')
-
-    # ── Dimensions et centrage ──
-    W, H = 540, 490 if first_trial_prompt else 460
-    root.geometry(f"{W}x{H}")
-    root.update_idletasks()
-    sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
-    root.geometry(f"{W}x{H}+{(sw - W) // 2}+{(sh - H) // 2}")
-    root.lift()
-    root.attributes('-topmost', True)
-    root.after(200, lambda: root.attributes('-topmost', False))
-
-    # ── En-tête ──
-    hdr = tk.Frame(root, bg='#1a3a5c', height=72)
-    hdr.pack(fill='x')
-    hdr.pack_propagate(False)
-    tk.Label(hdr, text="MySchoolGN",
-             font=('Arial', 22, 'bold'), bg='#1a3a5c', fg='white').place(
-        relx=0.5, rely=0.35, anchor='center')
-    tk.Label(hdr, text="Système de Gestion Scolaire — GS Hadja Kanfing Dian",
-             font=('Arial', 8), bg='#1a3a5c', fg='#aed6f1').place(
-        relx=0.5, rely=0.75, anchor='center')
-
-    # ── Corps ──
-    body = tk.Frame(root, bg='#ecf0f1', padx=24, pady=16)
-    body.pack(fill='both', expand=True)
-
-    # Message de statut
-    if first_trial_prompt and trial_days_left > 0:
-        status_txt = ("Avez-vous deja une licence annuelle MySchoolGN ?\n"
-                      "Si oui, cliquez sur Parcourir puis Activer la Licence.\n"
-                      "Sinon, continuez avec la version d'essai gratuite de 30 jours.")
-        status_col = '#1a5276'
-    elif trial_days_left <= 0:
-        status_txt = ("⚠  Votre période d'essai de 30 jours est expirée.\n"
-                      "Veuillez activer votre licence pour continuer.")
-        status_col = '#c0392b'
-    else:
-        status_txt = (f"Mode essai : {trial_days_left} jour(s) restant(s).\n"
-                      "Activez votre licence pour un accès illimité.")
-        status_col = '#d35400'
-
-    tk.Label(body, text=status_txt, font=('Arial', 10), bg='#ecf0f1',
-             fg=status_col, justify='left', wraplength=490).pack(
-        anchor='w', pady=(0, 12))
-
-    # ── ID Machine ──
-    mid_frm = tk.LabelFrame(body, text="  Identifiant Machine  ",
-                             bg='#ecf0f1', font=('Arial', 9, 'bold'),
-                             fg='#1a3a5c', padx=10, pady=8, relief='groove')
-    mid_frm.pack(fill='x', pady=(0, 10))
-    tk.Label(mid_frm,
-             text="Communiquez cet identifiant à GS Hadja Kanfing Dian pour obtenir votre licence :",
-             font=('Arial', 8), bg='#ecf0f1', fg='#555').pack(anchor='w')
-    mid_var = tk.StringVar(value=mid)
-    tk.Entry(mid_frm, textvariable=mid_var, font=('Courier', 10, 'bold'),
-             state='readonly', readonlybackground='#d5e8f7',
-             relief='flat', bd=1, fg='#1a3a5c').pack(
-        fill='x', pady=(4, 2), ipady=5)
-
-    cb_btn = tk.Button(mid_frm, text="  Copier l'identifiant  ",
-                       font=('Arial', 8), bg='#2980b9', fg='white',
-                       relief='flat', padx=8, pady=3, cursor='hand2')
-    cb_btn.pack(anchor='e', pady=(3, 0))
-
-    def _copy_mid():
-        root.clipboard_clear()
-        root.clipboard_append(mid)
-        cb_btn.config(text="  Copié !  ")
-        root.after(2000, lambda: cb_btn.config(text="  Copier l'identifiant  "))
-    cb_btn.config(command=_copy_mid)
-
-    # ── Activation fichier .lic ──
-    lic_frm = tk.LabelFrame(body,
-                             text="  Activer avec un fichier de licence (.lic)  ",
-                             bg='#ecf0f1', font=('Arial', 9, 'bold'),
-                             fg='#1a3a5c', padx=10, pady=8, relief='groove')
-    lic_frm.pack(fill='x', pady=(0, 8))
-
-    lic_var = tk.StringVar(value="")
-    lic_row = tk.Frame(lic_frm, bg='#ecf0f1')
-    lic_row.pack(fill='x')
-    tk.Entry(lic_row, textvariable=lic_var, font=('Arial', 9),
-             state='readonly', readonlybackground='#f9f9f9',
-             relief='flat', bd=1).pack(
-        side='left', fill='x', expand=True, ipady=5)
-
-    def _browse():
-        p = filedialog.askopenfilename(
-            title="Sélectionner votre fichier de licence",
-            filetypes=[("Licence MySchoolGN", "*.lic"),
-                       ("Tous les fichiers", "*.*")])
-        if p:
-            lic_var.set(p)
-            status_lbl.config(text="", fg='#27ae60')
-
-    tk.Button(lic_row, text="  Parcourir…  ", command=_browse,
-              font=('Arial', 9), bg='#7f8c8d', fg='white',
-              relief='flat', padx=6, pady=5, cursor='hand2').pack(
-        side='left', padx=(6, 0))
-
-    status_lbl = tk.Label(lic_frm, text="", font=('Arial', 9),
-                          bg='#ecf0f1', fg='#27ae60')
-    status_lbl.pack(anchor='w', pady=(4, 0))
-
-    def _do_activate():
-        p = lic_var.get().strip()
-        if not p:
-            messagebox.showwarning(
-                "Fichier manquant",
-                "Veuillez sélectionner un fichier .lic avant d'activer.")
-            return
-        try:
-            import license_manager
-            res = license_manager.activate_from_file(p)
-        except Exception as ex:
-            messagebox.showerror("Erreur", f"Erreur lors de l'activation :\n{ex}")
-            return
-        if res.get('valid'):
-            school = res.get('school', '')
-            days = res.get('days_left', 0)
-            edition = res.get('edition', 'Standard')
-            messagebox.showinfo(
-                "Activation réussie",
-                f"Licence activée avec succès !\n\n"
-                f"École    : {school}\n"
-                f"Édition  : {edition}\n"
-                f"Validité : {days} jour(s)")
-            result[0] = True
-            root.destroy()
-        else:
-            reason = res.get('reason', 'Erreur inconnue.')
-            status_lbl.config(text=f"Erreur : {reason}", fg='#c0392b')
-            messagebox.showerror("Activation échouée", reason)
-
-    # ── Boutons d'action ──
-    btn_frm = tk.Frame(body, bg='#ecf0f1')
-    btn_frm.pack(fill='x', pady=(4, 0))
-
-    tk.Button(btn_frm, text="   Activer la Licence   ",
-              command=_do_activate,
-              font=('Arial', 11, 'bold'), bg='#27ae60', fg='white',
-              relief='flat', padx=10, pady=8, cursor='hand2').pack(side='left')
-
-    if trial_days_left > 0:
-        def _continue_trial():
-            result[0] = True
-            root.destroy()
-        tk.Button(btn_frm,
-                  text=f"   Continuer avec l'essai ({trial_days_left}j)   ",
-                  command=_continue_trial,
-                  font=('Arial', 10), bg='#e67e22', fg='white',
-                  relief='flat', padx=10, pady=8, cursor='hand2').pack(
-            side='left', padx=(10, 0))
-
-    def _on_close():
-        if not result[0]:
-            if messagebox.askyesno("Quitter", "Quitter MySchoolGN ?"):
-                root.destroy()
-                os._exit(0)   # Fermeture complète : tue tous les threads/processus
-        else:
-            root.destroy()
-
-    tk.Button(btn_frm, text="  Quitter  ", command=_on_close,
-              font=('Arial', 10), bg='#95a5a6', fg='white',
-              relief='flat', padx=10, pady=8, cursor='hand2').pack(side='right')
-
-    root.protocol("WM_DELETE_WINDOW", _on_close)
-    root.mainloop()
-    return result[0]
-
-
 # ─── Protection anti-modification (garde) ──────────────────────────────────────
 def _tamper_exit():
     """Arrêt immédiat si modification détectée."""
@@ -377,7 +209,7 @@ def _tamper_exit():
             "L'application a été modifiée de manière non autorisée.\n\n"
             "L'application ne peut pas démarrer.\n\n"
             "Veuillez réinstaller MySchoolGN depuis le programme\n"
-            "officiel ou contactez GS Hadja Kanfing Dian."
+            "officiel du GS Les Jardins Wosewa."
         )
         root.destroy()
     except Exception:
@@ -408,28 +240,15 @@ def _guard_check():
         if not _hmac_mod.compare_digest(stored_sig, expected_sig):
             _tamper_exit()
 
-        # Vérifier les empreintes des modules critiques
-        import license_manager
+        # Vérifier l'empreinte du module d'intégrité. Le moteur de licence ne
+        # fait plus partie de l'application ni de cette chaîne de confiance.
         import integrity_check
 
-        lm_fp = _hmac_mod.new(
-            _GUARD_KEY, license_manager._DEV_SECRET, hashlib.sha256
-        ).hexdigest()
-        ic_fp = _hmac_mod.new(
+        module_fp = _hmac_mod.new(
             _GUARD_KEY, integrity_check._INTEGRITY_KEY, hashlib.sha256
         ).hexdigest()
-        combined = _hmac_mod.new(
-            _GUARD_KEY, (lm_fp + ic_fp).encode(), hashlib.sha256
-        ).hexdigest()
 
-        if not _hmac_mod.compare_digest(combined, stored_hash):
-            _tamper_exit()
-
-        # Canary : vérifier que la validation rejette les données invalides
-        test = license_manager._validate_license_data({
-            'license_data': 'GUARD_TEST', 'signature': 'INVALID'
-        })
-        if test.get('valid', False):
+        if not _hmac_mod.compare_digest(module_fp, stored_hash):
             _tamper_exit()
 
     except (ImportError, FileNotFoundError):
@@ -453,7 +272,7 @@ def check_integrity():
             print("")
             print("   L'application a été corrompue ou modifiée.")
             print("   Veuillez réinstaller depuis le programme officiel.")
-            print("   Contact : GS Hadja Kanfing Dian")
+            print("   Contact : GS Les Jardins Wosewa")
             print("!" * 60)
             print("")
             try:
@@ -466,7 +285,7 @@ def check_integrity():
                     "Des fichiers de l'application ont été modifiés.\n\n"
                     "L'application ne peut pas démarrer.\n\n"
                     "Veuillez réinstaller MySchoolGN depuis le programme\n"
-                    "officiel ou contactez GS Hadja Kanfing Dian."
+                    "officiel du GS Les Jardins Wosewa."
                 )
                 root.destroy()
             except Exception:
@@ -479,61 +298,6 @@ def check_integrity():
         pass  # Mode développement, integrity_check non disponible
     except Exception as e:
         print(f"  [Intégrité] Avertissement : {e}")
-
-
-# ─── Vérification de la licence ────────────────────────────────────────────────
-def check_license():
-    """Vérifie la licence au démarrage. Affiche une fenêtre si activation requise."""
-    try:
-        import license_manager
-        status = license_manager.check_license_or_trial()
-    except Exception as e:
-        print(f"[Licence] Avertissement vérification : {e}")
-        return True  # Continuer si le module est absent (dev mode)
-
-    mid = ''
-    try:
-        import license_manager as _lm
-        mid = _lm.get_machine_id()
-    except Exception:
-        pass
-
-    if status.get('valid'):
-        # Licence valide OU essai encore actif
-        if status.get('trial'):
-            days_left = status.get('days_left', 0)
-            if status.get('trial_started'):
-                print("  [ESSAI GRATUIT] Premiere utilisation detectee.")
-                print("  [ESSAI GRATUIT] L'utilisateur peut activer une licence annuelle ou continuer l'essai.")
-                show_activation_window(mid, trial_days_left=days_left, first_trial_prompt=True)
-            elif days_left <= 7:
-                print(f"  [ESSAI] Il vous reste {days_left} jour(s) d'essai.")
-                print(f"  [ESSAI] Contactez GS Hadja Kanfing Dian pour acheter une licence.")
-                show_activation_window(mid, trial_days_left=days_left)
-            else:
-                from datetime import datetime, timedelta
-                exp = (datetime.utcnow() + timedelta(days=days_left)).strftime('%d/%m/%Y')
-                print(f"  [ESSAI GRATUIT] {days_left} jour(s) restant(s) — expire le {exp}")
-                print(f"  [ESSAI GRATUIT] Contactez GS Hadja Kanfing Dian pour obtenir une licence.")
-        else:
-            school = status.get('school', '')
-            edition = status.get('edition', 'Standard')
-            days_left = status.get('days_left', 0)
-            if days_left <= 30:
-                print(f"  [Licence] Expire dans {days_left} jour(s). "
-                      f"Renouvelez auprès de GS Hadja Kanfing Dian.")
-            else:
-                print(f"  [Licence] Valide — {school} ({edition}) — {days_left}j restant(s).")
-    else:
-        # Essai expiré ou aucune licence → fenêtre bloquante (pas de bouton "Continuer")
-        days_left = status.get('days_left', 0)
-        print("")
-        print("  [Licence] Activation requise — ouverture de la fenêtre d'activation...")
-        can_start = show_activation_window(mid, trial_days_left=days_left)
-        if not can_start:
-            os._exit(0)   # Fermeture totale sans laisser Django démarrer
-
-    return True
 
 
 # ─── Utilitaires ──────────────────────────────────────────────────────────────
@@ -766,26 +530,12 @@ def open_browser(port):
     webbrowser.open(url)
 
 
-def show_banner(port, license_status=None):
+def show_banner(port):
     """Affiche la bannière de démarrage."""
-    school = ''
-    edition = 'Standard'
-    mode_label = 'Mode Essai'
-    if license_status:
-        if not license_status.get('trial'):
-            school = license_status.get('school', '')
-            edition = license_status.get('edition', 'Standard')
-            mode_label = f'Édition {edition}'
-        else:
-            days_left = license_status.get('days_left', 0)
-            mode_label = f'Essai — {days_left}j restant(s)'
-
     print("")
     print("=" * 60)
     print("   MySchoolGN - Système de Gestion Scolaire")
-    print(f"   {mode_label}")
-    if school:
-        print(f"   {school}")
+    print("   Accès actif — aucune licence requise")
     print("=" * 60)
     print("")
     print(f"   Adresse : http://127.0.0.1:{port}")
@@ -814,30 +564,127 @@ def _show_fatal_error(message):
         pass
 
 
+# ─── Sous-commandes de maintenance ────────────────────────────────────────────
+def _traiter_sous_commande():
+    """Exécute une sous-commande de sauvegarde passée en argument, si présente.
+
+    Traitée avant tout le reste — garde d'intégrité, base et serveur — afin
+    qu'une tâche planifiée puisse sauvegarder sans ouvrir l'application.
+
+    Le moteur de sauvegarde n'utilise ni Django ni la découverte des commandes
+    de management : il fonctionne donc dans l'exécutable PyInstaller.
+
+    Retourne True si une sous-commande a été traitée (l'application ne doit pas
+    démarrer le serveur).
+    """
+    arguments = [a.lower() for a in sys.argv[1:]]
+    if not arguments:
+        return False
+
+    connues = {'--sauvegarder', '--restaurer', '--lister-sauvegardes', '--diagnostiquer-sync'}
+    demandee = next((a for a in arguments if a in connues), None)
+    if not demandee:
+        return False
+
+    if demandee == '--diagnostiquer-sync':
+        # A la difference des autres sous-commandes, celle-ci a besoin de
+        # Django (modeles, parametres) pour rejouer un cycle de
+        # synchronisation reel. `django.setup()` n'a normalement lieu que
+        # plus loin, dans `setup_database()` : on l'avance ici.
+        import django
+        django.setup()
+        from synchronisation import auto_sync
+        sys.exit(auto_sync.diagnostiquer_synchronisation())
+
+    from ecole_moderne import sauvegarde
+
+    if demandee == '--lister-sauvegardes':
+        print("[Sauvegarde] Destinations :")
+        for cible in sauvegarde.destinations():
+            etat = 'existe' if os.path.isdir(cible) else 'a creer'
+            print(f"  - {cible}  [{etat}]")
+        archives = sauvegarde.archives_disponibles()
+        print(f"[Sauvegarde] Archives disponibles : {len(archives)}")
+        for archive in archives[:20]:
+            print(f"  {archive['date']:%d/%m/%Y %H:%M}  "
+                  f"{archive['taille'] / (1024 * 1024):6.1f} Mo  {archive['chemin']}")
+        return True
+
+    if demandee == '--sauvegarder':
+        rapport = sauvegarde.executer_sauvegarde()
+        for avertissement in rapport.avertissements:
+            print(f"[Sauvegarde] Avertissement : {avertissement}")
+        for echec in rapport.destinations_ko:
+            print(f"[Sauvegarde] Destination en echec : {echec}")
+        print(f"[Sauvegarde] {rapport.resume()}")
+        sys.exit(0 if rapport.succes else 1)
+
+    # --restaurer [chemin] [--confirmer]
+    positionnels = [a for a in sys.argv[1:] if not a.startswith('--')]
+    chemin = positionnels[0] if positionnels else None
+    if not chemin:
+        disponibles = sauvegarde.archives_disponibles()
+        if not disponibles:
+            print("[Restauration] Aucune archive trouvee sur les destinations connues.")
+            sys.exit(1)
+        chemin = disponibles[0]['chemin']
+
+    try:
+        manifeste = sauvegarde.lire_manifeste(chemin)
+    except Exception as err:
+        print(f"[Restauration] Archive illisible : {err}")
+        sys.exit(1)
+
+    print(f"[Restauration] Archive : {chemin}")
+    print(f"  Date    : {manifeste.get('date', '?')}")
+    print(f"  Machine : {manifeste.get('machine', '?')}")
+    print(f"  Medias  : {(manifeste.get('media') or {}).get('nombre', '?')} fichier(s)")
+    for cle, valeur in (manifeste.get('statistiques') or {}).items():
+        print(f"  {cle:<9} : {valeur}")
+
+    if '--confirmer' not in arguments:
+        print("[Restauration] Rien n'a ete modifie. Ajoutez --confirmer pour restaurer.")
+        sys.exit(0)
+
+    rapport = sauvegarde.restaurer(chemin)
+    if rapport.erreur:
+        print(f"[Restauration] ECHEC : {rapport.erreur}")
+        sys.exit(1)
+    print("[Restauration] Terminee. Redemarrez MySchoolGN.")
+    sys.exit(0)
+
+
 # ─── Point d'entrée principal ──────────────────────────────────────────────────
 def main():
     """Point d'entrée principal."""
+    if _traiter_sous_commande():
+        return
+
     print("")
     print("*" * 60)
-    print("   MySchoolGN — GS Hadja Kanfing Dian")
+    print("   MySchoolGN — GS Les Jardins Wosewa")
     print("   Démarrage en mode offline...")
     print("*" * 60)
     print(f"   Répertoire : {BASE_DIR}")
+
+    # ── Mise à jour téléchargée lors d'une session précédente ────────────────
+    # Appliquée ici, avant que quoi que ce soit ne démarre : l'installateur
+    # remplace des fichiers que l'application verrouillerait, et c'est le seul
+    # moment où personne n'est en train de saisir. L'application s'arrête, et
+    # l'installateur la rouvre une fois la nouvelle version en place.
+    try:
+        from ecole_moderne import auto_mise_a_jour
+        if auto_mise_a_jour.appliquer_si_en_attente():
+            print("[MAJ] Une nouvelle version s'installe. L'application va redémarrer.")
+            return
+    except Exception as _maj_err:
+        print(f"[MAJ] Mise à jour en attente non appliquée : {_maj_err}")
 
     # Vérification anti-modification (garde)
     _guard_check()
 
     # Vérification d'intégrité (anti-modification)
     check_integrity()
-
-    # Vérification de la licence
-    license_status = None
-    try:
-        import license_manager
-        license_status = license_manager.check_license_or_trial()
-    except Exception:
-        pass
-    check_license()
 
     # Créer les dossiers nécessaires
     for folder in ['logs', 'media', 'staticfiles',
@@ -857,7 +704,7 @@ def main():
         print("[MySchoolGN] Tentative de démarrage sans migration...")
 
     # Afficher la bannière
-    show_banner(port, license_status)
+    show_banner(port)
 
     # Démarrer la synchronisation automatique en arrière-plan (si configurée).
     # Le worker tente push+pull périodiquement ; hors-ligne il réessaie et se
@@ -865,13 +712,48 @@ def main():
     try:
         from synchronisation import auto_sync
         try:
-            _sync_interval = int(os.environ.get('MYSCHOOL_SYNC_INTERVAL', '60'))
+            _sync_interval = int(os.environ.get('MYSCHOOL_SYNC_INTERVAL', '10'))
         except (TypeError, ValueError):
-            _sync_interval = 60
-        if auto_sync.start(interval=_sync_interval, boot_delay=25):
-            print(f"[Sync] Synchronisation automatique active (intervalle {_sync_interval}s).")
+            _sync_interval = 10
+        try:
+            _sync_fast = int(os.environ.get('MYSCHOOL_SYNC_FAST_INTERVAL', '2'))
+        except (TypeError, ValueError):
+            _sync_fast = 2
+        if auto_sync.start(interval=_sync_interval, boot_delay=8, fast_interval=_sync_fast):
+            # Les cadences annoncées sont celles réellement appliquées, bornes
+            # comprises, et non les valeurs brutes du fichier de configuration.
+            _repos, _actif = auto_sync.cadence_effective(_sync_interval, _sync_fast)
+            print(f"[Sync] Synchronisation automatique active "
+                  f"(envoi immediat, verification {_actif}s en activite, "
+                  f"{_repos}s au repos).")
     except Exception as _sync_err:
         print(f"[Sync] Synchronisation automatique non démarrée : {_sync_err}")
+
+    # Surveiller les nouvelles versions de l'application. Le téléchargement se
+    # fait en tâche de fond ; l'installation attend le prochain démarrage, seul
+    # moment où interrompre l'application ne coûte aucune saisie.
+    try:
+        from ecole_moderne import auto_mise_a_jour
+        try:
+            _maj_interval = int(os.environ.get('MYSCHOOL_UPDATE_INTERVAL', str(6 * 3600)))
+        except (TypeError, ValueError):
+            _maj_interval = 6 * 3600
+        if auto_mise_a_jour.start(intervalle=_maj_interval, delai_initial=90):
+            print(f"[MAJ] Recherche de mises à jour active (toutes les {_maj_interval // 60} min).")
+    except Exception as _maj_err:
+        print(f"[MAJ] Recherche de mises à jour non démarrée : {_maj_err}")
+
+    # Démarrer la sauvegarde automatique en arrière-plan. Complémentaire de la
+    # tâche planifiée Windows : celle-ci couvre l'application fermée, celle-là
+    # ne demande aucune installation ni droit administrateur sur le poste.
+    try:
+        from ecole_moderne import auto_sauvegarde
+        _sauv_heures = auto_sauvegarde.start()
+        if _sauv_heures:
+            print(f"[Sauvegarde] Sauvegarde automatique active (toutes les "
+                  f"{_sauv_heures:g} h, base + medias, destinations multiples).")
+    except Exception as _sauv_err:
+        print(f"[Sauvegarde] Sauvegarde automatique non démarrée : {_sauv_err}")
 
     # Ouvrir le navigateur en arrière-plan
     browser_thread = threading.Thread(

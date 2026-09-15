@@ -134,6 +134,13 @@ def build():
         'ecole_moderne.decorators', 'ecole_moderne.middleware',
         'ecole_moderne.image_cache_middleware',
         'ecole_moderne.image_optimization_middleware',
+        # Mises à jour automatiques. `github_releases` est importé à l'intérieur
+        # d'une fonction (recours quand le serveur est injoignable) : l'analyse
+        # statique de PyInstaller ne peut pas le voir, et son absence rendrait
+        # ce recours silencieusement inopérant sur les postes compilés.
+        'ecole_moderne.auto_mise_a_jour', 'ecole_moderne.version',
+        'administration.github_releases',
+        'administration.views_mises_a_jour', 'administration.urls_mises_a_jour',
     ]
     hidden_imports.extend(extra_views)
 

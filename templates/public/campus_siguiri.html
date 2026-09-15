@@ -1,0 +1,197 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}École privée à Siguiri — Les Jardins Wosewa (Crèche, Maternelle, Primaire, Collège){% endblock %}
+{% block meta_description %}Les Jardins Wosewa à Siguiri, quartier Hèrèmankonon, région de Kankan : école privée agréée (n° 0096) accueillant de la crèche au collège, avec garderie, cantine et transport.{% endblock %}
+{% block og_title %}Les Jardins Wosewa — Campus de Siguiri (Hèrèmankonon){% endblock %}
+{% block og_description %}École privée agréée à Siguiri : de la crèche au collège, garderie jusqu'à 17h, cantine et transport scolaire.{% endblock %}
+{% block twitter_title %}Les Jardins Wosewa — Campus de Siguiri{% endblock %}
+{% block twitter_description %}École privée agréée à Siguiri, quartier Hèrèmankonon : de la crèche au collège.{% endblock %}
+
+{% comment %}Le domaine du logiciel sert les mêmes gabarits : on désigne explicitement
+   la version de référence pour éviter tout contenu dupliqué entre domaines.{% endcomment %}
+{% block canonical_url %}https://www.lesjardinswosewa.com/campus/siguiri/{% endblock %}
+{% block og_url %}https://www.lesjardinswosewa.com/campus/siguiri/{% endblock %}
+
+{% block structured_data %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "School",
+  "name": "Groupe Scolaire Privé Les Jardins Wosewa — Campus de Siguiri",
+  "description": "École privée agréée à Siguiri, quartier Hèrèmankonon, accueillant les élèves de la crèche au collège, avec garderie, cantine et transport scolaire.",
+  "url": "https://www.lesjardinswosewa.com/campus/siguiri/",
+  "address": {
+    "@type": "PostalAddress",
+    "streetAddress": "Quartier Hèrèmankonon",
+    "addressLocality": "Siguiri",
+    "addressRegion": "Kankan",
+    "addressCountry": "GN"
+  },
+  "telephone": ["+224627074644", "+224622751518"],
+  "email": "lesjardinswosewa.gui23@gmail.com",
+  "openingHours": "Mo-Fr 07:45-17:00",
+  "parentOrganization": {
+    "@type": "School",
+    "name": "Groupe Scolaire Privé Les Jardins Wosewa",
+    "url": "https://www.lesjardinswosewa.com/"
+  }
+}
+</script>
+{% endblock %}
+
+{% block breadcrumb %}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .campus { --c-blue: #1657a8; --c-blue-dark: #0f3f7d; --c-orange: #f28c1e; --c-muted: #5b6979; }
+  .campus-hero {
+    background: linear-gradient(135deg, var(--c-orange) 0%, #c26a06 100%);
+    color: #fff; border-radius: 1rem; padding: 2.5rem;
+  }
+  .campus-hero h1 { font-weight: 800; line-height: 1.2; }
+  .campus-card {
+    background: #fff; border: 1px solid #e3ebf5; border-left: 5px solid var(--c-orange);
+    border-radius: .9rem; padding: 1.6rem; height: 100%;
+  }
+  .campus-card--blue { border-left-color: var(--c-blue); }
+  .campus-card h2 { font-size: 1.15rem; font-weight: 700; color: #c26a06; margin-bottom: .85rem; }
+  .campus-card--blue h2 { color: var(--c-blue); }
+  .campus-card p, .campus-card li { color: var(--c-muted); line-height: 1.7; }
+  .campus-section-title { color: var(--c-blue); font-weight: 800; margin-bottom: 1rem; }
+  .campus-tarifs thead th { background: var(--c-blue); color: #fff; border: 0; white-space: nowrap; }
+  .campus-tarifs .montant { font-weight: 700; color: var(--c-blue); white-space: nowrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="campus container py-4">
+
+  <nav aria-label="Fil d'Ariane" class="mb-3">
+    <ol class="breadcrumb small mb-0">
+      <li class="breadcrumb-item"><a href="{% url 'home' %}">Accueil</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Campus de Siguiri</li>
+    </ol>
+  </nav>
+
+  <section class="campus-hero mb-4">
+    <h1 class="h2 mb-2">École privée à Siguiri — Les Jardins Wosewa</h1>
+    <p class="mb-0 opacity-75">
+      Quartier Hèrèmankonon, Siguiri — région de Kankan.
+      Établissement agréé n° 0096, de la crèche au collège.
+    </p>
+  </section>
+
+  <div class="row g-4 mb-4">
+    <div class="col-lg-7">
+      <h2 class="h4 campus-section-title">Une école agréée au cœur de Siguiri</h2>
+      <p class="text-muted" style="line-height:1.8;">
+        Le campus de Siguiri des Jardins Wosewa est implanté au quartier Hèrèmankonon, dans la
+        région de Kankan. L'établissement, agréé sous le numéro 0096, accueille les enfants dès
+        la crèche et les accompagne jusqu'au collège.
+      </p>
+      <p class="text-muted" style="line-height:1.8;">
+        L'enseignement suit le programme franco-guinéen. L'école propose une garderie jusqu'à 17h
+        pour les parents qui travaillent, ainsi qu'une cantine et un service de transport
+        scolaire. Les tenues, t-shirts et maillots de sport sont inclus dans les frais de
+        scolarité.
+      </p>
+    </div>
+    <div class="col-lg-5">
+      <div class="campus-card campus-card--blue">
+        <h2><i class="fas fa-location-dot me-2"></i>Nous trouver et nous joindre</h2>
+        <ul class="list-unstyled mb-0">
+          <li class="mb-3">
+            <strong>Adresse</strong><br>
+            <span class="text-muted">Quartier Hèrèmankonon<br>Siguiri, région de Kankan</span>
+          </li>
+          <li class="mb-3">
+            <strong>Téléphone</strong><br>
+            <a href="tel:+224627074644" class="text-decoration-none">627 07 46 44</a> ·
+            <a href="tel:+224622751518" class="text-decoration-none">622 75 15 18</a>
+          </li>
+          <li class="mb-3">
+            <strong>E-mail</strong><br>
+            <a href="mailto:lesjardinswosewa.gui23@gmail.com" class="text-decoration-none">lesjardinswosewa.gui23@gmail.com</a>
+          </li>
+          <li class="mb-0">
+            <strong>Agrément</strong><br>
+            <span class="text-muted">n° 0096</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="h4 campus-section-title">Frais de scolarité 2025 – 2026</h2>
+  <p class="text-muted">Tenue, maillot et t-shirt inclus dans les frais de scolarité.</p>
+  <div class="table-responsive mb-4">
+    <table class="table campus-tarifs align-middle">
+      <thead>
+        <tr>
+          <th scope="col">Niveau</th>
+          <th scope="col">Âge</th>
+          <th scope="col">Scolarité annuelle</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">Crèche</th><td>6 mois à 1 an</td><td class="montant">1 200 000 GNF</td></tr>
+        <tr><th scope="row">Toute petite section</th><td>1 à 2 ans</td><td class="montant">1 200 000 GNF</td></tr>
+        <tr><th scope="row">Petite section</th><td>3 à 4 ans</td><td class="montant">1 000 000 GNF</td></tr>
+        <tr><th scope="row">Moyenne section</th><td>4 à 5 ans</td><td class="montant">1 000 000 GNF</td></tr>
+        <tr><th scope="row">Grande section</th><td>5 ans</td><td class="montant">1 050 000 GNF</td></tr>
+        <tr><th scope="row">1<sup>re</sup> à 4<sup>e</sup> année</th><td>—</td><td class="montant">1 100 000 GNF</td></tr>
+        <tr><th scope="row">5<sup>e</sup> année</th><td>—</td><td class="montant">1 150 000 GNF</td></tr>
+        <tr><th scope="row">7<sup>e</sup>, 8<sup>e</sup> et 9<sup>e</sup> année</th><td>—</td><td class="montant">1 450 000 GNF</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="row g-4 mb-4">
+    <div class="col-lg-4">
+      <div class="campus-card campus-card--blue">
+        <h2><i class="fas fa-clock me-2"></i>Horaires</h2>
+        <ul class="mb-0">
+          <li>Maternelle&nbsp;: 7h45 – 12h00</li>
+          <li>Primaire&nbsp;: 7h45 – 14h00</li>
+          <li>Garderie&nbsp;: 7h45 – 17h00</li>
+          <li>Du lundi au vendredi</li>
+        </ul>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="campus-card">
+        <h2><i class="fas fa-bus me-2"></i>Services</h2>
+        <ul class="mb-0">
+          <li>Garderie maternelle et primaire</li>
+          <li>Cantine&nbsp;: 150 000 à 200 000 GNF / mois</li>
+          <li>Transport&nbsp;: 120 000 GNF / mois</li>
+        </ul>
+      </div>
+    </div>
+    <div class="col-lg-4">
+      <div class="campus-card campus-card--blue">
+        <h2><i class="fas fa-folder-open me-2"></i>Inscription</h2>
+        <ul class="mb-0">
+          <li>Extrait d'acte de naissance</li>
+          <li>Carnet de vaccination (tout-petits)</li>
+          <li>Quatre photos d'identité</li>
+          <li>Livret scolaire à partir du primaire</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <p class="text-muted small">
+    <i class="fas fa-circle-info me-1"></i>
+    Montants donnés à titre indicatif pour l'année scolaire 2025-2026&nbsp;; les places sont
+    limitées et un test de niveau est demandé aux nouveaux élèves.
+  </p>
+
+  <div class="d-flex flex-wrap gap-2">
+    <a href="{% url 'contact' %}" class="btn btn-primary"><i class="fas fa-envelope me-2"></i>Nous contacter</a>
+    <a href="{% url 'campus_conakry' %}" class="btn btn-outline-primary"><i class="fas fa-location-dot me-2"></i>Voir le campus de Conakry</a>
+  </div>
+
+</div>
+{% endblock %}

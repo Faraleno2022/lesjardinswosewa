@@ -57,11 +57,26 @@ def tableau_bord_cantine(request):
     )
     
     # Statistiques par type de repas
+    comptes_repas = dict(
+        qs.filter(statut='ACTIF')
+        .values_list('type_repas')
+        .annotate(nombre=Count('id'))
+    )
     stats_type_repas = {
-        'dejeuner': qs.filter(type_repas='DEJEUNER', statut='ACTIF').count(),
-        'gouter': qs.filter(type_repas='GOUTER', statut='ACTIF').count(),
-        'complet': qs.filter(type_repas='COMPLET', statut='ACTIF').count(),
+        'dejeuner': comptes_repas.get('DEJEUNER', 0),
+        'gouter': comptes_repas.get('GOUTER', 0),
+        'complet': comptes_repas.get('COMPLET', 0),
+        'repas_10h': comptes_repas.get('REPAS_10H', 0),
+        'repas_14h': comptes_repas.get('REPAS_14H', 0),
     }
+    stats_type_repas_lignes = [
+        {
+            'code': code,
+            'label': label,
+            'nombre': comptes_repas.get(code, 0),
+        }
+        for code, label in AbonnementCantine.TypeRepas.choices
+    ]
     
     # Revenus mensuels estimés
     revenus_mensuel = qs.filter(
@@ -82,6 +97,7 @@ def tableau_bord_cantine(request):
         'nb_proche_expiration': len(abonnements_proche_expiration),
         'nb_critiques': len(abonnements_critiques),
         'stats_type_repas': stats_type_repas,
+        'stats_type_repas_lignes': stats_type_repas_lignes,
         'revenus_mensuel': revenus_mensuel,
     }
     return render(request, 'bus/cantine/tableau_bord.html', context)
@@ -102,6 +118,7 @@ def liste_abonnements_cantine(request):
             Q(eleve__nom__icontains=q) |
             Q(eleve__prenom__icontains=q) |
             Q(eleve__matricule__icontains=q) |
+            Q(reference_externe__icontains=q) |
             Q(contact_parent__icontains=q)
         )
     
@@ -141,6 +158,7 @@ def liste_abonnements_cantine(request):
         'q': q,
         'filtre': filtre,
         'type_repas': type_repas,
+        'types_repas': AbonnementCantine.TypeRepas.choices,
     }
     return render(request, 'bus/cantine/liste.html', context)
 
@@ -148,34 +166,30 @@ def liste_abonnements_cantine(request):
 @login_required
 def creer_abonnement_cantine(request):
     """Créer un nouvel abonnement cantine"""
+    initial = {}
+    eleve_id = request.GET.get('eleve')
+    if eleve_id:
+        eleves_autorises = Eleve.objects.filter(est_dans_corbeille=False)
+        eleves_autorises = filter_by_user_school(
+            eleves_autorises, request.user, 'classe__ecole'
+        )
+        eleve = eleves_autorises.filter(pk=eleve_id).select_related(
+            'classe', 'responsable_principal'
+        ).first()
+        if eleve:
+            initial['eleve'] = eleve
+            initial['classe'] = eleve.classe_id
+            if eleve.responsable_principal:
+                initial['contact_parent'] = eleve.responsable_principal.telephone
+
     if request.method == 'POST':
-        form = AbonnementCantineForm(request.POST)
+        form = AbonnementCantineForm(request.POST, user=request.user)
         if form.is_valid():
             abonnement = form.save()
             messages.success(request, f"Abonnement cantine créé pour {abonnement.eleve}")
             return redirect('bus:liste_abonnements_cantine')
     else:
-        form = AbonnementCantineForm()
-        
-        # Pré-remplir l'élève si fourni dans l'URL
-        eleve_id = request.GET.get('eleve')
-        if eleve_id:
-            try:
-                eleve = Eleve.objects.get(pk=eleve_id)
-                form.initial['eleve'] = eleve
-                if eleve.responsable_principal:
-                    form.initial['contact_parent'] = eleve.responsable_principal.telephone
-            except Eleve.DoesNotExist:
-                pass
-    
-    # Filtrer les élèves par école de l'utilisateur
-    # IMPORTANT: Seul le superuser peut voir toutes les écoles
-    if not user_is_superadmin(request.user):
-        form.fields['eleve'].queryset = filter_by_user_school(
-            Eleve.objects.all(), 
-            request.user, 
-            'classe__ecole'
-        )
+        form = AbonnementCantineForm(initial=initial, user=request.user)
     
     context = {
         'titre_page': 'Nouvel Abonnement Cantine',
@@ -191,22 +205,15 @@ def modifier_abonnement_cantine(request, pk):
     abonnement = get_object_or_404(AbonnementCantine, pk=pk)
     
     if request.method == 'POST':
-        form = AbonnementCantineForm(request.POST, instance=abonnement)
+        form = AbonnementCantineForm(
+            request.POST, instance=abonnement, user=request.user
+        )
         if form.is_valid():
             form.save()
             messages.success(request, f"Abonnement cantine modifié pour {abonnement.eleve}")
             return redirect('bus:liste_abonnements_cantine')
     else:
-        form = AbonnementCantineForm(instance=abonnement)
-    
-    # Filtrer les élèves par école de l'utilisateur
-    # IMPORTANT: Seul le superuser peut voir toutes les écoles
-    if not user_is_superadmin(request.user):
-        form.fields['eleve'].queryset = filter_by_user_school(
-            Eleve.objects.all(), 
-            request.user, 
-            'classe__ecole'
-        )
+        form = AbonnementCantineForm(instance=abonnement, user=request.user)
     
     context = {
         'titre_page': 'Modifier Abonnement Cantine',
@@ -263,7 +270,7 @@ def export_cantine_excel(request):
     # En-têtes
     headers = [
         'Matricule', 'Nom', 'Prénom', 'Classe', 'Type Repas', 'Périodicité', 
-        'Montant (GNF)', 'Date Début', 'Date Expiration', 'Jours Restants', 
+        'Montant (GNF)', 'Référence externe', 'Date Début', 'Date Expiration', 'Jours Restants',
         'Statut', 'Régime Alimentaire', 'Allergies', 'Contact Parent'
     ]
     ws.append(headers)
@@ -278,6 +285,7 @@ def export_cantine_excel(request):
             abo.get_type_repas_display(),
             abo.get_periodicite_display(),
             float(abo.montant),
+            abo.reference_externe or '',
             abo.date_debut.strftime('%d/%m/%Y'),
             abo.date_expiration.strftime('%d/%m/%Y'),
             abo.jours_restants,
@@ -547,6 +555,8 @@ def generer_recu_cantine_pdf(request, abo_id):
     line('Type de repas', abo.get_type_repas_display())
     line('Périodicité', abo.get_periodicite_display())
     line('Montant', f"{int(abo.montant):,}".replace(',', ' ') + ' GNF')
+    if abo.reference_externe:
+        line('Référence externe', abo.reference_externe)
     line('Début', abo.date_debut.strftime('%d/%m/%Y') if abo.date_debut else '')
     line('Expiration', abo.date_expiration.strftime('%d/%m/%Y') if abo.date_expiration else '')
     

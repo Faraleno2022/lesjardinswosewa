@@ -48,15 +48,26 @@
     <div class="card shadow-sm border-0">
       <div class="card-header bg-white">
         <form method="get" class="row g-2 align-items-end">
-          <div class="col-sm-4">
+          <div class="{% if cfg.filtre_choix %}col-sm-3{% else %}col-sm-4{% endif %}">
             <label class="form-label small mb-0">Recherche</label>
             <input type="text" name="q" value="{{ filtres.q }}" class="form-control form-control-sm">
           </div>
+          {% if cfg.filtre_choix %}
           <div class="col-sm-3">
+            <label class="form-label small mb-0">{{ cfg.filtre_choix.label }}</label>
+            <select name="type" class="form-select form-select-sm">
+              <option value="">Tous</option>
+              {% for code, libelle in cfg.filtre_choix.choix %}
+                <option value="{{ code }}" {% if filtres.type == code %}selected{% endif %}>{{ libelle }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          {% endif %}
+          <div class="{% if cfg.filtre_choix %}col-sm-2{% else %}col-sm-3{% endif %}">
             <label class="form-label small mb-0">Du</label>
             <input type="date" name="date_debut" value="{{ filtres.date_debut }}" class="form-control form-control-sm">
           </div>
-          <div class="col-sm-3">
+          <div class="{% if cfg.filtre_choix %}col-sm-2{% else %}col-sm-3{% endif %}">
             <label class="form-label small mb-0">Au</label>
             <input type="date" name="date_fin" value="{{ filtres.date_fin }}" class="form-control form-control-sm">
           </div>
@@ -72,6 +83,7 @@
               <tr>
                 <th>Date</th>
                 <th>{{ cfg.entete_libelle }}</th>
+                {% if cle == 'entree' %}<th>Type</th><th>Mode</th><th>Référence</th>{% endif %}
                 <th class="text-end">Montant</th>
                 <th>Observation</th>
                 <th class="text-end">Actions</th>
@@ -81,7 +93,12 @@
               {% for op in operations %}
               <tr>
                 <td class="text-nowrap">{{ op.date|date:"d/m/Y" }}</td>
-                <td>{% if cle == 'versement' %}{{ op.lieu_versement }}{% else %}{{ op.designation }}{% endif %}</td>
+                <td>{{ op.libelle }}</td>
+                {% if cle == 'entree' %}
+                <td><span class="badge bg-light text-dark border">{{ op.type_entree_libelle }}</span></td>
+                <td class="small">{{ op.mode_paiement_libelle }}</td>
+                <td class="small text-muted">{{ op.reference|default:"—" }}</td>
+                {% endif %}
                 <td class="text-end text-nowrap fw-semibold">{{ op.montant|floatformat:0|intcomma }} GNF</td>
                 <td class="small text-muted">{{ op.observation|default:"—"|truncatechars:60 }}</td>
                 <td class="text-end text-nowrap">
@@ -90,13 +107,13 @@
                 </td>
               </tr>
               {% empty %}
-              <tr><td colspan="5" class="text-center text-muted py-4">Aucune opération enregistrée.</td></tr>
+              <tr><td colspan="{% if cle == 'entree' %}8{% else %}5{% endif %}" class="text-center text-muted py-4">Aucune opération enregistrée.</td></tr>
               {% endfor %}
             </tbody>
             {% if operations %}
             <tfoot class="table-light">
               <tr>
-                <th colspan="2">Total ({{ nombre }} opération{{ nombre|pluralize }})</th>
+                <th colspan="{% if cle == 'entree' %}5{% else %}2{% endif %}">Total ({{ nombre }} opération{{ nombre|pluralize }})</th>
                 <th class="text-end">{{ total|intcomma }} GNF</th>
                 <th colspan="2"></th>
               </tr>

@@ -329,3 +329,32 @@ class RemiseBaseCalculParTrancheTests(TestCase):
         self.assertEqual(tranches[1]["du"], 500000)
         self.assertEqual(tranches[1]["sur_ce_paiement"], 280000)
         self.assertEqual(tranches[2]["sur_ce_paiement"], 0)
+
+    def test_plusieurs_remises_sont_plafonnees_a_la_base_selectionnee(self):
+        today = timezone.now().date()
+        remise_a = RemiseReduction.objects.create(
+            nom='Remise fixe A', type_remise='MONTANT_FIXE', valeur=400000,
+            motif='SOCIALE', date_debut=today, date_fin=today, actif=True,
+        )
+        remise_b = RemiseReduction.objects.create(
+            nom='Remise fixe B', type_remise='MONTANT_FIXE', valeur=400000,
+            motif='AUTRE', date_debut=today, date_fin=today, actif=True,
+        )
+
+        resp = self.client.post(
+            self.url,
+            {
+                'montant_original': self.paiement.montant,
+                'remises': [remise_a.id, remise_b.id],
+                'motif': 'GESTE_COMMERCIAL',
+                'tranches': ['1'],
+                'base_calcul': 'TRANCHES_DUES',
+            },
+        )
+
+        self.assertEqual(resp.status_code, 302)
+        total = sum(
+            ligne.montant_remise
+            for ligne in PaiementRemise.objects.filter(paiement=self.paiement)
+        )
+        self.assertEqual(total, 500000)

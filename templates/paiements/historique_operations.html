@@ -1,0 +1,109 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="{% url 'paiements:tableau_bord' %}">Paiements</a></li>
+<li class="breadcrumb-item active">Audit des montants</li>
+{% endblock %}
+
+{% block page_actions %}
+<a href="{% url 'paiements:tableau_bord' %}" class="btn btn-outline-secondary">
+  <i class="fas fa-arrow-left me-1"></i>Tableau de bord
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="alert alert-info">
+  <i class="fas fa-shield-alt me-2"></i>
+  Les suppressions sont des annulations conservées : aucune donnée de paiement n’est effacée définitivement.
+</div>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <form method="get" class="row g-3 align-items-end">
+      <div class="col-lg-4">
+        <label class="form-label">Recherche</label>
+        <input class="form-control" name="q" value="{{ q }}" placeholder="Reçu, élève, motif ou utilisateur">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Période</label>
+        <select class="form-select" name="periode">
+          {% for value, label in periodes.items %}
+          <option value="{{ value }}" {% if periode == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Opération</label>
+        <select class="form-select" name="operation">
+          <option value="">Toutes</option>
+          {% for value, label in operations %}
+          <option value="{{ value }}" {% if operation == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary w-100"><i class="fas fa-filter me-1"></i>Filtrer</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <strong><i class="fas fa-history me-2"></i>Journal des opérations</strong>
+    <span class="badge bg-primary">{{ page_obj.paginator.count|intcomma }} opération(s)</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr><th>Date</th><th>Opération</th><th>Reçu / élève</th><th>Montant avant</th><th>Montant après</th><th>Variation</th><th>Motif</th><th>Auteur</th></tr>
+      </thead>
+      <tbody>
+      {% for evenement in page_obj %}
+        <tr>
+          <td class="text-nowrap">{{ evenement.date_modification|date:'d/m/Y H:i' }}</td>
+          <td>
+            {% if evenement.operation == 'SUPPRESSION' %}
+            <span class="badge bg-danger">Suppression douce</span>
+            {% else %}
+            <span class="badge bg-warning text-dark">Modification</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if evenement.paiement %}<a href="{% url 'paiements:detail_paiement' evenement.paiement.id %}"><strong>{{ evenement.numero_recu }}</strong></a>{% else %}<strong>{{ evenement.numero_recu }}</strong>{% endif %}
+            <div class="small text-muted">{{ evenement.eleve|default:'Élève non renseigné' }}{% if evenement.ecole %} · {{ evenement.ecole.nom }}{% endif %}</div>
+          </td>
+          <td>{{ evenement.montant_avant|floatformat:0|intcomma }} GNF</td>
+          <td>
+            {% if evenement.operation == 'SUPPRESSION' %}<span class="text-muted">Annulé</span>{% else %}{{ evenement.montant_apres|floatformat:0|intcomma }} GNF{% endif %}
+          </td>
+          <td>
+            {% if evenement.operation == 'SUPPRESSION' %}
+            <span class="text-danger">-{{ evenement.montant_avant|floatformat:0|intcomma }} GNF</span>
+            {% elif 'montant' in evenement.champs_modifies %}
+            <span class="{% if evenement.variation_montant < 0 %}text-danger{% elif evenement.variation_montant > 0 %}text-success{% else %}text-muted{% endif %}">
+              {{ evenement.variation_montant|floatformat:0|intcomma }} GNF
+            </span>
+            {% else %}<span class="text-muted">Autres champs</span>{% endif %}
+          </td>
+          <td style="min-width: 240px">{{ evenement.motif }}</td>
+          <td>{{ evenement.utilisateur.get_full_name|default:evenement.utilisateur.username|default:'Système' }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="8" class="text-center text-muted py-5">Aucune opération pour ces critères.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.has_other_pages %}
+  <div class="card-footer d-flex justify-content-between align-items-center">
+    {% if page_obj.has_previous %}<a class="btn btn-outline-primary btn-sm" href="?page={{ page_obj.previous_page_number }}&periode={{ periode }}&operation={{ operation }}&q={{ q|urlencode }}">Précédent</a>{% else %}<span></span>{% endif %}
+    <span>Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}<a class="btn btn-outline-primary btn-sm" href="?page={{ page_obj.next_page_number }}&periode={{ periode }}&operation={{ operation }}&q={{ q|urlencode }}">Suivant</a>{% else %}<span></span>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

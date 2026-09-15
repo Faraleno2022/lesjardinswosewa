@@ -2,6 +2,9 @@
 
 {% block title %}Demander une démonstration - Myschool GN{% endblock %}
 {% block meta_description %}Demandez une démonstration de Myschool GN pour découvrir la gestion scolaire adaptée aux établissements en Guinée.{% endblock %}
+{% comment %}Page commerciale du logiciel : sur le domaine de l'école, elle ne doit pas
+   être indexée, sinon Google la référence sous lesjardinswosewa.com.{% endcomment %}
+{% block meta_robots %}{% if site.est_ecole %}noindex,follow{% else %}index,follow{% endif %}{% endblock %}
 
 {% block content %}
 <section class="container py-5">

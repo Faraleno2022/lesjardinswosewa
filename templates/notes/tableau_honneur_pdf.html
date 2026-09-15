@@ -1,8 +1,19 @@
+{% load branding %}
+{% school_document_branding ecole bulletin=True as palette %}
 <!DOCTYPE html>
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
 <style>
+    :root {
+        --brand-primary: {{ palette.primary }};
+        --brand-secondary: {{ palette.secondary }};
+        --brand-primary-light: {{ palette.primary_light }};
+        --brand-success: {{ palette.success }};
+        --brand-text: {{ palette.text }};
+        --brand-muted: {{ palette.muted }};
+        --brand-border: {{ palette.border }};
+    }
     @page {
         size: A4 landscape;
         margin: 8mm;
@@ -10,14 +21,14 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
         font-family: Arial, sans-serif;
-        color: #222;
+        color: var(--brand-text);
         font-size: 10px;
     }
 
     /* ── En-tête compact ── */
     .header {
         width: 100%;
-        border-bottom: 3px solid #1a6fc4;
+        border-bottom: 3px solid var(--brand-primary);
         padding-bottom: 5px;
         margin-bottom: 6px;
         overflow: hidden;
@@ -29,16 +40,16 @@
     .header-left-inner { display: inline-block; vertical-align: middle; }
     .header-logo { display: inline-block; vertical-align: middle; margin-right: 8px; }
     .header-logo img { width: 40px; height: 40px; object-fit: contain; }
-    .school-name    { font-size: 13px; font-weight: 700; color: #1a1a2e; }
-    .school-details { font-size: 8px; color: #666; }
-    .annee { font-size: 11px; font-weight: 600; color: #1a6fc4; }
+    .school-name    { font-size: 13px; font-weight: 700; color: var(--brand-text); }
+    .school-details { font-size: 8px; color: var(--brand-muted); }
+    .annee { font-size: 11px; font-weight: 600; color: var(--brand-primary); }
     .date  { font-size: 8px; color: #777; }
 
     /* ── Titre ── */
     .main-title { text-align: center; margin-bottom: 8px; }
     .main-title h1 {
         font-size: 16px; font-weight: 800;
-        color: #1a6fc4; text-transform: uppercase; letter-spacing: 2px;
+        color: var(--brand-primary); text-transform: uppercase; letter-spacing: 2px;
     }
     .subtitle { font-size: 9px; color: #666; margin-top: 2px; }
 
@@ -56,7 +67,7 @@
 
     /* ── Badge carte paysage ── */
     .badge-card {
-        border: 2px solid #1a6fc4;
+        border: 2px solid var(--brand-primary);
         border-radius: 12px;
         overflow: hidden;
         background: #fff;
@@ -92,7 +103,7 @@
         width: 115px;
         height: 145px;
         overflow: hidden;
-        background: linear-gradient(135deg, #4a90d9 0%, #1a6fc4 50%, #0d3b8c 100%);
+        background: linear-gradient(135deg, var(--brand-secondary) 0%, var(--brand-primary) 60%, var(--brand-text) 100%);
         position: relative;
     }
     .badge-photo img {
@@ -129,7 +140,7 @@
     .rang-gold   { background: linear-gradient(135deg, #ffd700, #d4a017); color: #333; }
     .rang-silver { background: linear-gradient(135deg, #d4d4d4, #8a8a8a); color: #333; }
     .rang-bronze { background: linear-gradient(135deg, #cd7f32, #b87333); }
-    .rang-other  { background: #1a6fc4; }
+    .rang-other  { background: var(--brand-primary); }
 
     /* ── Infos élève à droite ── */
     .badge-niveau {
@@ -143,14 +154,14 @@
         margin-bottom: 5px;
         letter-spacing: 0.5px;
     }
-    .niveau-maternelle  { background: #28a745; }
-    .niveau-primaire    { background: #1a6fc4; }
+    .niveau-maternelle  { background: var(--brand-success); }
+    .niveau-primaire    { background: var(--brand-primary); }
     .niveau-secondaire  { background: #6c757d; }
 
     .badge-name {
         font-size: 12px;
         font-weight: 800;
-        color: #1a1a2e;
+        color: var(--brand-text);
         text-transform: uppercase;
         line-height: 1.3;
         margin-bottom: 2px;
@@ -158,7 +169,7 @@
     }
     .badge-classe {
         font-size: 9px;
-        color: #1a6fc4;
+        color: var(--brand-primary);
         font-weight: 600;
         margin-bottom: 8px;
     }
@@ -178,7 +189,7 @@
     }
     .stat-pill:last-child { margin-right: 0; }
 
-    .stat-pill-moyenne { background: #eef4ff; border: 1px solid #c7deff; }
+    .stat-pill-moyenne { background: var(--brand-primary-light); border: 1px solid var(--brand-border); }
     .stat-pill-rang    { background: #eefbf0; border: 1px solid #b8e6c0; }
 
     .stat-pill .label {
@@ -193,8 +204,8 @@
         font-size: 11px;
         font-weight: 800;
     }
-    .stat-pill-moyenne .value { color: #1a6fc4; }
-    .stat-pill-rang .value    { color: #28a745; }
+    .stat-pill-moyenne .value { color: var(--brand-primary); }
+    .stat-pill-rang .value    { color: var(--brand-success); }
 
     /* ── Ruban décoratif diagonal pour le top 3 ── */
     .badge-ribbon {
@@ -215,7 +226,7 @@
     .footer {
         margin-top: 8px;
         padding-top: 5px;
-        border-top: 2px solid #1a6fc4;
+        border-top: 2px solid var(--brand-primary);
         overflow: hidden;
         font-size: 8px;
     }

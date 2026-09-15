@@ -1,91 +1,32 @@
 # -*- coding: utf-8 -*-
 """
-MySchoolGN - Vues d'activation de licence et création de compte
-================================================================
+MySchoolGN - Gestion des comptes utilisateurs
+==============================================
 Auteur : GS Hadja Kanfing Dian
 """
-
-import json
-import os
-from pathlib import Path
 
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.contrib.auth import get_user_model, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
-from django.http import JsonResponse
 
 User = get_user_model()
 
 
-# ─── Helpers licence ──────────────────────────────────────────────────────────
-def _get_license_status():
-    try:
-        import license_manager as lm
-        status = lm.check_license_or_trial()
-        status['machine_id'] = lm.get_machine_id()
-        status['machine_short'] = lm.get_machine_id_short()
-        return status
-    except Exception as e:
-        return {'valid': True, 'reason': f'Module licence non disponible : {e}',
-                'machine_id': 'N/A', 'machine_short': 'N/A', 'dev_mode': True}
-
-
-# ─── Page principale d'activation ─────────────────────────────────────────────
+# ─── Page principale de gestion des comptes ──────────────────────────────────
 @login_required
 def activation_page(request):
-    """Page d'activation de licence et gestion des comptes admin."""
+    """Page historique ``activation`` devenue la gestion des comptes admin."""
     if not request.user.is_superuser:
         messages.error(request, "Accès réservé à l'administrateur principal.")
         return redirect('/')
 
-    license_status = _get_license_status()
-
     context = {
-        'license_status': license_status,
         'users': User.objects.all().order_by('-is_superuser', 'username'),
-        'page_title': 'Activation & Comptes',
+        'page_title': 'Gestion des comptes',
     }
     return render(request, 'utilisateurs/activation.html', context)
-
-
-# ─── Activation de licence ────────────────────────────────────────────────────
-@login_required
-@require_http_methods(["POST"])
-def activer_licence(request):
-    """Reçoit un fichier .lic et l'active."""
-    if not request.user.is_superuser:
-        return JsonResponse({'success': False, 'error': 'Accès refusé.'}, status=403)
-
-    lic_file = request.FILES.get('lic_file')
-    if not lic_file:
-        messages.error(request, "Veuillez sélectionner un fichier .lic.")
-        return redirect('utilisateurs:activation')
-
-    try:
-        content = lic_file.read().decode('utf-8')
-        lic_data = json.loads(content)
-    except Exception:
-        messages.error(request, "Fichier de licence invalide ou corrompu.")
-        return redirect('utilisateurs:activation')
-
-    try:
-        import license_manager as lm
-        result = lm._validate_license_data(lic_data)
-        if result['valid']:
-            lm.save_license(lic_data)
-            school = result.get('school', '')
-            days   = result.get('days_left', 0)
-            messages.success(request,
-                f"✓ Licence activée avec succès ! "
-                f"École : {school} | Expire dans {days} jour(s).")
-        else:
-            messages.error(request, f"Licence invalide : {result.get('reason', 'Erreur inconnue')}")
-    except Exception as e:
-        messages.error(request, f"Erreur lors de l'activation : {e}")
-
-    return redirect('utilisateurs:activation')
 
 
 # ─── Création de compte utilisateur ──────────────────────────────────────────

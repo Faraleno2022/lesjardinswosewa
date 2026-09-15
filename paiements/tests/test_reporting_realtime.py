@@ -105,6 +105,11 @@ class ReportingTempsReelTests(TestCase):
             },
         )
         self.client.force_login(self.comptable)
+        # Ces tests portent sur les rapports après authentification complète.
+        # Le profil possède un téléphone : simuler sa vérification préalable.
+        session = self.client.session
+        session['phone_verified'] = True
+        session.save()
 
     def _creer_eleve(self, matricule, nom, prenom, classe, responsable):
         return Eleve.objects.create(
@@ -145,8 +150,9 @@ class ReportingTempsReelTests(TestCase):
         lignes = response.context['eleves_avec_soldes']
         self.assertEqual(len(lignes), 1)
         self.assertEqual(lignes[0]['eleve'], self.eleve)
-        self.assertEqual(lignes[0]['montant_paye'], 30000)
-        self.assertEqual(lignes[0]['reste_a_payer'], 70000)
+        # Une remise de tranche ne doit jamais effacer les frais d'admission.
+        self.assertEqual(lignes[0]['montant_paye'], 20000)
+        self.assertEqual(lignes[0]['reste_a_payer'], 80000)
         self.assertNotContains(response, self.autre_eleve.matricule)
 
     def test_soldes_prennent_une_annee_ayant_des_echeanciers(self):

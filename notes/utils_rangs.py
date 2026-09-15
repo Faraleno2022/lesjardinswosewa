@@ -16,6 +16,8 @@ from typing import Dict, List, Optional
 from django.core.cache import cache
 from django.db.models import Prefetch, Q
 from .calculs_intelligent import calculer_rang_intelligent
+from .calculs_moyennes import calculer_moyenne_periode_guineenne
+from .classes_utils import trouver_classe_eleve
 import logging
 import time
 
@@ -25,7 +27,7 @@ logger = logging.getLogger(__name__)
 _cache_classes = {}
 _cache_matieres = {}
 CACHE_TIMEOUT = 600  # 10 minutes
-RANGS_CACHE_SCHEMA_VERSION = 2
+RANGS_CACHE_SCHEMA_VERSION = 3
 
 
 def calculer_rangs_classe_periode(classe_note, periode: str, use_cache: bool = True) -> Dict[int, dict]:
@@ -58,23 +60,8 @@ def calculer_rangs_classe_periode(classe_note, periode: str, use_cache: bool = T
     from eleves.models import Eleve, Classe as ClasseEleve
     from .models import MatiereNote
     
-    # Récupérer la classe élève correspondante avec mapping spécial
-    mapping_classes = {
-        61: 56,  # ClasseNote '12ème Année' -> ClasseEleve '12ÈME ANNÉE'
-        59: 8,   # ClasseNote '11ème Série littéraire' -> ClasseEleve '11ème série littéraire'
-    }
-    
-    if classe_note.id in mapping_classes:
-        classe_eleve = ClasseEleve.objects.filter(
-            id=mapping_classes[classe_note.id]
-        ).first()
-    else:
-        classe_eleve = ClasseEleve.objects.filter(
-            nom=classe_note.nom,
-            annee_scolaire=classe_note.annee_scolaire,
-            ecole=classe_note.ecole
-        ).first()
-    
+    classe_eleve = trouver_classe_eleve(classe_note)
+
     if not classe_eleve:
         return {}
     

@@ -1,0 +1,292 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% block title %}Salaires du personnel - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+  <div>
+    <h1 class="h4 mb-1"><i class="fas fa-users me-2 text-primary"></i>Recouvrement — Salaires du personnel</h1>
+    <p class="text-muted small mb-0">Ajoutez un membre, puis saisissez ses montants mois par mois directement dans le tableau.</p>
+  </div>
+  <div class="d-flex gap-2">
+    <a href="#form-membre" class="btn btn-sm btn-primary"><i class="fas fa-user-plus me-1"></i>Ajouter un enseignant</a>
+    <a href="{% url 'depenses:recouvrement_hub' %}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-arrow-left me-1"></i>Recouvrement</a>
+    <a href="{% url 'depenses:personnel_export_excel' %}?annee={{ annee }}" class="btn btn-sm btn-success"><i class="fas fa-file-excel me-1"></i>Export Excel</a>
+  </div>
+</div>
+
+<!-- ===== Sélection de l'année ===== -->
+<form method="get" class="d-flex align-items-center gap-2 mb-4">
+  <label for="annee" class="form-label mb-0 small text-muted">Année de saisie</label>
+  <select name="annee" id="annee" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+    {% for a in annees_disponibles %}
+      <option value="{{ a }}" {% if a == annee %}selected{% endif %}>{{ a }}</option>
+    {% endfor %}
+  </select>
+</form>
+
+<!-- ===== Ajout d'un membre du personnel ===== -->
+<div class="card border-0 shadow-sm mb-4 border-top border-4 border-primary" id="form-membre">
+  <div class="card-header bg-white">
+    <strong><i class="fas fa-user-plus me-2 text-primary"></i>Ajouter un enseignant ou un membre du personnel</strong>
+    <div class="small text-muted">
+      Renseignez le prénom, le nom et la fonction, choisissez le groupe, puis cliquez sur
+      <strong>Ajouter</strong>. La personne apparaît aussitôt dans le tableau de son groupe,
+      où vous saisissez ses montants mois par mois.
+    </div>
+  </div>
+  <div>
+    <div class="card-body">
+      <form method="post" class="row g-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="ajouter">
+        <input type="hidden" name="annee" value="{{ annee }}">
+        <div class="col-md-3">
+          <label class="form-label small fw-semibold" for="{{ form.prenom.id_for_label }}">Prénom</label>
+          {{ form.prenom }}
+          {% for erreur in form.prenom.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small fw-semibold" for="{{ form.nom.id_for_label }}">Nom</label>
+          {{ form.nom }}
+          {% for erreur in form.nom.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small fw-semibold" for="{{ form.fonction.id_for_label }}">Fonction</label>
+          {{ form.fonction }}
+          {% for erreur in form.fonction.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small fw-semibold" for="{{ form.groupe.id_for_label }}">Groupe</label>
+          {{ form.groupe }}
+          {% for erreur in form.groupe.errors %}<div class="text-danger small">{{ erreur }}</div>{% endfor %}
+        </div>
+        <div class="col-md-9">
+          <label class="form-label small fw-semibold" for="{{ form.observation.id_for_label }}">Observation</label>
+          {{ form.observation }}
+        </div>
+        <div class="col-md-3 d-flex flex-column justify-content-end">
+          <div class="form-check mb-2">
+            {{ form.actif }}
+            <label class="form-check-label small" for="{{ form.actif.id_for_label }}">En activité</label>
+          </div>
+          <button type="submit" class="btn btn-primary"><i class="fas fa-plus me-1"></i>Ajouter</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Statistique globale des salaires ===== -->
+<h2 class="sal-section-title"><i class="fas fa-chart-pie me-2"></i>Statistique globale des salaires — {{ annee }}</h2>
+<div class="row g-3 mb-3">
+  <div class="col-6 col-lg-3">
+    <div class="sal-kpi sal-kpi--primary">
+      <div class="sal-kpi-label">Masse salariale {{ annee }}</div>
+      <div class="sal-kpi-value">{{ statistique.total_general|intcomma }} <small>GNF</small></div>
+      <div class="sal-kpi-sub">{{ statistique.nombre_mois_renseignes }} mois renseigné{{ statistique.nombre_mois_renseignes|pluralize }}</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="sal-kpi sal-kpi--info">
+      <div class="sal-kpi-label">Effectif suivi</div>
+      <div class="sal-kpi-value">{{ statistique.effectif_total }} <small>personne{{ statistique.effectif_total|pluralize }}</small></div>
+      <div class="sal-kpi-sub">Moyenne : {{ statistique.moyenne_par_membre|intcomma }} GNF / personne</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="sal-kpi sal-kpi--success">
+      <div class="sal-kpi-label">Moyenne mensuelle</div>
+      <div class="sal-kpi-value">{{ statistique.moyenne_mensuelle|intcomma }} <small>GNF</small></div>
+      <div class="sal-kpi-sub">Sur les mois effectivement payés</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="sal-kpi sal-kpi--warning">
+      <div class="sal-kpi-label">{{ mois_courant_nom }} (mois en cours)</div>
+      <div class="sal-kpi-value">{{ statistique.total_mois_courant|intcomma }} <small>GNF</small></div>
+      <div class="sal-kpi-sub">
+        {% if statistique.mois_le_plus_lourd %}Mois le plus lourd : {{ statistique.mois_le_plus_lourd.nom }}{% else %}Aucun montant saisi{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-5">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-white"><strong>Répartition par groupe</strong></div>
+      <div class="card-body">
+        {% for groupe in groupes %}
+        <div class="mb-3">
+          <div class="d-flex justify-content-between small mb-1">
+            <span class="fw-semibold"><i class="{{ groupe.icone }} me-1 text-{{ groupe.couleur }}"></i>{{ groupe.libelle }}</span>
+            <span>{{ groupe.total|intcomma }} GNF · {{ groupe.part }} %</span>
+          </div>
+          <div class="progress" style="height: 10px;">
+            <div class="progress-bar bg-{{ groupe.couleur }}" style="width: {{ groupe.part }}%;"></div>
+          </div>
+          <div class="text-muted" style="font-size: .76rem;">
+            {{ groupe.effectif }} personne{{ groupe.effectif|pluralize }} ·
+            moyenne {{ groupe.moyenne|intcomma }} GNF
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-white"><strong>Masse salariale mois par mois — {{ annee }}</strong></div>
+      <div class="card-body">
+        {% for mois in statistique.totaux_mois %}
+        <div class="d-flex align-items-center mb-1">
+          <div class="small text-muted" style="width: 90px;">{{ mois.nom }}</div>
+          <div class="flex-grow-1 bg-light rounded me-2" style="height: 14px;">
+            <div class="bg-primary rounded" style="height: 14px; width: {{ mois.part }}%;"></div>
+          </div>
+          <div class="small fw-semibold" style="width: 130px; text-align: right;">
+            {% if mois.total %}{{ mois.total|intcomma }} GNF{% else %}<span class="text-muted">—</span>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Tableaux des salaires, un par groupe ===== -->
+<form method="post" id="form-montants">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="montants">
+  <input type="hidden" name="annee" value="{{ annee }}">
+
+  {% for groupe in groupes %}
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <strong class="text-{{ groupe.couleur }}"><i class="{{ groupe.icone }} me-2"></i>{{ groupe.libelle }}</strong>
+      <span class="small text-muted">
+        {{ groupe.effectif }} personne{{ groupe.effectif|pluralize }} ·
+        total {{ annee }} : <span class="fw-semibold text-dark">{{ groupe.total|intcomma }} GNF</span>
+      </span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0 sal-table">
+        <thead class="table-light">
+          <tr>
+            <th style="min-width: 170px;">Prénom et nom</th>
+            <th style="min-width: 150px;">Fonction</th>
+            {% for mois in mois_entetes %}<th class="text-center" title="{{ mois.nom }}">{{ mois.court }}</th>{% endfor %}
+            <th class="text-end" style="min-width: 120px;">Total</th>
+            <th style="width: 80px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ligne in groupe.lignes %}
+          <tr>
+            <td class="fw-semibold">
+              {{ ligne.membre.prenom }} {{ ligne.membre.nom }}
+              {% if not ligne.membre.actif %}<span class="badge bg-secondary ms-1">Inactif</span>{% endif %}
+            </td>
+            <td class="text-muted small">{{ ligne.membre.fonction }}</td>
+            {% for cellule in ligne.cellules %}
+            <td class="p-1">
+              <input type="text" inputmode="numeric"
+                     class="form-control form-control-sm text-end sal-montant"
+                     name="{{ prefixe_montant }}_{{ ligne.membre.id }}_{{ cellule.mois }}"
+                     value="{% if cellule.montant %}{{ cellule.montant }}{% endif %}"
+                     placeholder="—">
+            </td>
+            {% endfor %}
+            <td class="text-end fw-bold sal-total-ligne">{{ ligne.total|intcomma }}</td>
+            <td class="text-end">
+              <a href="{% url 'depenses:personnel_modifier' pk=ligne.membre.id %}?annee={{ annee }}"
+                 class="btn btn-sm btn-outline-secondary" title="Modifier"><i class="fas fa-pen"></i></a>
+              <a href="{% url 'depenses:personnel_supprimer' pk=ligne.membre.id %}?annee={{ annee }}"
+                 class="btn btn-sm btn-outline-danger" title="Retirer"><i class="fas fa-trash"></i></a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="16" class="text-center text-muted py-4">
+              Aucun membre dans « {{ groupe.libelle }} ».
+              <a href="#form-membre" class="fw-semibold">Ajouter quelqu'un dans ce groupe</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        {% if groupe.lignes %}
+        <tfoot class="table-light">
+          <tr class="fw-bold">
+            <td colspan="2">Sous-total {{ groupe.libelle }}</td>
+            {% for mois in groupe.totaux_mois %}
+            <td class="text-end small">{% if mois.total %}{{ mois.total|intcomma }}{% else %}—{% endif %}</td>
+            {% endfor %}
+            <td class="text-end">{{ groupe.total|intcomma }}</td>
+            <td></td>
+          </tr>
+        </tfoot>
+        {% endif %}
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+
+  <div class="card border-0 shadow-sm mb-4 bg-light">
+    <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
+      <div>
+        <div class="small text-muted text-uppercase">Total général {{ annee }} — les trois groupes</div>
+        <div class="h4 mb-0">{{ statistique.total_general|intcomma }} GNF</div>
+      </div>
+      <button type="submit" class="btn btn-primary">
+        <i class="fas fa-save me-1"></i>Enregistrer les montants saisis
+      </button>
+    </div>
+  </div>
+</form>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .sal-section-title {
+    font-size: 1.02rem; font-weight: 700; color: #2c3e50;
+    margin: 0 0 1rem; padding-bottom: .5rem; border-bottom: 2px solid #eef1f5;
+  }
+  .sal-kpi {
+    background: #fff; border-radius: 14px; padding: 1.1rem 1.15rem;
+    height: 100%; box-shadow: 0 2px 10px rgba(0,0,0,.06); border-top: 4px solid #ccc;
+  }
+  .sal-kpi-label { font-size: .78rem; font-weight: 600; color: #6c757d; text-transform: uppercase; }
+  .sal-kpi-value { font-size: 1.4rem; font-weight: 700; color: #24303f; line-height: 1.3; }
+  .sal-kpi-value small { font-size: .78rem; font-weight: 600; color: #8a95a3; }
+  .sal-kpi-sub { font-size: .76rem; color: #8a95a3; }
+  .sal-kpi--primary { border-top-color: #007bff; }
+  .sal-kpi--info    { border-top-color: #17a2b8; }
+  .sal-kpi--success { border-top-color: #28a745; }
+  .sal-kpi--warning { border-top-color: #ffc107; }
+
+  .sal-table th { font-size: .74rem; text-transform: uppercase; letter-spacing: .02em; white-space: nowrap; }
+  .sal-table td { font-size: .84rem; }
+  .sal-montant { min-width: 84px; font-size: .8rem; padding: .2rem .35rem; }
+  .sal-montant:focus { background: #fffdf3; }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Recalcule le total d'une ligne à la volée : la saisie reste lisible avant
+  // même l'enregistrement.
+  document.addEventListener('input', function (evenement) {
+    const champ = evenement.target;
+    if (!champ.classList || !champ.classList.contains('sal-montant')) return;
+    const ligne = champ.closest('tr');
+    let total = 0;
+    ligne.querySelectorAll('.sal-montant').forEach(function (saisie) {
+      const valeur = parseInt((saisie.value || '').replace(/[^0-9]/g, ''), 10);
+      if (!isNaN(valeur)) total += valeur;
+    });
+    const cellule = ligne.querySelector('.sal-total-ligne');
+    if (cellule) cellule.textContent = total.toLocaleString('fr-FR');
+  });
+</script>
+{% endblock %}

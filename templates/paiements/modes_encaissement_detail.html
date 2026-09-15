@@ -1,0 +1,265 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Élèves et soldes par mode d'encaissement{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="{% url 'paiements:tableau_bord' %}">Paiements</a></li>
+<li class="breadcrumb-item"><a href="{% url 'paiements:rapport_comptable' %}">Rapport comptable</a></li>
+<li class="breadcrumb-item active">Élèves et soldes par mode</li>
+{% endblock %}
+
+{% block page_actions %}
+<div class="d-flex flex-wrap gap-2">
+  <a href="{% url 'paiements:rapport_comptable' %}" class="btn btn-outline-secondary">
+    <i class="fas fa-arrow-left me-1"></i>Rapport comptable
+  </a>
+  <a id="previewAccountingPdf" href="{% url 'paiements:apercu_comptabilite_pdf' %}" class="btn btn-outline-danger" target="_blank" rel="noopener">
+    <i class="fas fa-eye me-1"></i>Aperçu du rapport PDF
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+  <h3 class="mb-1">Élèves et soldes par mode d'encaissement</h3>
+  <p class="text-muted mb-0">
+    Consultez le montant encaissé par mode et la situation de scolarité de chaque élève.
+  </p>
+</div>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span class="fw-semibold"><i class="fas fa-filter me-1"></i>Filtres dynamiques</span>
+    <span id="modesLoading" class="text-primary small d-none" role="status">
+      <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Actualisation…
+    </span>
+  </div>
+  <div class="card-body">
+    <form method="get" id="modesFiltres" class="row g-3 align-items-end" data-no-fast-submit>
+      {% if schools|length > 1 %}
+      <div class="col-md-3 col-xl-2">
+        <label for="modeEcole" class="form-label">École</label>
+        <select id="modeEcole" name="ecole_id" class="form-select modes-auto-filter">
+          <option value="">Toutes les écoles</option>
+          {% for school in schools %}
+          <option value="{{ school.id }}" {% if selected_school_id == school.id %}selected{% endif %}>{{ school.nom }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div class="col-md-3 col-xl-2">
+        <label for="modeAnnee" class="form-label">Année scolaire</label>
+        <select id="modeAnnee" name="annee_scolaire" class="form-select modes-auto-filter">
+          {% for year in years %}
+          <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3 col-xl-2">
+        <label for="modeClasse" class="form-label">Classe</label>
+        <select id="modeClasse" name="classe_id" class="form-select modes-auto-filter">
+          <option value="">Toutes les classes</option>
+          {% for classe in classes %}
+          <option value="{{ classe.id }}"
+                  data-school="{{ classe.ecole_id }}"
+                  data-year="{{ classe.annee_scolaire }}"
+                  {% if selected_class_id == classe.id %}selected{% endif %}>
+            {{ classe.nom }} — {{ classe.annee_scolaire }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3 col-xl-2">
+        <label for="modePaiement" class="form-label">Mode</label>
+        <select id="modePaiement" name="mode_id" class="form-select modes-auto-filter">
+          <option value="">Tous les modes</option>
+          {% for mode in modes %}
+          <option value="{{ mode.id }}" {% if selected_mode_id == mode.id %}selected{% endif %}>{{ mode.nom }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3 col-xl-2">
+        <label for="modeStatut" class="form-label">Statut du paiement</label>
+        <select id="modeStatut" name="statut" class="form-select modes-auto-filter">
+          <option value="VALIDE" {% if statut == 'VALIDE' %}selected{% endif %}>Validés</option>
+          <option value="EN_ATTENTE" {% if statut == 'EN_ATTENTE' %}selected{% endif %}>En attente</option>
+          <option value="REJETE" {% if statut == 'REJETE' %}selected{% endif %}>Rejetés</option>
+          <option value="REMBOURSE" {% if statut == 'REMBOURSE' %}selected{% endif %}>Remboursés</option>
+          <option value="TOUS" {% if statut == 'TOUS' %}selected{% endif %}>Tous les statuts</option>
+        </select>
+      </div>
+      <div class="col-md-3 col-xl-2">
+        <label for="modeSituation" class="form-label">Situation</label>
+        <select id="modeSituation" name="situation" class="form-select modes-auto-filter">
+          <option value="" {% if not situation_filter %}selected{% endif %}>Tous les soldes</option>
+          <option value="solde" {% if situation_filter == 'solde' %}selected{% endif %}>Élèves soldés</option>
+          <option value="reste" {% if situation_filter == 'reste' %}selected{% endif %}>Solde restant</option>
+          <option value="sans_echeancier" {% if situation_filter == 'sans_echeancier' %}selected{% endif %}>Sans échéancier</option>
+        </select>
+      </div>
+      <div class="col-md-3 col-xl-2">
+        <label for="modeDebut" class="form-label">Du</label>
+        <input id="modeDebut" type="date" name="date_debut" value="{{ date_debut|date:'Y-m-d' }}" class="form-control modes-auto-filter">
+      </div>
+      <div class="col-md-3 col-xl-2">
+        <label for="modeFin" class="form-label">Au</label>
+        <input id="modeFin" type="date" name="date_fin" value="{{ date_fin|date:'Y-m-d' }}" class="form-control modes-auto-filter">
+      </div>
+      <div class="col-md-6 col-xl-4">
+        <label for="modeRecherche" class="form-label">Rechercher un élève ou un reçu</label>
+        <div class="input-group">
+          <span class="input-group-text"><i class="fas fa-search"></i></span>
+          <input id="modeRecherche" type="search" name="q" value="{{ q }}" class="form-control"
+                 placeholder="Nom, matricule, reçu, référence…" autocomplete="off">
+        </div>
+      </div>
+      <div class="col-md-6 col-xl-4 d-flex gap-2">
+        <button type="submit" class="btn btn-primary flex-grow-1">
+          <i class="fas fa-sync-alt me-1"></i>Actualiser
+        </button>
+        <a href="{% url 'paiements:modes_encaissement_eleves' %}" class="btn btn-outline-secondary">
+          Réinitialiser
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="modesResults" aria-live="polite">
+  {% include 'paiements/_modes_encaissement_resultats.html' %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const form = document.getElementById('modesFiltres');
+  const results = document.getElementById('modesResults');
+  const loading = document.getElementById('modesLoading');
+  const search = document.getElementById('modeRecherche');
+  const school = document.getElementById('modeEcole');
+  const year = document.getElementById('modeAnnee');
+  const classSelect = document.getElementById('modeClasse');
+  const previewAccountingPdf = document.getElementById('previewAccountingPdf');
+  let debounceTimer = null;
+  let currentRequest = null;
+
+  function filterYearOptions(clearInvalid) {
+    if (!year || !classSelect) return;
+    const schoolValue = school ? school.value : '';
+    const availableYears = new Set(
+      Array.from(classSelect.options)
+        .filter(function (option, index) {
+          return index > 0 && (!schoolValue || option.dataset.school === schoolValue);
+        })
+        .map(function (option) { return option.dataset.year; })
+    );
+    let selectionIsVisible = false;
+    Array.from(year.options).forEach(function (option) {
+      const visible = availableYears.has(option.value);
+      option.hidden = !visible;
+      option.disabled = !visible;
+      if (option.selected && visible) selectionIsVisible = true;
+    });
+    if (clearInvalid && !selectionIsVisible) {
+      const firstVisible = Array.from(year.options).find(function (option) {
+        return !option.disabled;
+      });
+      year.value = firstVisible ? firstVisible.value : '';
+    }
+  }
+
+  function filterClassOptions(clearInvalid) {
+    if (!classSelect) return;
+    const schoolValue = school ? school.value : '';
+    const yearValue = year ? year.value : '';
+    let selectionIsVisible = !classSelect.value;
+    Array.from(classSelect.options).forEach(function (option, index) {
+      if (index === 0) return;
+      const visible = (!schoolValue || option.dataset.school === schoolValue)
+        && (!yearValue || option.dataset.year === yearValue);
+      option.hidden = !visible;
+      option.disabled = !visible;
+      if (option.selected && visible) selectionIsVisible = true;
+    });
+    if (clearInvalid && !selectionIsVisible) classSelect.value = '';
+  }
+
+  function cleanParams(params) {
+    const cleaned = new URLSearchParams(params);
+    cleaned.delete('fragment');
+    Array.from(cleaned.entries()).forEach(function (entry) {
+      if (!entry[1]) cleaned.delete(entry[0]);
+    });
+    return cleaned;
+  }
+
+  function updateAccountingPreviewLink() {
+    const url = new URL('{% url "paiements:apercu_comptabilite_pdf" %}', window.location.origin);
+    const params = cleanParams(new URLSearchParams(new FormData(form)));
+    params.delete('mode_id');
+    params.delete('statut');
+    params.delete('situation');
+    params.delete('q');
+    url.search = params.toString();
+    previewAccountingPdf.href = url.toString();
+  }
+
+  async function refreshResults(sourceUrl) {
+    if (currentRequest) currentRequest.abort();
+    currentRequest = new AbortController();
+    const url = sourceUrl ? new URL(sourceUrl, window.location.href) : new URL(window.location.href);
+    if (!sourceUrl) {
+      url.search = new URLSearchParams(new FormData(form)).toString();
+    }
+    url.searchParams.set('fragment', '1');
+    loading.classList.remove('d-none');
+    results.setAttribute('aria-busy', 'true');
+    try {
+      const response = await fetch(url.toString(), {
+        headers: {'X-Requested-With': 'XMLHttpRequest'},
+        signal: currentRequest.signal
+      });
+      if (!response.ok) throw new Error('Réponse invalide');
+      results.innerHTML = await response.text();
+      const clean = cleanParams(url.searchParams);
+      window.history.replaceState({}, '', url.pathname + (clean.toString() ? '?' + clean.toString() : ''));
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        results.innerHTML = '<div class="alert alert-danger">Impossible d’actualiser le tableau. Réessayez.</div>';
+      }
+    } finally {
+      loading.classList.add('d-none');
+      results.removeAttribute('aria-busy');
+    }
+  }
+
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+    refreshResults();
+  });
+  previewAccountingPdf.addEventListener('click', updateAccountingPreviewLink);
+  form.querySelectorAll('.modes-auto-filter').forEach(function (control) {
+    control.addEventListener('change', function () {
+      if (control === school) filterYearOptions(true);
+      if (control === school || control === year) filterClassOptions(true);
+      refreshResults();
+    });
+  });
+  search.addEventListener('input', function () {
+    window.clearTimeout(debounceTimer);
+    debounceTimer = window.setTimeout(refreshResults, 350);
+  });
+  results.addEventListener('click', function (event) {
+    const link = event.target.closest('[data-modes-page]');
+    if (!link) return;
+    event.preventDefault();
+    refreshResults(link.href);
+  });
+  filterYearOptions(false);
+  filterClassOptions(false);
+  updateAccountingPreviewLink();
+})();
+</script>
+{% endblock %}

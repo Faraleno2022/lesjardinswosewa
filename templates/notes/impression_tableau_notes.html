@@ -1,9 +1,18 @@
+{% load branding %}
+{% school_document_branding classe_selectionnee.ecole bulletin=True as palette %}
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8">
     <title>Tableau des Notes - {{ classe_selectionnee.nom }} - {{ periode_selectionnee }}</title>
     <style>
+        :root {
+            --brand-primary: {{ palette.primary }};
+            --brand-table: {{ palette.table_light }};
+            --brand-accent-light: {{ palette.accent_light }};
+            --brand-text: {{ palette.text }};
+            --brand-border: {{ palette.border }};
+        }
         @media print {
             @page {
                 size: A4 landscape;
@@ -34,14 +43,14 @@
             }
             
             th, td {
-                border: 1px solid #333 !important;
+                border: 1px solid var(--brand-border) !important;
                 padding: 1px 2px !important;
                 text-align: center !important;
                 vertical-align: middle !important;
             }
             
             th {
-                background-color: #f0f0f0 !important;
+                background-color: var(--brand-table) !important;
                 font-weight: bold !important;
                 font-size: 5pt !important;
                 height: 60px !important;
@@ -84,7 +93,7 @@
                 width: 30px !important;
                 min-width: 30px !important;
                 max-width: 30px !important;
-                background-color: #ffffcc !important;
+                background-color: var(--brand-accent-light) !important;
             }
             
             .col-matiere {
@@ -131,7 +140,7 @@
         .header {
             text-align: center;
             margin-bottom: 15px;
-            border-bottom: 2px solid #333;
+            border-bottom: 2px solid var(--brand-primary);
             padding-bottom: 10px;
         }
         
@@ -166,14 +175,14 @@
         }
         
         th, td {
-            border: 1px solid #333;
+            border: 1px solid var(--brand-border);
             padding: 2px 4px;
             text-align: center;
             vertical-align: middle;
         }
         
         th {
-            background-color: #f0f0f0;
+            background-color: var(--brand-table);
             font-weight: bold;
             font-size: 6pt;
             writing-mode: vertical-rl;
@@ -212,7 +221,7 @@
         .col-moyenne {
             width: 35px;
             min-width: 35px;
-            background-color: #ffffcc;
+            background-color: var(--brand-accent-light);
         }
         
         .col-matiere {
@@ -252,7 +261,7 @@
             text-align: center;
             font-size: 8pt;
             color: #666;
-            border-top: 1px solid #333;
+            border-top: 1px solid var(--brand-border);
             padding-top: 5px;
         }
         

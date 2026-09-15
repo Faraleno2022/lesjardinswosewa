@@ -244,6 +244,23 @@
                         </div>
                     </div>
 
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="form-group">
+                                <div class="form-check">
+                                    {{ form.test_accueil_evalue }}
+                                    <label class="form-check-label" for="{{ form.test_accueil_evalue.id_for_label }}">
+                                        {{ form.test_accueil_evalue.label }}
+                                    </label>
+                                </div>
+                                <small class="text-muted d-block">{{ form.test_accueil_evalue.help_text }}</small>
+                                {% if form.test_accueil_evalue.errors %}
+                                    <div class="text-danger small mt-1">{{ form.test_accueil_evalue.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Responsable -->
                     <h4 class="section-title mt-4"><i class="fas fa-users me-2"></i>Responsable principal</h4>
                     

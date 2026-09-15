@@ -40,4 +40,24 @@ def filter_by_user_school(qs: QuerySet, user: User, field_path: str = 'ecole') -
     if ecole is None:
         # If no school is set, return empty queryset to avoid data leakage
         return qs.none()
+
+    # Un paiement appartient comptablement à l'école où il a été encaissé,
+    # pas à l'école actuelle de l'élève après un transfert. Le repli sur la
+    # classe courante ne sert qu'aux anciennes lignes sans snapshot.
+    if field_path == 'eleve__classe__ecole' and hasattr(qs, 'pour_ecole'):
+        return qs.pour_ecole(ecole)
+    if field_path == 'paiement__eleve__classe__ecole':
+        try:
+            qs.model._meta.get_field('paiement')
+            from django.db.models import Q
+
+            return qs.filter(
+                Q(paiement__ecole_encaissement=ecole)
+                | Q(
+                    paiement__ecole_encaissement__isnull=True,
+                    paiement__eleve__classe__ecole=ecole,
+                )
+            )
+        except Exception:
+            pass
     return qs.filter(**{field_path: ecole})

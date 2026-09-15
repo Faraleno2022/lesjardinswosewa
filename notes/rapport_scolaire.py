@@ -7,6 +7,8 @@ et génère un PDF complet : situation scolaire, notes, activités journalières
 import io
 import os
 import re
+from contextvars import ContextVar
+from functools import wraps
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from types import SimpleNamespace
@@ -18,7 +20,7 @@ from django.views.decorators.http import require_POST
 
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
-from reportlab.lib import colors
+from reportlab.lib import colors as reportlab_colors
 from reportlab.lib.units import cm
 from reportlab.platypus import Table, TableStyle
 from reportlab.lib.utils import ImageReader
@@ -34,6 +36,43 @@ from paiements.models import Paiement, EcheancierPaiement
 
 from django.utils.crypto import get_random_string
 from django.core.signing import TimestampSigner, BadSignature, SignatureExpired
+from ecole_moderne.branding import get_pdf_palette
+
+
+_RAPPORT_PALETTE = ContextVar(
+    'rapport_palette', default=get_pdf_palette(None, bulletin=True)
+)
+
+
+class _CouleursRapport:
+    _remplacements = {
+        '#003D82': 'primary',
+        '#F5F5F5': 'table_light',
+        '#E91E63': 'accent',
+        '#FCE4EC': 'accent_light',
+    }
+
+    def __getattr__(self, name):
+        return getattr(reportlab_colors, name)
+
+    def HexColor(self, value):
+        cle = self._remplacements.get(str(value).upper())
+        return _RAPPORT_PALETTE.get()[cle] if cle else reportlab_colors.HexColor(value)
+
+
+colors = _CouleursRapport()
+
+
+def _avec_charte_rapport(fonction):
+    @wraps(fonction)
+    def enveloppe(eleve, *args, **kwargs):
+        ecole = eleve.classe.ecole if getattr(eleve, 'classe', None) else None
+        jeton = _RAPPORT_PALETTE.set(get_pdf_palette(ecole, bulletin=True))
+        try:
+            return fonction(eleve, *args, **kwargs)
+        finally:
+            _RAPPORT_PALETTE.reset(jeton)
+    return enveloppe
 
 
 # ────────────────────────────────────────────────────────────────
@@ -610,6 +649,7 @@ def _generer_recu_paiement_pdf(paiement):
 # GÉNÉRATION PDF COMPLÈTE
 # ────────────────────────────────────────────────────────────────
 
+@_avec_charte_rapport
 def _generer_rapport_pdf(eleve):
     """Génère le PDF complet du rapport scolaire pour un élève."""
     buf = io.BytesIO()

@@ -1,0 +1,212 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Avances sur salaire{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <div>
+            <h1 class="h3 mb-1"><i class="fas fa-hand-holding-usd text-warning me-2"></i>Avances sur salaire</h1>
+            <p class="text-muted mb-0">Enregistrement, déduction automatique et historique des avances</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{% url 'salaires:etats_salaire' %}" class="btn btn-outline-primary">
+                <i class="fas fa-file-invoice-dollar me-1"></i>États de salaire
+            </a>
+            <a href="{% url 'salaires:tableau_bord' %}" class="btn btn-primary">
+                <i class="fas fa-tachometer-alt me-1"></i>Tableau de bord
+            </a>
+        </div>
+    </div>
+
+    <div class="alert alert-info d-flex align-items-start gap-2">
+        <i class="fas fa-info-circle mt-1"></i>
+        <div>
+            Une avance <strong>à déduire</strong> est automatiquement retirée du salaire net de la période choisie.
+            Après validation du salaire, elle devient non modifiable. Une erreur est annulée avec un motif et reste dans l'historique ; aucune suppression définitive n'est effectuée.
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-3">
+            <div class="card h-100 border-0 shadow-sm"><div class="card-body">
+                <div class="text-muted small">Avances affichées</div>
+                <div class="fs-3 fw-bold">{{ stats.nombre|intcomma }}</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card h-100 border-0 shadow-sm"><div class="card-body">
+                <div class="text-muted small">Montant total</div>
+                <div class="fs-4 fw-bold text-primary">{{ stats.montant_total|floatformat:0|intcomma }} GNF</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card h-100 border-0 shadow-sm"><div class="card-body">
+                <div class="text-muted small">À déduire</div>
+                <div class="fs-4 fw-bold text-warning">{{ stats.a_deduire|floatformat:0|intcomma }} GNF</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card h-100 border-0 shadow-sm"><div class="card-body">
+                <div class="text-muted small">Déjà déduites</div>
+                <div class="fs-4 fw-bold text-success">{{ stats.deduites|floatformat:0|intcomma }} GNF</div>
+            </div></div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-xl-4">
+            <div class="card border-0 shadow-sm sticky-xl-top" style="top: 1rem;">
+                <div class="card-header bg-warning-subtle">
+                    <h2 class="h5 mb-0"><i class="fas fa-plus-circle me-2"></i>Nouvelle avance</h2>
+                </div>
+                <div class="card-body">
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        {% if form.non_field_errors %}
+                        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                        {% endif %}
+                        {% for field in form %}
+                        <div class="mb-3">
+                            <label for="{{ field.id_for_label }}" class="form-label fw-semibold">{{ field.label }}</label>
+                            {{ field }}
+                            {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
+                            {% for error in field.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        {% endfor %}
+                        <button type="submit" class="btn btn-warning w-100 fw-semibold">
+                            <i class="fas fa-save me-1"></i>Enregistrer l'avance
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-8">
+            <div class="card border-0 shadow-sm mb-3">
+                <div class="card-header bg-light"><strong><i class="fas fa-filter me-2"></i>Filtres</strong></div>
+                <div class="card-body">
+                    <form method="get" class="row g-2 align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label">Recherche</label>
+                            <input type="search" name="search" value="{{ request.GET.search }}" class="form-control" placeholder="Nom, reçu ou motif">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Enseignant</label>
+                            <select name="enseignant" class="form-select">
+                                <option value="">Tous</option>
+                                {% for enseignant in enseignants %}
+                                <option value="{{ enseignant.id }}" {% if request.GET.enseignant == enseignant.id|stringformat:'s' %}selected{% endif %}>{{ enseignant.nom_complet }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Période</label>
+                            <select name="periode" class="form-select">
+                                <option value="">Toutes</option>
+                                {% for periode in periodes %}
+                                <option value="{{ periode.id }}" {% if request.GET.periode == periode.id|stringformat:'s' %}selected{% endif %}>{{ periode }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Statut</label>
+                            <select name="statut" class="form-select">
+                                <option value="">Tous</option>
+                                {% for valeur, libelle in statuts %}
+                                <option value="{{ valeur }}" {% if request.GET.statut == valeur %}selected{% endif %}>{{ libelle }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex gap-1">
+                            <button class="btn btn-primary flex-grow-1" title="Filtrer"><i class="fas fa-search"></i></button>
+                            <a href="{% url 'salaires:avances_salaire' %}" class="btn btn-outline-secondary" title="Réinitialiser"><i class="fas fa-times"></i></a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h2 class="h5 mb-0"><i class="fas fa-history me-2"></i>Historique</h2>
+                    <span class="badge bg-secondary">{{ stats.nombre }}</span>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Enseignant</th>
+                                <th>Période</th>
+                                <th>Date / référence</th>
+                                <th class="text-end">Montant</th>
+                                <th>Statut</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for avance in page_obj %}
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">{{ avance.enseignant.nom_complet }}</div>
+                                    <small class="text-muted">{{ avance.enseignant.ecole.nom }}</small>
+                                    {% if avance.motif %}<div class="small text-muted mt-1">{{ avance.motif|truncatechars:55 }}</div>{% endif %}
+                                </td>
+                                <td>{{ avance.periode.nom_periode }}</td>
+                                <td>
+                                    <div>{{ avance.date_avance|date:'d/m/Y' }}</div>
+                                    <small class="text-muted">{{ avance.reference|default:'Sans référence' }}</small>
+                                </td>
+                                <td class="text-end fw-bold">{{ avance.montant|floatformat:0|intcomma }} GNF</td>
+                                <td>
+                                    {% if avance.statut == 'EN_ATTENTE' %}
+                                    <span class="badge bg-warning text-dark">À déduire</span>
+                                    {% elif avance.statut == 'DEDUITE' %}
+                                    <span class="badge bg-success">Déduite</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Annulée</span>
+                                    {% if avance.motif_annulation %}<div class="small text-muted mt-1" title="{{ avance.motif_annulation }}">{{ avance.motif_annulation|truncatechars:45 }}</div>{% endif %}
+                                    {% endif %}
+                                </td>
+                                <td class="text-end" style="min-width: 220px;">
+                                    {% if avance.peut_etre_modifiee %}
+                                    <a href="{% url 'salaires:modifier_avance_salaire' avance.id %}" class="btn btn-sm btn-outline-primary mb-1">
+                                        <i class="fas fa-edit"></i> Modifier
+                                    </a>
+                                    <form method="post" action="{% url 'salaires:annuler_avance_salaire' avance.id %}" class="d-flex justify-content-end gap-1 mt-1" onsubmit="return confirm('Annuler cette avance tout en la conservant dans l’historique ?');">
+                                        {% csrf_token %}
+                                        <input type="text" name="motif_annulation" class="form-control form-control-sm" required minlength="3" placeholder="Motif d'annulation">
+                                        <button class="btn btn-sm btn-outline-danger"><i class="fas fa-ban"></i></button>
+                                    </form>
+                                    {% elif avance.etat_salaire_id %}
+                                    <a href="{% url 'salaires:fiche_paie_pdf' avance.etat_salaire_id %}" class="btn btn-sm btn-outline-secondary">
+                                        <i class="fas fa-file-pdf"></i> Fiche de paie
+                                    </a>
+                                    {% else %}
+                                    <span class="text-muted small">Historique conservé</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="6" class="text-center py-5 text-muted">
+                                <i class="fas fa-inbox fa-2x d-block mb-2"></i>Aucune avance trouvée.
+                            </td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {% if page_obj.has_other_pages %}
+            <nav class="mt-3" aria-label="Pagination des avances">
+                <ul class="pagination justify-content-center flex-wrap">
+                    {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?{{ request.GET.urlencode }}&page={{ page_obj.previous_page_number }}">Précédent</a></li>{% endif %}
+                    <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span></li>
+                    {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?{{ request.GET.urlencode }}&page={{ page_obj.next_page_number }}">Suivant</a></li>{% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

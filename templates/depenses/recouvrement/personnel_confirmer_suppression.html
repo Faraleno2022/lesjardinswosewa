@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block title %}Retirer un membre du personnel - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-danger text-white">
+        <strong><i class="fas fa-triangle-exclamation me-2"></i>Confirmer le retrait</strong>
+      </div>
+      <div class="card-body">
+        <p class="mb-3">
+          Retirer <strong>{{ membre.nom_complet }}</strong>
+          ({{ membre.fonction }} — {{ membre.groupe_libelle }}) du registre des salaires ?
+        </p>
+        {% if nombre_montants %}
+        <div class="alert alert-warning small">
+          <i class="fas fa-circle-exclamation me-1"></i>
+          {{ nombre_montants }} montant{{ nombre_montants|pluralize }} mensuel{{ nombre_montants|pluralize }}
+          déjà saisi{{ nombre_montants|pluralize }} sera{{ nombre_montants|pluralize:"ont" }} également supprimé{{ nombre_montants|pluralize }}.
+        </div>
+        {% endif %}
+        <form method="post" class="d-flex gap-2">
+          {% csrf_token %}
+          <input type="hidden" name="annee" value="{{ annee }}">
+          <button type="submit" class="btn btn-danger"><i class="fas fa-trash me-1"></i>Retirer</button>
+          <a href="{% url 'depenses:personnel_dashboard' %}?annee={{ annee }}" class="btn btn-outline-secondary">Annuler</a>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

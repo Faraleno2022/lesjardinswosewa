@@ -4,6 +4,7 @@ Envoie des messages aux parents pour les paiements en retard
 """
 
 from django.db import models
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 from django.template.loader import render_to_string
 from decimal import Decimal
@@ -11,6 +12,7 @@ from datetime import datetime, timedelta
 import logging
 
 from .models import EcheancierPaiement, Relance, ConfigurationPaiement
+from .services import calculer_situations_echeanciers
 from eleves.models import Eleve
 
 logger = logging.getLogger(__name__)
@@ -112,27 +114,27 @@ Contactez-nous IMMÉDIATEMENT pour éviter toute interruption de la scolarité.
         aujourd_hui = timezone.now().date()
         date_limite = aujourd_hui - timedelta(days=jours_grace)
         
-        # Récupérer les échéanciers avec des impayés
-        echeanciers_retard = EcheancierPaiement.objects.filter(
-            models.Q(
-                date_echeance_inscription__lt=date_limite,
-                frais_inscription_paye__lt=models.F('frais_inscription_du')
-            ) |
-            models.Q(
-                date_echeance_tranche_1__lt=date_limite,
-                tranche_1_payee__lt=models.F('tranche_1_due')
-            ) |
-            models.Q(
-                date_echeance_tranche_2__lt=date_limite,
-                tranche_2_payee__lt=models.F('tranche_2_due')
-            ) |
-            models.Q(
-                date_echeance_tranche_3__lt=date_limite,
-                tranche_3_payee__lt=models.F('tranche_3_due')
-            )
+        base = EcheancierPaiement.objects.filter(
+            annee_scolaire=models.F('eleve__classe__annee_scolaire')
         ).select_related('eleve', 'eleve__classe')
-        
-        return echeanciers_retard
+        ids = []
+        echeanciers = list(base)
+        situations = calculer_situations_echeanciers(echeanciers, aujourd_hui)
+        for echeancier in echeanciers:
+            situation = situations[echeancier.pk]
+            dates = {
+                'inscription': echeancier.date_echeance_inscription,
+                'tranche_1': echeancier.date_echeance_tranche_1,
+                'tranche_2': echeancier.date_echeance_tranche_2,
+                'tranche_3': echeancier.date_echeance_tranche_3,
+            }
+            if any(
+                echeance and echeance < date_limite
+                and situation['restes_par_poste'][poste] > 0
+                for poste, echeance in dates.items()
+            ):
+                ids.append(echeancier.pk)
+        return base.filter(pk__in=ids)
     
     def calculer_niveau_rappel(self, eleve_id):
         """

@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Activation & Comptes — MySchoolGN{% endblock %}
+{% block title %}Gestion des comptes — MySchoolGN{% endblock %}
 
 {% block content %}
 <div class="container-fluid px-4 py-3">
@@ -9,11 +9,11 @@
   <!-- En-tête -->
   <div class="d-flex align-items-center mb-4">
     <div class="me-3">
-      <span style="font-size:2rem;">🔑</span>
+      <span style="font-size:2rem;">👥</span>
     </div>
     <div>
-      <h1 class="h3 mb-0 fw-bold">Activation &amp; Comptes</h1>
-      <small class="text-muted">Gérez la licence et les utilisateurs de MySchoolGN</small>
+      <h1 class="h3 mb-0 fw-bold">Gestion des comptes</h1>
+      <small class="text-muted">Gérez les utilisateurs et leurs accès à MySchoolGN</small>
     </div>
   </div>
 
@@ -27,84 +27,8 @@
 
   <div class="row g-4">
 
-    <!-- ══════════════════════════════════════════════════
-         COLONNE GAUCHE : LICENCE
-    ══════════════════════════════════════════════════ -->
+    <!-- Colonne gauche : sécurité du compte administrateur -->
     <div class="col-lg-5">
-
-      <!-- Statut de la licence -->
-      <div class="card shadow-sm mb-4">
-        <div class="card-header fw-bold {% if license_status.valid %}bg-success text-white{% else %}bg-warning{% endif %}">
-          <i class="fas fa-shield-alt me-2"></i>
-          Statut de la Licence
-        </div>
-        <div class="card-body">
-
-          {% if license_status.valid %}
-            {% if license_status.trial %}
-              <div class="alert alert-warning mb-3">
-                <i class="fas fa-clock me-2"></i>
-                <strong>Mode Essai</strong> — {{ license_status.days_left }} jour(s) restant(s)
-              </div>
-            {% else %}
-              <div class="alert alert-success mb-3">
-                <i class="fas fa-check-circle me-2"></i>
-                <strong>Licence Valide</strong> — {{ license_status.days_left }} jour(s) restant(s)
-              </div>
-              {% if license_status.school %}
-              <p class="mb-1"><strong>École :</strong> {{ license_status.school }}</p>
-              {% endif %}
-              {% if license_status.edition %}
-              <p class="mb-1"><strong>Édition :</strong> {{ license_status.edition }}</p>
-              {% endif %}
-            {% endif %}
-          {% else %}
-            <div class="alert alert-danger mb-3">
-              <i class="fas fa-exclamation-triangle me-2"></i>
-              <strong>Licence expirée ou absente</strong><br>
-              {{ license_status.reason }}
-            </div>
-          {% endif %}
-
-          <!-- ID Machine -->
-          <div class="mt-3">
-            <label class="form-label fw-bold text-muted small">ID Machine (à envoyer à l'administrateur FARA LENO AU +224622613559)</label>
-            <div class="input-group">
-              <input type="text" class="form-control form-control-sm font-monospace"
-                     id="machineId" value="{{ license_status.machine_id }}" readonly>
-              <button class="btn btn-outline-secondary btn-sm" type="button"
-                      onclick="copyMachineId()">
-                <i class="fas fa-copy"></i> Copier
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Activer une licence -->
-      <div class="card shadow-sm mb-4">
-        <div class="card-header fw-bold">
-          <i class="fas fa-key me-2"></i>Activer une Licence
-        </div>
-        <div class="card-body">
-          <p class="text-muted small mb-3">
-            Vous avez reçu un fichier <code>.lic</code> de l'administrateur FARA LENO AU +224622613559 ?
-            Importez-le ici pour activer votre licence permanente.
-          </p>
-          <form method="post" action="{% url 'utilisateurs:activer_licence' %}"
-                enctype="multipart/form-data">
-            {% csrf_token %}
-            <div class="mb-3">
-              <label class="form-label fw-bold">Fichier de licence (.lic)</label>
-              <input type="file" name="lic_file" accept=".lic,.json"
-                     class="form-control" required>
-            </div>
-            <button type="submit" class="btn btn-warning w-100 fw-bold">
-              <i class="fas fa-upload me-2"></i>Activer la Licence
-            </button>
-          </form>
-        </div>
-      </div>
 
       <!-- Changer mot de passe admin -->
       <div class="card shadow-sm">
@@ -288,18 +212,4 @@
   </div><!-- /row -->
 </div><!-- /container -->
 
-<script>
-function copyMachineId() {
-  const el = document.getElementById('machineId');
-  el.select();
-  document.execCommand('copy');
-  const btn = el.nextElementSibling;
-  btn.innerHTML = '<i class="fas fa-check"></i> Copié !';
-  btn.classList.replace('btn-outline-secondary', 'btn-success');
-  setTimeout(() => {
-    btn.innerHTML = '<i class="fas fa-copy"></i> Copier';
-    btn.classList.replace('btn-success', 'btn-outline-secondary');
-  }, 2000);
-}
-</script>
 {% endblock %}

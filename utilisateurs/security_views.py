@@ -260,7 +260,13 @@ def secure_logout(request):
     logout(request)
     request.session.flush()
     
-    messages.success(request, 'Vous avez été déconnecté avec succès.')
+    if request.POST.get('reason') == 'inactivity':
+        messages.info(
+            request,
+            "Votre session a été fermée après une période d'inactivité.",
+        )
+    else:
+        messages.success(request, 'Vous avez été déconnecté avec succès.')
     return redirect('utilisateurs:login')
 
 @ensure_csrf_cookie
@@ -563,8 +569,14 @@ def verify_phone(request):
     """
     profil = getattr(request.user, 'profil', None)
     if not profil or not profil.telephone:
+        username = request.user.get_username()
+        logout(request)
         messages.error(request, _("Aucun numéro de téléphone n'est enregistré sur votre profil. Contactez l'administrateur FARA LENO AU +224622613559."))
-        return redirect('utilisateurs:logout')
+        logger.info(
+            "Verification telephone impossible pour %s : numero absent.",
+            username,
+        )
+        return redirect('utilisateurs:login')
 
     # Si déjà vérifié pour la session courante, on passe
     if request.session.get('phone_verified'):

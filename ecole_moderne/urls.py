@@ -21,9 +21,8 @@ from django.conf.urls.static import static
 from django.http import HttpResponse
 from django.views.generic import TemplateView, RedirectView
 from .static_views import serve_static_no_cache
-from .activation_views import activer_licence
+from .identite_site import identite_pour_hote
 from .desktop_views import arreter_application
-from utilisateurs.license_api import activate_license, verify_license
 from notes.rapport_scolaire import rapport_scolaire_recherche, rapport_scolaire_detail, rapport_scolaire_pdf, rapport_scolaire_recu_pdf, rapport_scolaire_classes_ajax
 
 
@@ -60,12 +59,22 @@ def sitemap_xml(request):
     base = f"{request.scheme}://{request.get_host()}"
     urls = [
         (f"{base}/", "1.0"),
-        (f"{base}/fonctionnalites/", "0.9"),
         (f"{base}/rapport-scolaire/", "0.8"),
-        (f"{base}/contact/", "0.8"),
-        (f"{base}/demo/", "0.8"),
-        (f"{base}/tarifs/", "0.6"),
     ]
+    if identite_pour_hote(request.get_host())['est_ecole']:
+        # Site de l'école : les pages de campus lui appartiennent, les pages
+        # commerciales du logiciel (tarifs, démo…) n'ont rien à y faire.
+        urls += [
+            (f"{base}/campus/conakry/", "0.9"),
+            (f"{base}/campus/siguiri/", "0.9"),
+        ]
+    else:
+        urls += [
+            (f"{base}/fonctionnalites/", "0.9"),
+            (f"{base}/contact/", "0.8"),
+            (f"{base}/demo/", "0.8"),
+            (f"{base}/tarifs/", "0.6"),
+        ]
     items = "\n".join(
         f"  <url><loc>{loc}</loc><changefreq>weekly</changefreq><priority>{priority}</priority></url>"
         for loc, priority in urls
@@ -80,16 +89,15 @@ def sitemap_xml(request):
 
 urlpatterns = [
     path(settings.ADMIN_URL, admin.site.urls),
-    path('activer/', activer_licence, name='activer_licence'),
     path('desktop/arreter/', arreter_application, name='arreter_application'),
-    path('api/v1/license/activate', activate_license, name='license_api_activate'),
-    path('api/v1/license/activate/', activate_license, name='license_api_activate_slash'),
-    path('api/v1/license/verify', verify_license, name='license_api_verify'),
-    path('api/v1/license/verify/', verify_license, name='license_api_verify_slash'),
     path('', TemplateView.as_view(template_name='home.html'), name='home'),
     path('index/', TemplateView.as_view(template_name='home.html'), name='index'),
     path('robots.txt', robots_txt, name='robots_txt'),
     path('sitemap.xml', sitemap_xml, name='sitemap_xml'),
+    # Pages locales des deux campus (référencement « école privée Conakry »,
+    # « école Siguiri ») : leur canonical pointe vers lesjardinswosewa.com.
+    path('campus/conakry/', TemplateView.as_view(template_name='public/campus_conakry.html'), name='campus_conakry'),
+    path('campus/siguiri/', TemplateView.as_view(template_name='public/campus_siguiri.html'), name='campus_siguiri'),
     path('fonctionnalites/', TemplateView.as_view(template_name='public/fonctionnalites.html'), name='fonctionnalites'),
     path('tarifs/', TemplateView.as_view(template_name='public/tarifs.html'), name='tarifs'),
     path('contact/', TemplateView.as_view(template_name='public/contact.html'), name='contact'),
@@ -118,6 +126,7 @@ urlpatterns = [
     path('abonnements/', include('abonnements.urls')),
     path('chatbot/', include('chatbot.urls')),
     path('api/v1/sync/', include('synchronisation.urls')),
+    path('api/v1/updates/', include('administration.urls_mises_a_jour')),
 ]
 
 # Servir les fichiers STATIC et MEDIA en développement

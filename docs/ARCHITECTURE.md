@@ -19,7 +19,7 @@ MySchoolGN est une application web Django suivant le pattern **MVT** (Model-View
 |                                                          |
 |  +----------------+  +----------------+                  |
 |  |   Middleware   |  |   URL Router   |                  |
-|  | - LicenceCheck |  | ecole_moderne/ |                  |
+|  | - Integrite    |  | ecole_moderne/ |                  |
 |  | - CSRF         |  |    urls.py     |                  |
 |  | - Session      |  +----------------+                  |
 |  | - GZip         |                                      |
@@ -125,11 +125,11 @@ Enseignant
 
 ## Middleware personnalise
 
-### LicenceMiddleware
-- Verifie la validite de la licence a chaque requete
-- Bloque l'acces si la periode d'essai est expiree
-- Redirige vers une page d'erreur de licence si invalide
-- Exclut les URLs publiques (login, admin, etc.)
+### IntegrityMiddleware
+- Verifie l'integrite des fichiers livres avec l'application desktop
+- Ne contient aucun controle de licence ni date d'expiration
+- Bloque uniquement une distribution alteree ou corrompue
+- Exclut les URLs publiques (login, admin, synchronisation, mises a jour)
 
 ### ImageOptimizationMiddleware (dev uniquement)
 - Met en cache les images optimisees
@@ -233,12 +233,9 @@ Ce script :
 
 ### Fichiers .spec disponibles
 - `myschool.spec` - Application principale
-- `LicenceTool_GS_Hadja.spec` - Gestionnaire de licences
-- `generate_license.spec` - Generateur de licences
 - `installer.spec` - Installeur Windows
 
-### Systeme de licences offline
-- `license_manager.py` : generation et validation des licences
-- `generate_license_gui.py` : interface graphique pour les licences
-- Licence stockee localement, validee a chaque demarrage
-- Periode d'essai configurable
+### Acces desktop
+- Aucune licence annuelle ni periode d'essai
+- Acces illimite apres installation
+- Integrite de la distribution verifiee au demarrage

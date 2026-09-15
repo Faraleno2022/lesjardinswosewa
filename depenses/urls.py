@@ -4,6 +4,7 @@ from . import views_logistique
 from . import views_bibliotheque
 from . import views_fournitures
 from . import views_recouvrement
+from . import views_personnel
 
 app_name = 'depenses'
 
@@ -70,8 +71,10 @@ urlpatterns = [
     path('recouvrement/informatique/<int:pk>/carte/', views_recouvrement.informatique_carte, name='informatique_carte'),
     path('recouvrement/informatique/export/excel/', views_recouvrement.informatique_export_excel, name='informatique_export_excel'),
     path('recouvrement/informatique/export/pdf/', views_recouvrement.informatique_export_pdf, name='informatique_export_pdf'),
-    path('recouvrement/salaires/', views_recouvrement.salaires_dashboard, name='salaires_dashboard'),
-    path('recouvrement/salaires/export/excel/', views_recouvrement.salaires_export_excel, name='salaires_export_excel'),
+    path('recouvrement/personnel/', views_personnel.personnel_dashboard, name='personnel_dashboard'),
+    path('recouvrement/personnel/export/excel/', views_personnel.personnel_export_excel, name='personnel_export_excel'),
+    path('recouvrement/personnel/<int:pk>/modifier/', views_personnel.personnel_modifier, name='personnel_modifier'),
+    path('recouvrement/personnel/<int:pk>/supprimer/', views_personnel.personnel_supprimer, name='personnel_supprimer'),
     path('recouvrement/<str:cle>/', views_recouvrement.liste_operations, name='recouvrement_liste'),
     path('recouvrement/<str:cle>/tableau-bord/', views_recouvrement.tableau_bord_module, name='recouvrement_tableau_bord'),
     path('recouvrement/<str:cle>/export/excel/', views_recouvrement.export_excel_module, name='recouvrement_export_excel'),

@@ -3,6 +3,7 @@ from django.core.validators import MinValueValidator
 from decimal import Decimal
 from datetime import date, datetime
 from django.utils import timezone
+from django.db.models import Q
 
 from .models import Paiement, EcheancierPaiement, TypePaiement, ModePaiement, RemiseReduction, PaiementRemise
 from eleves.models import Eleve, Ecole
@@ -42,11 +43,16 @@ class PaiementForm(forms.ModelForm):
             'mode_paiement': forms.Select(attrs={
                 'class': 'form-select'
             }),
+            # `step` reste à 1 : le montant proposé par le moteur est le reste
+            # exact de l'échéancier, qui n'est pas toujours un multiple de
+            # 1 000 (forfaits, remises, soldes partiels). Un pas de 1 000 ferait
+            # refuser par le navigateur le montant que le serveur vient de
+            # calculer.
             'montant': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'Montant en GNF',
-                'min': '0',
-                'step': '1000'
+                'min': '1',
+                'step': '1'
             }),
             'date_paiement': forms.DateInput(attrs={
                 'class': 'form-control',
@@ -68,7 +74,7 @@ class PaiementForm(forms.ModelForm):
         # Ordonner les élèves par nom
         self.fields['eleve'].queryset = Eleve.objects.select_related(
             'classe', 'classe__ecole'
-        ).filter(statut='ACTIF').order_by('nom', 'prenom')
+        ).filter(statut__in=('ACTIF', 'EN_ATTENTE'), est_dans_corbeille=False).order_by('nom', 'prenom')
         
         # Filtrer les types et modes actifs
         self.fields['type_paiement'].queryset = TypePaiement.objects.filter(actif=True)
@@ -96,6 +102,133 @@ class PaiementForm(forms.ModelForm):
             except Exception:
                 self.add_error('remise_pourcentage', "Valeur de remise invalide.")
         return cleaned
+
+
+class ModificationPaiementForm(forms.ModelForm):
+    """Correction contrôlée d'un paiement existant."""
+
+    motif_modification = forms.CharField(
+        required=True,
+        min_length=5,
+        label="Motif de la modification",
+        help_text="Ce motif sera conservé dans l'historique.",
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 3,
+            'placeholder': "Ex. : montant saisi incomplet lors de l'encaissement",
+        }),
+    )
+
+    class Meta:
+        model = Paiement
+        fields = (
+            'type_paiement', 'mode_paiement', 'montant', 'date_paiement',
+            'reference_externe', 'observations',
+        )
+        widgets = {
+            'type_paiement': forms.Select(attrs={'class': 'form-select'}),
+            'mode_paiement': forms.Select(attrs={'class': 'form-select'}),
+            # `step` doit rester à 1 : avec min=1, un pas de 1000 ne rendrait
+            # valides que 1, 1001, 2001... Le navigateur refusait alors tout
+            # montant rond (250000) — y compris celui déjà enregistré.
+            'montant': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '1', 'step': '1',
+            }),
+            'date_paiement': forms.DateInput(attrs={
+                'class': 'form-control', 'type': 'date',
+            }),
+            'reference_externe': forms.TextInput(attrs={'class': 'form-control'}),
+            'observations': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['montant'].help_text = (
+            "Si seul le type inscription/réinscription change, la différence de tarif "
+            "sera appliquée à l'enregistrement. Les remises sont conservées. "
+            "Un montant corrigé manuellement est prioritaire."
+        )
+        self.fields['type_paiement'].queryset = TypePaiement.objects.filter(
+            Q(actif=True) | Q(pk=getattr(self.instance, 'type_paiement_id', None))
+        ).distinct()
+        self.fields['mode_paiement'].queryset = ModePaiement.objects.filter(
+            Q(actif=True) | Q(pk=getattr(self.instance, 'mode_paiement_id', None))
+        ).distinct()
+
+    def clean_montant(self):
+        montant = self.cleaned_data.get('montant')
+        if montant is None or montant <= 0:
+            raise forms.ValidationError("Le montant doit être supérieur à zéro.")
+        return montant
+
+    def clean(self):
+        cleaned = super().clean()
+        nouveau_type = cleaned.get('type_paiement')
+        montant = cleaned.get('montant')
+        if not self.instance.pk or nouveau_type is None or montant is None:
+            return cleaned
+        original = Paiement.objects.select_related('type_paiement').get(pk=self.instance.pk)
+        if montant != original.montant or nouveau_type.pk == original.type_paiement_id:
+            return cleaned
+
+        from copy import copy
+        from .calculs import est_type_scolarite, normaliser_libelle
+        from .views import _align_enrollment_fee, _enrollment_preference_from_type
+
+        ancien_nom = original.type_paiement.nom
+        nouveau_nom = nouveau_type.nom
+        ancienne_nature = _enrollment_preference_from_type(ancien_nom)
+        nouvelle_nature = _enrollment_preference_from_type(nouveau_nom)
+
+        def prestations(nom):
+            compact = ''.join(c for c in normaliser_libelle(nom) if c.isalnum())
+            return compact.replace('reinscription', '').replace('inscription', '')
+
+        # Ne pas deviner un montant si les tranches ou le service changent aussi.
+        if (ancienne_nature is None or nouvelle_nature is None
+                or ancienne_nature == nouvelle_nature
+                or prestations(ancien_nom) != prestations(nouveau_nom)
+                or not est_type_scolarite(original.type_paiement)
+                or not est_type_scolarite(nouveau_type)):
+            return cleaned
+        echeancier = EcheancierPaiement.objects.filter(
+            eleve_id=original.eleve_id, annee_scolaire=original.annee_scolaire,
+        ).first()
+        if echeancier is None:
+            return cleaned
+        avant = copy(echeancier)
+        candidat = copy(original)
+        candidat.type_paiement = nouveau_type
+        candidat.date_paiement = cleaned.get('date_paiement') or original.date_paiement
+        _align_enrollment_fee(original.eleve, avant, paiement_candidat=original, persist=False)
+        _align_enrollment_fee(original.eleve, echeancier, paiement_candidat=candidat, persist=False)
+        ajuste = montant + echeancier.frais_inscription_du - avant.frais_inscription_du
+        if ajuste <= 0:
+            self.add_error('montant', "Saisissez le montant encaissé après correction du tarif.")
+        else:
+            # Le reçu est déjà net si la remise a été déduite. Seule
+            # l'admission change : ne jamais déduire de nouveau la remise.
+            cleaned['montant'] = ajuste
+        return cleaned
+
+
+class SuppressionPaiementForm(forms.Form):
+    """Motif obligatoire d'une annulation conservée dans l'audit."""
+
+    motif_suppression = forms.CharField(
+        required=True,
+        min_length=5,
+        label="Motif de la suppression",
+        help_text=(
+            "Le paiement sera annulé et retiré de tous les calculs, mais il "
+            "restera conservé avec ce motif."
+        ),
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 4,
+            'placeholder': "Ex. : reçu créé en double ou montant attribué au mauvais élève",
+        }),
+    )
 
 class EcheancierForm(forms.ModelForm):
     """Formulaire pour créer/modifier un échéancier"""

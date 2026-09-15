@@ -848,7 +848,7 @@ def nouvelle_annee_creer(request):
 
             # ─── Étape 5 : Recréer les échéanciers pour la nouvelle année ─
             # Pour chaque élève qui a changé de classe (nouvelle année),
-            # supprimer l'ancien échéancier et en créer un neuf via la grille tarifaire.
+            # conserver l'historique et créer un échéancier distinct via la grille tarifaire.
             if faire_passer_eleves:
                 from paiements.models import EcheancierPaiement
                 from .models import GrilleTarifaire
@@ -867,8 +867,11 @@ def nouvelle_annee_creer(request):
 
                 for eleve in eleves_nouvelle_annee:
                     try:
-                        # Supprimer l'ancien échéancier (lié à l'ancienne année)
-                        EcheancierPaiement.objects.filter(eleve=eleve).delete()
+                        # Ne jamais supprimer les échéanciers des années précédentes.
+                        if EcheancierPaiement.objects.filter(
+                            eleve=eleve, annee_scolaire=annee_nouvelle
+                        ).exists():
+                            continue
 
                         # Chercher la grille tarifaire de la nouvelle année
                         niveau = getattr(eleve.classe, 'niveau', None)

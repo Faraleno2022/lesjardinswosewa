@@ -305,7 +305,7 @@ class ImportElevesProcessor:
                         if resultat['type'] == 'creer':
                             eleves_a_creer.append(resultat['eleve'])
                             if 'responsables' in resultat:
-                                responsables_a_creer.extend(resultat['responsables'])
+                                responsables_a_creer.extend(resultat['responsables'] or [])
                         elif resultat['type'] == 'modifier':
                             eleves_a_modifier.append(resultat['eleve'])
                     
@@ -343,6 +343,12 @@ class ImportElevesProcessor:
                 )
                 self.stats['modifies'] += len(eleves_a_modifier)
         
+        # Relire les identifiants : certains moteurs ne les renvoient pas
+        # directement après bulk_create.
+        matricules = [e.matricule for e in eleves_a_creer + eleves_a_modifier]
+        self.eleves_importes = list(Eleve.objects.filter(
+            classe=classe, matricule__in=matricules,
+        ).values_list('pk', flat=True))
         return self.stats
     
     def _preparer_eleve(self, row, classe, numero_ordre, matricules_existants, responsables_dict, eleves_existants):
@@ -396,7 +402,7 @@ class ImportElevesProcessor:
             eleve_existant.lieu_naissance = lieu_naissance
             eleve_existant.responsable_principal = responsable
             eleve_existant.responsable_secondaire = responsable_secondaire
-            eleve_existant.statut = 'ACTIF'
+            # Une réimportation conserve le statut du dossier existant.
             
             return {'type': 'modifier', 'eleve': eleve_existant}
         else:
@@ -410,7 +416,7 @@ class ImportElevesProcessor:
                 lieu_naissance=lieu_naissance,
                 classe=classe,
                 date_inscription=datetime.now().date(),
-                statut='ACTIF'
+                statut='EN_ATTENTE'
             )
             
             # Stocker les téléphones pour lier après bulk_create des responsables
@@ -510,39 +516,52 @@ class ImportElevesProcessor:
         raise ImportElevesError(f"Format de date invalide: {date_str}")
 
 
+def exporter_liste_eleves_queryset(eleves, inclure_classe=False):
+    """Construit un export compatible avec les colonnes du template d'import."""
+    data = []
+    for eleve in eleves:
+        responsable = eleve.responsable_principal
+        responsable_2 = eleve.responsable_secondaire
+
+        ligne = {}
+        if inclure_classe:
+            ligne.update({
+                'École': eleve.classe.ecole.nom,
+                'Classe': eleve.classe.nom,
+                'Année scolaire': eleve.classe.annee_scolaire,
+            })
+        ligne.update({
+            'Matricule': eleve.matricule,
+            'Prénom': eleve.prenom,
+            'Nom': eleve.nom,
+            'Sexe': eleve.sexe,
+            'Date de Naissance': eleve.date_naissance.strftime('%d/%m/%Y') if eleve.date_naissance else '',
+            'Lieu de Naissance': eleve.lieu_naissance,
+            'Nom du Père/Tuteur': responsable.nom if responsable else '',
+            'Prénom du Père/Tuteur': responsable.prenom if responsable else '',
+            'Téléphone Principal': responsable.telephone if responsable else '',
+            'Adresse': responsable.adresse if responsable else '',
+            'Nom de la Mère': responsable_2.nom if responsable_2 else '',
+            'Prénom de la Mère': responsable_2.prenom if responsable_2 else '',
+            'Téléphone Secondaire': responsable_2.telephone if responsable_2 else '',
+            'Email': responsable.email if responsable else '',
+        })
+        data.append(ligne)
+    return pd.DataFrame(data)
+
+
 def exporter_liste_eleves(classe_id):
     """
     Exporte la liste des élèves d'une classe au format Excel
     """
     try:
         classe = Classe.objects.get(id=classe_id)
-        eleves = Eleve.objects.filter(classe=classe, statut='ACTIF').order_by('nom', 'prenom')
-        
-        data = []
-        for eleve in eleves:
-            responsable = eleve.responsable_principal
-            responsable_2 = eleve.responsable_secondaire
-            
-            data.append({
-                'Matricule': eleve.matricule,
-                'Prénom': eleve.prenom,
-                'Nom': eleve.nom,
-                'Sexe': eleve.sexe,
-                'Date de Naissance': eleve.date_naissance.strftime('%d/%m/%Y') if eleve.date_naissance else '',
-                'Lieu de Naissance': eleve.lieu_naissance,
-                'Nom du Père/Tuteur': responsable.nom if responsable else '',
-                'Prénom du Père/Tuteur': responsable.prenom if responsable else '',
-                'Téléphone Principal': responsable.telephone if responsable else '',
-                'Adresse': responsable.adresse if responsable else '',
-                'Nom de la Mère': responsable_2.nom if responsable_2 else '',
-                'Prénom de la Mère': responsable_2.prenom if responsable_2 else '',
-                'Téléphone Secondaire': responsable_2.telephone if responsable_2 else '',
-                'Email': responsable.email if responsable else ''
-            })
-        
-        df = pd.DataFrame(data)
-        
-        return df
+        eleves = Eleve.objects.filter(
+            classe=classe, statut='ACTIF', est_dans_corbeille=False,
+        ).select_related(
+            'classe', 'classe__ecole', 'responsable_principal', 'responsable_secondaire',
+        ).order_by('nom', 'prenom')
+        return exporter_liste_eleves_queryset(eleves)
     
     except Exception as e:
         raise ImportElevesError(f"Erreur lors de l'export: {e}")

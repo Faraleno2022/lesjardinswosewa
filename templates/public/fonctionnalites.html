@@ -2,6 +2,9 @@
 
 {% block title %}Fonctionnalités - MySchoolGN Guinée{% endblock %}
 {% block meta_description %}MySchoolGN est conçu pour les réalités des écoles guinéennes : paiements, bulletins, absences, communication parents, enseignants, offline et Mobile Money.{% endblock %}
+{% comment %}Page commerciale du logiciel : sur le domaine de l'école, elle ne doit pas
+   être indexée, sinon Google la référence sous lesjardinswosewa.com.{% endcomment %}
+{% block meta_robots %}{% if site.est_ecole %}noindex,follow{% else %}index,follow{% endif %}{% endblock %}
 
 {% block content %}
 <section class="container py-5">

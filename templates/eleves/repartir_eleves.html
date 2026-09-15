@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block title %}Répartir les élèves{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
+        <h2>Répartir les élèves</h2>
+        <a href="{% url 'eleves:importer_eleves' %}" class="btn btn-outline-secondary">Importer un fichier</a>
+    </div>
+    <p>Choisissez la classe de chaque élève, puis enregistrez ou passez au paiement. Seules les classes du même niveau, de la même école et de la même année sont proposées.</p>
+    <div class="alert alert-info">Les nouveaux dossiers importés sont en attente. Le premier paiement de scolarité <strong>validé</strong> active le dossier. Un paiement simplement enregistré en attente ne l'active pas.</div>
+    {% if dernier_import %}<p><strong>Dernier import — {{ page_obj.paginator.count }} élève(s)</strong> · <a href="?tous=1">Voir tous les élèves</a></p>{% endif %}
+    <form method="get" class="d-flex flex-wrap gap-2 mb-3">
+        {% if request.GET.tous == '1' %}<input type="hidden" name="tous" value="1">{% endif %}
+        <input name="q" value="{{ recherche }}" class="form-control w-auto" placeholder="Nom, prénom ou matricule" aria-label="Rechercher un élève">
+        <label class="align-self-center"><input type="checkbox" name="attente" value="1" {% if request.GET.attente == '1' %}checked{% endif %}> Dossiers en attente uniquement</label>
+        <button class="btn btn-primary">Rechercher</button>
+    </form>
+    <div class="table-responsive"><table class="table table-striped align-middle">
+        <thead><tr><th>Élève</th><th>École / année</th><th>Dossier</th><th>Classe et paiement</th></tr></thead>
+        <tbody>{% for eleve in page_obj %}
+            <tr>
+                <td><a href="{% url 'eleves:detail_eleve' eleve.id %}">{{ eleve.nom_complet }}</a><small class="d-block text-muted">{{ eleve.matricule }}</small></td>
+                <td>{{ eleve.classe.ecole.nom }}<small class="d-block">{{ eleve.classe.annee_scolaire }}</small></td>
+                <td>{% if eleve.premier_paiement_valide %}<span class="badge bg-success">Confirmé — premier paiement validé</span>{% else %}<span class="badge bg-warning text-dark">En attente du premier paiement</span>{% endif %}
+                {% if eleve.statut != 'ACTIF' and eleve.statut != 'EN_ATTENTE' %}<small class="d-block">{{ eleve.get_statut_display }}</small>{% endif %}</td>
+                <td><form method="post" class="d-flex flex-wrap gap-2">
+                    {% csrf_token %}
+                    <input type="hidden" name="eleve_id" value="{{ eleve.id }}">
+                    <input type="hidden" name="ancienne_classe_id" value="{{ eleve.classe_id }}">
+                    <select name="classe_id" class="form-select w-auto" aria-label="Classe de {{ eleve.nom_complet }}" required>
+                        {% for classe in eleve.classes_repartition %}<option value="{{ classe.id }}" {% if classe.id == eleve.classe_id %}selected{% endif %}>{{ classe.nom }}</option>{% endfor %}
+                    </select>
+                    <button name="action" value="enregistrer" class="btn btn-outline-primary">Enregistrer</button>
+                    <button name="action" value="payer" class="btn btn-success">{% if eleve.premier_paiement_valide %}Enregistrer et payer{% else %}Enregistrer et faire le premier paiement{% endif %}</button>
+                </form></td>
+            </tr>
+        {% empty %}<tr><td colspan="4">Aucun élève à afficher.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% if page_obj.has_other_pages %}<nav aria-label="Pagination des élèves" class="d-flex gap-3">
+        {% if page_obj.has_previous %}<a href="?{{ pagination_query }}&page={{ page_obj.previous_page_number }}">Précédent</a>{% endif %}
+        <span>Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}<a href="?{{ pagination_query }}&page={{ page_obj.next_page_number }}">Suivant</a>{% endif %}
+    </nav>{% endif %}
+</div>
+{% endblock %}

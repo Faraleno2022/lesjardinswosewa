@@ -4,7 +4,8 @@ Inclut toutes les notes de chaque élève pour chaque matière
 """
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
+from ecole_moderne.branding import get_pdf_palette
 from decimal import Decimal
 import io
 import logging
@@ -13,7 +14,9 @@ import re
 logger = logging.getLogger(__name__)
 
 from .models import ClasseNote, MatiereNote, NoteMensuelle, CompositionNote, AppreciationMaternelle
-from eleves.models import Eleve, Classe as ClasseEleve
+from eleves.models import Eleve
+from utilisateurs.utils import filter_by_user_school
+from .classes_utils import trouver_classe_eleve
 
 
 def get_notes_eleves_par_matiere(classe, periode, eleves, matieres, est_maternelle=False):
@@ -161,13 +164,13 @@ def exporter_notes_complet_excel(request):
         return HttpResponse("Paramètre classe_id manquant", status=400)
     
     try:
-        classe = get_object_or_404(ClasseNote, pk=classe_id)
+        classe = get_object_or_404(
+            filter_by_user_school(ClasseNote.objects.all(), request.user), pk=classe_id,
+        )
         matieres = list(MatiereNote.objects.filter(classe=classe, actif=True).order_by('nom'))
         
         # Récupérer les élèves
-        classe_eleve = ClasseEleve.objects.filter(
-            nom=classe.nom, annee_scolaire=classe.annee_scolaire, ecole=classe.ecole
-        ).first()
+        classe_eleve = trouver_classe_eleve(classe)
         
         if not classe_eleve:
             return HttpResponse("Classe élèves non trouvée", status=404)
@@ -202,6 +205,7 @@ def exporter_notes_complet_excel(request):
         
         # Récupérer les informations de l'école
         ecole = classe.ecole
+        palette = get_pdf_palette(ecole, bulletin=True)
         
         # En-tête école
         ws.merge_cells('A1:' + get_column_letter(5 + len(matieres)) + '1')
@@ -295,9 +299,9 @@ def exporter_notes_complet_excel(request):
             # Moyenne générale
             moy = r.get('moyenne_generale')
             if est_maternelle:
-                moy_cell = ws.cell(row=row, column=col, value=f"{moy:.1f}%" if moy else '-')
+                moy_cell = ws.cell(row=row, column=col, value=f"{moy:.1f}%" if moy is not None else '-')
             else:
-                moy_cell = ws.cell(row=row, column=col, value=f"{moy:.2f}" if moy else '-')
+                moy_cell = ws.cell(row=row, column=col, value=f"{moy:.2f}" if moy is not None else '-')
             moy_cell.border = thin_border
             moy_cell.alignment = center_align
             seuil_moy = 5 if est_primaire else 10
@@ -328,7 +332,7 @@ def exporter_notes_complet_excel(request):
             col += 1
         
         # Moyenne générale de la classe
-        moyennes_gen = [r['moyenne_generale'] for r in resultats if r['moyenne_generale']]
+        moyennes_gen = [r['moyenne_generale'] for r in resultats if r['moyenne_generale'] is not None]
         if moyennes_gen:
             ws.cell(row=row, column=col, value=f"{sum(moyennes_gen)/len(moyennes_gen):.2f}")
         
@@ -357,6 +361,8 @@ def exporter_notes_complet_excel(request):
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
         
+    except Http404:
+        raise
     except Exception as e:
         logger.exception("Erreur export Excel")
         return HttpResponse("Une erreur est survenue lors de l'export Excel.", status=500)
@@ -379,13 +385,13 @@ def exporter_notes_complet_pdf(request):
         return HttpResponse("Paramètre classe_id manquant", status=400)
     
     try:
-        classe = get_object_or_404(ClasseNote, pk=classe_id)
+        classe = get_object_or_404(
+            filter_by_user_school(ClasseNote.objects.all(), request.user), pk=classe_id,
+        )
         matieres = list(MatiereNote.objects.filter(classe=classe, actif=True).order_by('nom'))
         
         # Récupérer les élèves
-        classe_eleve = ClasseEleve.objects.filter(
-            nom=classe.nom, annee_scolaire=classe.annee_scolaire, ecole=classe.ecole
-        ).first()
+        classe_eleve = trouver_classe_eleve(classe)
         
         if not classe_eleve:
             return HttpResponse("Classe élèves non trouvée", status=404)
@@ -419,13 +425,14 @@ def exporter_notes_complet_pdf(request):
         
         # Récupérer les informations de l'école
         ecole = classe.ecole
+        palette = get_pdf_palette(ecole, bulletin=True)
         
         # Styles personnalisés
         title_style = ParagraphStyle(
             'Title',
             parent=styles['Heading1'],
             fontSize=14,
-            textColor=colors.HexColor('#007bff'),
+            textColor=palette['primary'],
             alignment=TA_CENTER,
             spaceAfter=4
         )
@@ -465,7 +472,7 @@ def exporter_notes_complet_pdf(request):
             fontSize=7.2,
             leading=7.8,
             alignment=TA_CENTER,
-            textColor=colors.whitesmoke,
+            textColor=palette['header_text'],
             wordWrap='CJK'
         )
 
@@ -517,9 +524,9 @@ def exporter_notes_complet_pdf(request):
             moy = r.get('moyenne_generale')
             if est_maternelle:
                 # Pour maternelle, afficher en pourcentage
-                row.append(f"{moy:.1f}%" if moy else '-')
+                row.append(f"{moy:.1f}%" if moy is not None else '-')
             else:
-                row.append(f"{moy:.2f}" if moy else '-')
+                row.append(f"{moy:.2f}" if moy is not None else '-')
             row.append(r.get('rang', '-'))
             
             data.append(row)
@@ -534,8 +541,8 @@ def exporter_notes_complet_pdf(request):
         
         # Styles du tableau
         style_commands = [
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#007bff')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('BACKGROUND', (0, 0), (-1, 0), palette['header']),
+            ('TEXTCOLOR', (0, 0), (-1, 0), palette['header_text']),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 7.4),
@@ -544,7 +551,7 @@ def exporter_notes_complet_pdf(request):
             ('TOPPADDING', (0, 0), (-1, -1), 3),
             ('BOTTOMPADDING', (0, 1), (-1, -1), 3),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')]),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, palette['table_light']]),
             ('ALIGN', (2, 1), (2, -1), 'LEFT'),  # Nom complet aligné à gauche
         ]
         
@@ -570,7 +577,7 @@ def exporter_notes_complet_pdf(request):
         
         # Statistiques
         elements.append(Spacer(1, 0.5*cm))
-        moyennes_gen = [r['moyenne_generale'] for r in resultats if r['moyenne_generale']]
+        moyennes_gen = [r['moyenne_generale'] for r in resultats if r['moyenne_generale'] is not None]
         if moyennes_gen:
             moy_classe = sum(moyennes_gen) / len(moyennes_gen)
             stats_text = f"Effectif: {len(resultats)} | Moyenne classe: {moy_classe:.2f} | "
@@ -588,6 +595,8 @@ def exporter_notes_complet_pdf(request):
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
         
+    except Http404:
+        raise
     except Exception as e:
         logger.exception("Erreur export PDF")
         return HttpResponse("Une erreur est survenue lors de l'export PDF.", status=500)

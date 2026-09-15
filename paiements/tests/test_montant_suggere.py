@@ -42,6 +42,40 @@ class TranchesViseesParTypeTests(TestCase):
         self.assertEqual(self._tranches("Scolarité"), {1, 2, 3})
         self.assertEqual(self._tranches("Inscription + Annuel"), {1, 2, 3})
 
+    def test_une_tranche_nommee_prime_sur_le_mot_scolarite(self):
+        """Régression : « scolarité » court-circuitait les tranches citées.
+
+        « Frais d'inscription + Scolarité 1ère Tranche » est un type réellement
+        créé par scripts/add_combined_payment_types.py. Il proposait l'année
+        entière au lieu de la seule première tranche.
+        """
+        self.assertEqual(
+            self._tranches("Frais d'inscription + Scolarité 1ère Tranche"), {1}
+        )
+        self.assertEqual(self._tranches("Scolarité 2ème tranche"), {2})
+        self.assertEqual(self._tranches("Scolarité tranche 3"), {3})
+
+    def test_graphies_alternatives(self):
+        self.assertEqual(self._tranches("T2"), {2})
+        self.assertEqual(self._tranches("Réinscription + T1"), {1})
+        self.assertEqual(self._tranches("Deuxième tranche"), {2})
+        self.assertEqual(self._tranches("Troisième versement"), {3})
+        self.assertEqual(self._tranches("Tranche II"), {2})
+        self.assertEqual(self._tranches("Tranche n°2"), {2})
+        self.assertEqual(self._tranches("3e tranche"), {3})
+
+    def test_enumerations_et_intervalles(self):
+        self.assertEqual(self._tranches("Tranches 1 et 2"), {1, 2})
+        self.assertEqual(self._tranches("Tranches 1 et 3"), {1, 3})
+        self.assertEqual(self._tranches("Tranches 1, 2 et 3"), {1, 2, 3})
+        self.assertEqual(self._tranches("Tranches 1 à 3"), {1, 2, 3})
+        self.assertEqual(self._tranches("Tranches 2-3"), {2, 3})
+
+    def test_un_decompte_n_est_pas_un_rang(self):
+        """« 3 tranches » annonce un découpage, pas la troisième tranche."""
+        self.assertEqual(self._tranches("Scolarité annuelle (3 tranches)"), {1, 2, 3})
+        self.assertEqual(self._tranches("Scolarité en 3 versements"), {1, 2, 3})
+
     def test_types_hors_echeancier(self):
         self.assertEqual(self._tranches("Cantine"), set())
         self.assertEqual(self._tranches("Transport"), set())
@@ -132,10 +166,86 @@ class AjaxMontantSuggereTests(TestCase):
         self.assertEqual(data["suggested"], 400000)  # 600 000 - 200 000
         self.assertEqual(data["breakdown"]["t1_restant"], 400000)
 
+    def test_reinscription_plus_tranche_1(self):
+        data = self._demander("Réinscription + Tranche 1")
+        self.assertEqual(data["suggested"], 30000 + 600000)
+        self.assertTrue(data["couvre_frais"])
+        self.assertEqual(data["tranches"], [1])
+
+    def test_le_montant_deduit_les_recus_en_attente(self):
+        """Un reçu non encore validé n'est pas affecté à l'échéancier.
+
+        Sans déduction, le moteur proposait de réencaisser un poste qu'un reçu
+        en attente couvre déjà. Le reçu se ventile comme un encaissement
+        validé : inscription d'abord, puis T1, T2, T3. Ici 250 000 couvrent les
+        50 000 d'inscription, puis 200 000 sur la première tranche.
+        """
+        from paiements.views import ensure_echeancier_for_eleve
+
+        ensure_echeancier_for_eleve(self.eleve)
+        mode = ModePaiement.objects.create(nom="Espèces attente")
+        Paiement.objects.create(
+            eleve=self.eleve,
+            type_paiement=TypePaiement.objects.create(nom="Tranche 1 (en attente)"),
+            mode_paiement=mode,
+            montant=Decimal("250000"),
+            date_paiement=date(2025, 10, 1),
+            statut="EN_ATTENTE",
+        )
+
+        data = self._demander("Tranche 1")
+
+        self.assertEqual(data["breakdown"]["en_attente"], 250000)
+        self.assertEqual(data["breakdown"]["fi_restant"], 0)
+        self.assertEqual(data["suggested"], 400000)  # 600 000 - 200 000
+        self.assertIn("en attente", data["breakdown"]["description"])
+
+    def test_un_recu_en_attente_ne_rend_jamais_le_reste_negatif(self):
+        """Un reçu qui solde l'année ramène la proposition à zéro, pas en négatif."""
+        from paiements.views import ensure_echeancier_for_eleve
+
+        ensure_echeancier_for_eleve(self.eleve)
+        mode = ModePaiement.objects.create(nom="Espèces solde")
+        Paiement.objects.create(
+            eleve=self.eleve,
+            type_paiement=TypePaiement.objects.create(nom="Scolarité complète"),
+            mode_paiement=mode,
+            montant=Decimal("5000000"),
+            date_paiement=date(2025, 10, 1),
+            statut="EN_ATTENTE",
+        )
+
+        data = self._demander("Inscription + Tranche 1 + Tranche 2 + Tranche 3")
+
+        self.assertEqual(data["suggested"], 0)
+
+    def test_un_recu_en_attente_hors_scolarite_ne_reduit_rien(self):
+        mode = ModePaiement.objects.create(nom="Espèces cantine")
+        Paiement.objects.create(
+            eleve=self.eleve,
+            type_paiement=TypePaiement.objects.create(nom="Cantine octobre"),
+            mode_paiement=mode,
+            montant=Decimal("250000"),
+            date_paiement=date(2025, 10, 1),
+            statut="EN_ATTENTE",
+        )
+
+        data = self._demander("Tranche 1")
+
+        self.assertEqual(data["breakdown"]["en_attente"], 0)
+        self.assertEqual(data["suggested"], 600000)
+
     def test_type_hors_echeancier_ne_propose_rien(self):
         data = self._demander("Cantine")
         self.assertEqual(data["suggested"], 0)
         self.assertIn("aucun poste", data["breakdown"]["description"].lower())
+
+    def test_un_type_hors_scolarite_ignore_les_tranches_de_son_libelle(self):
+        """La catégorie prime sur le libellé : « Cantine T1 » reste de la cantine."""
+        data = self._demander("Cantine T1")
+        self.assertEqual(data["suggested"], 0)
+        self.assertEqual(data["tranches"], [])
+        self.assertFalse(data["couvre_frais"])
 
     def test_parametres_manquants(self):
         response = self.client.get(reverse("paiements:ajax_montant_suggere"))

@@ -1,0 +1,139 @@
+{% load humanize %}
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl">
+    <div class="card h-100 border-primary"><div class="card-body py-3">
+      <small class="text-muted">Élèves</small>
+      <div class="h5 mb-0 text-primary">{{ student_count|intcomma }}</div>
+    </div></div>
+  </div>
+  <div class="col-sm-6 col-xl">
+    <div class="card h-100 border-info"><div class="card-body py-3">
+      <small class="text-muted">Forfaits de référence</small>
+      <div class="h5 mb-0">{{ forfait_reference_total|floatformat:0|intcomma }} GNF</div>
+    </div></div>
+  </div>
+  <div class="col-sm-6 col-xl">
+    <div class="card h-100 border-secondary"><div class="card-body py-3">
+      <small class="text-muted">Inscription / réinscription</small>
+      <div class="h5 mb-0">{{ admission_total|floatformat:0|intcomma }} GNF</div>
+    </div></div>
+  </div>
+  <div class="col-sm-6 col-xl">
+    <div class="card h-100 border-success"><div class="card-body py-3">
+      <small class="text-muted">Encaissé</small>
+      <div class="h5 mb-0 text-success">{{ paid_total|floatformat:0|intcomma }} GNF</div>
+    </div></div>
+  </div>
+  <div class="col-sm-6 col-xl">
+    <div class="card h-100 border-danger"><div class="card-body py-3">
+      <small class="text-muted">Reste à payer</small>
+      <div class="h5 mb-0 text-danger">{{ remaining_total|floatformat:0|intcomma }} GNF</div>
+    </div></div>
+  </div>
+</div>
+
+{% if without_schedule_count or to_check_count %}
+<div class="alert alert-warning d-flex flex-wrap gap-3 align-items-center">
+  <strong><i class="fas fa-exclamation-triangle me-1"></i>Contrôles :</strong>
+  {% if without_schedule_count %}<span>{{ without_schedule_count }} élève{{ without_schedule_count|pluralize }} sans échéancier</span>{% endif %}
+  {% if to_check_count %}<span>{{ to_check_count }} forfait{{ to_check_count|pluralize }} à vérifier</span>{% endif %}
+</div>
+{% endif %}
+
+<div class="card shadow-sm">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+      <span class="fw-semibold">Détail des élèves en garde prolongée</span>
+      <small class="text-muted ms-2">{{ page_obj.paginator.count|intcomma }} élève{{ page_obj.paginator.count|pluralize }}</small>
+    </div>
+    <small class="text-muted">Année scolaire : {{ selected_year|default:'Toutes' }}</small>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover table-striped align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Élève</th>
+          <th>Classe / cycle</th>
+          <th>Responsable</th>
+          <th>Admission</th>
+          <th class="text-end">Frais admission</th>
+          <th class="text-end">Forfait référence</th>
+          <th class="text-end">Forfait appliqué</th>
+          <th class="text-end">Total dû</th>
+          <th class="text-end">Encaissé</th>
+          <th class="text-end">Remises</th>
+          <th class="text-end">Reste</th>
+          <th>Situation</th>
+          <th>Contrôle</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>
+            <div class="fw-semibold">{{ row.student }}</div>
+            <small class="text-muted">{{ row.matricule }} · {{ row.student_status }}</small>
+          </td>
+          <td>
+            <div>{{ row.class }}</div>
+            <small class="text-muted">{{ row.school }} · {{ row.cycle }}</small>
+          </td>
+          <td>
+            <div>{{ row.responsible }}</div>
+            <small class="text-muted">{{ row.phone|default:'Téléphone non renseigné' }}</small>
+          </td>
+          <td><span class="badge text-bg-info">{{ row.admission_label }}</span></td>
+          <td class="text-end">{% if row.admission_due is not None %}{{ row.admission_due|floatformat:0|intcomma }}{% else %}—{% endif %}</td>
+          <td class="text-end fw-semibold">{% if row.reference_forfait is not None %}{{ row.reference_forfait|floatformat:0|intcomma }}{% else %}—{% endif %}</td>
+          <td class="text-end">{% if row.applied_forfait is not None %}{{ row.applied_forfait|floatformat:0|intcomma }}{% else %}—{% endif %}</td>
+          <td class="text-end fw-semibold">{% if row.total_due is not None %}{{ row.total_due|floatformat:0|intcomma }}{% else %}—{% endif %}</td>
+          <td class="text-end text-success">{% if row.paid is not None %}{{ row.paid|floatformat:0|intcomma }}{% else %}—{% endif %}</td>
+          <td class="text-end">{% if row.discount is not None %}{{ row.discount|floatformat:0|intcomma }}{% else %}—{% endif %}</td>
+          <td class="text-end fw-bold {% if row.situation_code == 'solde' %}text-success{% elif row.remaining %}text-danger{% endif %}">
+            {% if row.remaining is not None %}{{ row.remaining|floatformat:0|intcomma }}{% else %}—{% endif %}
+          </td>
+          <td>
+            {% if row.situation_code == 'solde' %}<span class="badge text-bg-success">{{ row.situation }}</span>
+            {% elif row.situation_code == 'partiel' %}<span class="badge text-bg-warning">{{ row.situation }}</span>
+            {% elif row.situation_code == 'sans_echeancier' %}<span class="badge text-bg-secondary">{{ row.situation }}</span>
+            {% else %}<span class="badge text-bg-danger">{{ row.situation }}</span>{% endif %}
+          </td>
+          <td>
+            {% if row.conformity_code == 'conforme' %}<span class="badge text-bg-success">{{ row.conformity }}</span>
+            {% elif row.conformity_code == 'a_verifier' %}<span class="badge text-bg-danger">{{ row.conformity }}</span>
+            {% else %}<span class="badge text-bg-secondary">{{ row.conformity }}</span>{% endif %}
+          </td>
+          <td class="text-end">
+            <a href="{% url 'paiements:echeancier_eleve' row.student_id %}" class="btn btn-sm btn-outline-primary" title="Voir l'échéancier">
+              <i class="fas fa-calendar-alt"></i><span class="visually-hidden">Voir l'échéancier de {{ row.student }}</span>
+            </a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="14" class="text-center text-muted py-5">
+          <i class="fas fa-search fa-2x mb-3 d-block"></i>Aucun élève ne correspond aux filtres sélectionnés.
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.paginator.num_pages > 1 %}
+  <div class="card-footer d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <small class="text-muted">Page {{ page_obj.number }} sur {{ page_obj.paginator.num_pages }}</small>
+    <nav aria-label="Pagination des élèves en garde prolongée">
+      <ul class="pagination pagination-sm mb-0">
+        {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" data-garde-page href="?{% if query_string %}{{ query_string }}&{% endif %}page={{ page_obj.previous_page_number }}">Précédent</a></li>{% endif %}
+        <li class="page-item active"><span class="page-link">{{ page_obj.number }}</span></li>
+        {% if page_obj.has_next %}<li class="page-item"><a class="page-link" data-garde-page href="?{% if query_string %}{{ query_string }}&{% endif %}page={{ page_obj.next_page_number }}">Suivant</a></li>{% endif %}
+      </ul>
+    </nav>
+  </div>
+  {% endif %}
+</div>
+
+<div class="alert alert-light border mt-3 mb-0 small text-muted">
+  Le total dû est calculé par le moteur des échéanciers. Le forfait de référence
+  permet de repérer immédiatement un ancien échéancier non aligné sur le barème de garde prolongée.
+</div>

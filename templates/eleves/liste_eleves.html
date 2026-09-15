@@ -7,6 +7,7 @@
 {% endblock %}
 
 {% block page_actions %}
+    <a href="{% url 'eleves:repartir_eleves' %}" class="btn btn-outline-primary"><i class="fas fa-random me-1"></i>Répartir les élèves</a>
     <div>
         <a href="{% url 'eleves:ajouter_eleve' %}" class="btn btn-primary">
             <i class="fas fa-plus me-1"></i>Ajouter un élève
@@ -184,6 +185,24 @@
                     
                     showMessage('Génération du PDF en cours...', 'info');
                     const url = `{% url 'eleves:tickets_bus_classe_pdf' 0 %}`.replace('0', classeId);
+                    window.open(url, '_blank');
+                    setTimeout(() => showMessage('PDF généré avec succès !'), 1000);
+                });
+            }
+
+            // Gestion du bouton Cartes Cantine en masse
+            const btnTicketsCantineMasse = zone.querySelector('#btn-tickets-cantine-masse');
+            if (btnTicketsCantineMasse) {
+                const newBtn = btnTicketsCantineMasse.cloneNode(true);
+                btnTicketsCantineMasse.parentNode.replaceChild(newBtn, btnTicketsCantineMasse);
+                newBtn.addEventListener('click', () => {
+                    const classeId = select.value;
+                    if (!classeId) {
+                        showMessage('Veuillez sélectionner une classe pour générer les cartes cantine.', 'error');
+                        return;
+                    }
+                    showMessage('Génération du PDF en cours...', 'info');
+                    const url = `{% url 'eleves:tickets_cantine_classe_pdf' 0 %}`.replace('0', classeId);
                     window.open(url, '_blank');
                     setTimeout(() => showMessage('PDF généré avec succès !'), 1000);
                 });
@@ -377,4 +396,3 @@
     });
     </script>
 {% endblock %}
-

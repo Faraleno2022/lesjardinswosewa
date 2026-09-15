@@ -1,6 +1,8 @@
 import os
+from django.conf import settings
 from .models import Profil
 from .permissions import get_user_permissions, check_comptable_restrictions
+from ecole_moderne.branding import get_school_branding
 
 def user_context(request):
     """
@@ -17,6 +19,12 @@ def user_context(request):
         'nouvelle_annee_status': {'due': False},
         # Mode hors-ligne : True quand lancé depuis l'exe PyInstaller
         'is_offline': os.environ.get('OFFLINE_MODE', '0') == '1',
+        'session_idle_timeout_seconds': getattr(
+            settings,
+            'SESSION_IDLE_TIMEOUT_SECONDS',
+            1800,
+        ),
+        'school_branding': get_school_branding(),
     }
 
     if request.user.is_authenticated:
@@ -38,6 +46,7 @@ def user_context(request):
                 )
                 context['annee_active'] = get_annee_active(request, profil.ecole)
                 context['nouvelle_annee_status'] = get_statut_creation_nouvelle_annee(profil.ecole)
+                context['school_branding'] = get_school_branding(profil.ecole)
         except Profil.DoesNotExist:
             context.update({
                 'user_permissions': get_user_permissions(request.user),

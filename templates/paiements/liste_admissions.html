@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}{{ titre_page }}{% endblock %}
+
+{% block breadcrumb_items %}
+<li class="breadcrumb-item"><a href="{% url 'paiements:tableau_bord' %}">Paiements</a></li>
+<li class="breadcrumb-item active">{{ titre_page }}</li>
+{% endblock %}
+
+{% block page_actions %}
+<div class="d-flex flex-wrap gap-2">
+  <a href="{% url 'paiements:export_admissions_pdf' nature %}{% if q %}?q={{ q|urlencode }}{% endif %}" class="btn btn-outline-danger">
+    <i class="fas fa-file-pdf me-1"></i>PDF
+  </a>
+  <a href="{% url 'paiements:export_admissions_excel' nature %}{% if q %}?q={{ q|urlencode }}{% endif %}" class="btn btn-outline-success">
+    <i class="fas fa-file-excel me-1"></i>Excel
+  </a>
+  <a href="{% url 'paiements:tableau_bord' %}" class="btn btn-outline-secondary">
+    <i class="fas fa-arrow-left me-1"></i>Tableau de bord
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-4">
+  <div class="col-md-4"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Élèves</div><div class="h3 mb-0">{{ page_obj.paginator.count|intcomma }}</div></div></div></div>
+  <div class="col-md-4"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Frais dus</div><div class="h3 text-primary mb-0">{{ montant_du|floatformat:0|intcomma }} GNF</div></div></div></div>
+  <div class="col-md-4"><div class="card shadow-sm"><div class="card-body"><div class="text-muted">Frais payés</div><div class="h3 text-success mb-0">{{ montant_paye|floatformat:0|intcomma }} GNF</div></div></div></div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <form method="get" class="row g-2">
+      <div class="col-md-9"><input name="q" value="{{ q }}" class="form-control" placeholder="Matricule, nom, prénom ou classe"></div>
+      <div class="col-md-3"><button class="btn btn-primary w-100"><i class="fas fa-search me-1"></i>Rechercher</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="card shadow-sm">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light"><tr><th>Matricule</th><th>Élève</th><th>Classe</th><th>Année</th><th>Inscription</th><th>Dû</th><th>Payé</th><th>Reste</th><th>Statut</th></tr></thead>
+      <tbody>
+      {% for echeancier in page_obj %}
+        <tr>
+          <td><strong>{{ echeancier.eleve.matricule }}</strong></td>
+          <td>{{ echeancier.eleve.nom_complet }}<br><small class="text-muted">{{ echeancier.eleve.classe.ecole.nom }}</small></td>
+          <td>{{ echeancier.eleve.classe.nom }}</td>
+          <td>{{ echeancier.annee_scolaire }}</td>
+          <td>{{ echeancier.eleve.date_inscription|date:'d/m/Y'|default:'-' }}</td>
+          <td>{{ echeancier.frais_inscription_du|floatformat:0|intcomma }} GNF</td>
+          <td class="text-success">{{ echeancier.frais_inscription_paye|floatformat:0|intcomma }} GNF</td>
+          <td>{{ echeancier.reste_admission|floatformat:0|intcomma }} GNF</td>
+          <td><span class="badge bg-secondary">{{ echeancier.get_statut_display }}</span></td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="9" class="text-center text-muted py-5">Aucun élève trouvé.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.has_other_pages %}
+  <div class="card-footer d-flex justify-content-between">
+    {% if page_obj.has_previous %}<a class="btn btn-outline-primary btn-sm" href="?page={{ page_obj.previous_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}">Précédent</a>{% else %}<span></span>{% endif %}
+    <span>Page {{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}<a class="btn btn-outline-primary btn-sm" href="?page={{ page_obj.next_page_number }}{% if q %}&q={{ q|urlencode }}{% endif %}">Suivant</a>{% else %}<span></span>{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

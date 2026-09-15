@@ -1,7 +1,13 @@
 from django.urls import path
-from . import views
+from . import views, views_admissions, views_audit
 from .views_tranches import export_tranches_par_classe_pdf, export_tranches_par_classe_excel
-from .export_comptabilite import export_comptabilite_pdf, export_comptabilite_excel
+from .rapports_professionnels import (
+    apercu_comptabilite_pdf,
+    export_comptabilite_pdf,
+    export_comptabilite_excel,
+    export_payment_modes_pdf,
+    export_payment_modes_excel,
+)
 from .export_paiements_filtres import export_paiements_filtres_pdf, export_paiements_filtres_excel
 from . import views_rappels
 from .whatsapp_recu import apercu_message_whatsapp_recu, apercu_message_whatsapp_note_rappel
@@ -11,16 +17,28 @@ from .views_rapport_comptable import (
     export_rapport_comptable_pdf,
     export_rapport_comptable_excel,
 )
+from .views_modes_encaissement import payment_modes_students
+from .views_garde_prolongee import (
+    garde_prolongee_report,
+    export_garde_prolongee_pdf,
+    export_garde_prolongee_excel,
+)
 
 app_name = 'paiements'
 
 urlpatterns = [
     # Tableau de bord
     path('', views.tableau_bord_paiements, name='tableau_bord'),
+    path('audit/', views_audit.historique_paiements, name='historique_operations'),
+    path('admissions/<str:nature>/', views_admissions.liste_admissions, name='liste_admissions'),
+    path('admissions/<str:nature>/pdf/', views_admissions.export_admissions_pdf, name='export_admissions_pdf'),
+    path('admissions/<str:nature>/excel/', views_admissions.export_admissions_excel, name='export_admissions_excel'),
     
     # Gestion des paiements
     path('liste/', views.liste_paiements, name='liste_paiements'),
     path('detail/<int:paiement_id>/', views.detail_paiement, name='detail_paiement'),
+    path('modifier/<int:paiement_id>/', views.modifier_paiement, name='modifier_paiement'),
+    path('supprimer/<int:paiement_id>/', views.supprimer_paiement, name='supprimer_paiement'),
     path('ajouter/', views.ajouter_paiement, name='ajouter_paiement'),
     path('ajouter/<int:eleve_id>/', views.ajouter_paiement, name='ajouter_paiement_eleve'),
     path('valider/<int:paiement_id>/', views.valider_paiement, name='valider_paiement'),
@@ -36,14 +54,22 @@ urlpatterns = [
     
     # Génération de documents
     path('recu/<int:paiement_id>/pdf/', views.generer_recu_pdf, name='generer_recu_pdf'),
+    path(
+        'carnet/<int:paiement_id>/pdf/',
+        views.generer_carnet_paiement_pdf,
+        name='generer_carnet_paiement_pdf',
+    ),
     path('note-rappel/<int:eleve_id>/pdf/', views.generer_note_rappel_pdf, name='generer_note_rappel_pdf'),
     path('notes-rappel/classe/<int:classe_id>/pdf/', views.generer_notes_rappel_classe_pdf, name='generer_notes_rappel_classe_pdf'),
     path('eleves-impayes/', views.liste_eleves_impayes, name='liste_eleves_impayes'),
     path('notes-rappel/tous/pdf/', views.generer_toutes_notes_rappel_pdf, name='generer_toutes_notes_rappel_pdf'),
     path('export/paiements-filtres/pdf/', export_paiements_filtres_pdf, name='export_paiements_filtres_pdf'),
     path('export/paiements-filtres/excel/', export_paiements_filtres_excel, name='export_paiements_filtres_excel'),
+    path('rapport/comptabilite/apercu-pdf/', apercu_comptabilite_pdf, name='apercu_comptabilite_pdf'),
     path('export/comptabilite/pdf/', export_comptabilite_pdf, name='export_comptabilite_pdf'),
     path('export/comptabilite/excel/', export_comptabilite_excel, name='export_comptabilite_excel'),
+    path('export/modes-encaissement/pdf/', export_payment_modes_pdf, name='export_modes_encaissement_pdf'),
+    path('export/modes-encaissement/excel/', export_payment_modes_excel, name='export_modes_encaissement_excel'),
     path('export/tranches-par-classe/pdf/', export_tranches_par_classe_pdf, name='export_tranches_par_classe_pdf'),
     path('export/tranches-par-classe/excel/', export_tranches_par_classe_excel, name='export_tranches_par_classe_excel'),
     path('export/liste/excel/', views.export_liste_paiements_excel, name='export_liste_paiements_excel'),
@@ -58,6 +84,19 @@ urlpatterns = [
     path('rapport/comptabilite/', rapport_comptable, name='rapport_comptable'),
     path('rapport/comptabilite/pdf/', export_rapport_comptable_pdf, name='export_rapport_comptable_pdf'),
     path('rapport/comptabilite/excel/', export_rapport_comptable_excel, name='export_rapport_comptable_excel'),
+    path('rapport/garde-prolongee/', garde_prolongee_report, name='garde_prolongee_report'),
+    path('export/garde-prolongee/pdf/', export_garde_prolongee_pdf, name='export_garde_prolongee_pdf'),
+    path('export/garde-prolongee/excel/', export_garde_prolongee_excel, name='export_garde_prolongee_excel'),
+    path(
+        'rapport/modes-encaissement/',
+        payment_modes_students,
+        name='modes_encaissement_eleves',
+    ),
+    path(
+        'rapport/modes-encaissement/eleves/',
+        payment_modes_students,
+        name='modes_encaissement_eleves_legacy',
+    ),
     
     # Élèves soldés (année scolaire réglée)
     path('eleves-soldes/', views.eleves_soldes_simple, name='liste_eleves_soldes'),
@@ -102,4 +141,3 @@ urlpatterns = [
     path('recu-public/<int:paiement_id>/', recu_public_pdf, name='recu_public_pdf'),
     path('note-rappel-public/<int:eleve_id>/', note_rappel_public_pdf, name='note_rappel_public_pdf'),
 ]
-

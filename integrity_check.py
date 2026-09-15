@@ -31,8 +31,8 @@ def _base_dir():
     return Path(__file__).parent
 
 # ─── Fichiers critiques à protéger ───────────────────────────────────────────
-# NOTE ANTI-MODIFICATION : Les modules Python critiques (license_manager.py,
-# integrity_check.py, load_env.py, run_server.py) sont compilés en bytecode
+# NOTE ANTI-MODIFICATION : Les modules Python critiques (integrity_check.py,
+# load_env.py, run_server.py) sont compilés en bytecode
 # dans le PYZ et ne sont PAS présents comme fichiers .py lisibles.
 # La protection des modules compilés est assurée par le système de garde (.guard.dat).
 CRITICAL_PATTERNS = [
@@ -42,7 +42,7 @@ CRITICAL_PATTERNS = [
 # Fichiers de configuration Django (présents comme données si copiés)
 DJANGO_PATTERNS = [
     'ecole_moderne/settings.py',
-    'ecole_moderne/licence_middleware.py',
+    'ecole_moderne/integrity_middleware.py',
     'ecole_moderne/urls.py',
     'ecole_moderne/__init__.py',
 ]
@@ -52,10 +52,8 @@ EXE_PATTERNS = [
     'MySchoolGN.exe',
 ]
 
-# Fichiers .pyd (modules compilés Nuitka)
-PYD_PATTERNS = [
-    'license_manager.cp*.pyd',
-]
+# Fichiers .pyd (modules compiles Nuitka, liste vide par defaut)
+PYD_PATTERNS = []
 
 MANIFEST_FILE = '.integrity.dat'
 

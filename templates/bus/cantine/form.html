@@ -33,16 +33,27 @@
                             </div>
                             <div class="card-body">
                                 <div class="row">
-                                    <div class="col-md-8">
+                                    <div class="col-md-5">
                                         <div class="mb-3">
-                                            <label class="form-label">Élève *</label>
+                                            <label class="form-label" for="{{ form.classe.id_for_label }}">Filtrer par classe</label>
+                                            {{ form.classe }}
+                                            <small class="form-text text-muted">Choisissez une classe pour réduire la liste.</small>
+                                            {% if form.classe.errors %}
+                                                <div class="text-danger">{{ form.classe.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="col-md-7">
+                                        <div class="mb-3">
+                                            <label class="form-label" for="{{ form.eleve.id_for_label }}">Élève *</label>
                                             {{ form.eleve }}
+                                            <small class="form-text text-muted">Affichage : matricule — prénom nom.</small>
                                             {% if form.eleve.errors %}
                                                 <div class="text-danger">{{ form.eleve.errors }}</div>
                                             {% endif %}
                                         </div>
                                     </div>
-                                    <div class="col-md-4">
+                                    <div class="col-md-6">
                                         <div class="mb-3">
                                             <label class="form-label">Contact Parent</label>
                                             {{ form.contact_parent }}
@@ -99,7 +110,7 @@
                                     </div>
                                     <div class="col-md-6">
                                         <div class="mb-3">
-                                            <label class="form-label">Périodicité *</label>
+                                            <label class="form-label">Type de paiement *</label>
                                             {{ form.periodicite }}
                                             {% if form.periodicite.errors %}
                                                 <div class="text-danger">{{ form.periodicite.errors }}</div>
@@ -114,6 +125,16 @@
                                             {{ form.montant }}
                                             {% if form.montant.errors %}
                                                 <div class="text-danger">{{ form.montant.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="col-md-8">
+                                        <div class="mb-3">
+                                            <label class="form-label">Référence externe du paiement</label>
+                                            {{ form.reference_externe }}
+                                            <small class="form-text text-muted">Numéro du reçu, transaction Mobile Money, chèque ou autre référence.</small>
+                                            {% if form.reference_externe.errors %}
+                                                <div class="text-danger">{{ form.reference_externe.errors }}</div>
                                             {% endif %}
                                         </div>
                                     </div>
@@ -227,6 +248,8 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const eleveInfoUrlModele = '{% url "bus:get_eleve_info_json" 0 %}';
+    const classeSelect = document.getElementById('id_classe');
     const eleveSelect = document.getElementById('id_eleve');
     const contactParentInput = document.getElementById('id_contact_parent');
     const eleveInfoDiv = document.getElementById('eleve-info');
@@ -234,6 +257,72 @@ document.addEventListener('DOMContentLoaded', function() {
     const infoClasse = document.getElementById('info-classe');
     const infoPhoto = document.getElementById('info-photo');
     const infoNoPhoto = document.getElementById('info-no-photo');
+    const periodiciteSelect = document.getElementById('id_periodicite');
+    const dateDebutInput = document.getElementById('id_date_debut');
+    const dateExpirationInput = document.getElementById('id_date_expiration');
+    const toutesLesOptionsEleves = eleveSelect
+        ? Array.from(eleveSelect.options).map(option => option.cloneNode(true))
+        : [];
+
+    function filtrerElevesParClasse() {
+        if (!classeSelect || !eleveSelect) return;
+        const classeId = classeSelect.value;
+        const ancienneValeur = eleveSelect.value;
+        eleveSelect.innerHTML = '';
+        toutesLesOptionsEleves.forEach(option => {
+            if (!option.value || !classeId || option.dataset.classeId === classeId) {
+                eleveSelect.appendChild(option.cloneNode(true));
+            }
+        });
+        const selectionExiste = Array.from(eleveSelect.options).some(
+            option => option.value === ancienneValeur
+        );
+        eleveSelect.value = selectionExiste ? ancienneValeur : '';
+        if (!selectionExiste && ancienneValeur) {
+            eleveInfoDiv.style.display = 'none';
+        }
+    }
+
+    if (classeSelect) {
+        classeSelect.addEventListener('change', filtrerElevesParClasse);
+    }
+    filtrerElevesParClasse();
+
+    function calculerDateExpiration() {
+        if (!periodiciteSelect || !dateDebutInput || !dateExpirationInput) return;
+        if (!periodiciteSelect.value || !dateDebutInput.value) return;
+
+        const expiration = new Date(`${dateDebutInput.value}T12:00:00`);
+        if (Number.isNaN(expiration.getTime())) return;
+
+        switch (periodiciteSelect.value) {
+            case 'JOURNALIER':
+                expiration.setDate(expiration.getDate() + 1);
+                break;
+            case 'HEBDOMADAIRE':
+                expiration.setDate(expiration.getDate() + 7);
+                break;
+            case 'MENSUEL':
+                expiration.setMonth(expiration.getMonth() + 1);
+                break;
+            case 'TRIMESTRIEL':
+                expiration.setMonth(expiration.getMonth() + 3);
+                break;
+            case 'ANNUEL':
+                expiration.setFullYear(expiration.getFullYear() + 1);
+                break;
+            default:
+                return;
+        }
+
+        const annee = expiration.getFullYear();
+        const mois = String(expiration.getMonth() + 1).padStart(2, '0');
+        const jour = String(expiration.getDate()).padStart(2, '0');
+        dateExpirationInput.value = `${annee}-${mois}-${jour}`;
+    }
+
+    periodiciteSelect && periodiciteSelect.addEventListener('change', calculerDateExpiration);
+    dateDebutInput && dateDebutInput.addEventListener('change', calculerDateExpiration);
     
     if (eleveSelect) {
         // Charger les infos si un élève est déjà sélectionné (mode édition)
@@ -266,7 +355,7 @@ document.addEventListener('DOMContentLoaded', function() {
         infoNoPhoto.style.display = 'none';
         
         // Requête AJAX pour récupérer les informations
-        fetch(`/bus/cantine/api/eleve/${eleveId}/`)
+        fetch(eleveInfoUrlModele.replace('/0/', `/${eleveId}/`))
             .then(response => {
                 if (!response.ok) {
                     throw new Error('Erreur lors du chargement des informations');

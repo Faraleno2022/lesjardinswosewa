@@ -130,12 +130,16 @@ class OptimizedQueryMixin:
         """Queryset optimisé pour les paiements"""
         qs = (
             Paiement.objects
-            .select_related('eleve', 'eleve__classe', 'eleve__classe__ecole', 'type_paiement', 'mode_paiement')
+            .select_related(
+                'eleve', 'eleve__classe', 'eleve__classe__ecole',
+                'classe_encaissement', 'ecole_encaissement',
+                'type_paiement', 'mode_paiement',
+            )
             .prefetch_related('remises')
         )
         
         if school:
-            qs = qs.filter(eleve__classe__ecole=school)
+            qs = qs.pour_ecole(school)
             
         return qs
     

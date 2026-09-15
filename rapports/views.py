@@ -20,6 +20,9 @@ from .utils import collecter_donnees_periode, generer_pdf_periode, _draw_header_
 from eleves.models import Eleve, Ecole
 from eleves.utils_annee import get_debut_periode_reporting
 from paiements.models import Paiement, PaiementRemise, EcheancierPaiement, TypePaiement
+from paiements.calculs import filtre_types_scolarite
+from paiements.reporting import repartir_encaissements
+from paiements.services import calculer_situations_echeanciers
 from bus.models import AbonnementBus
 from depenses.models import Depense
 from salaires.models import Enseignant, EtatSalaire
@@ -624,17 +627,9 @@ def collecter_donnees_journalieres(date_rapport, user=None):
         # Paiements du jour - utiliser une approche plus flexible
         paiements_jour = Paiement.objects.filter(
             eleve__classe__ecole=ecole,
-            date_paiement=date_rapport
-        ).exclude(statut='ANNULE')  # Exclure seulement les annulés
-        
-        # Si pas de paiements ce jour, essayer avec les paiements récents (30 derniers jours)
-        if not paiements_jour.exists():
-            date_limite = date_rapport - timedelta(days=30)
-            paiements_jour = Paiement.objects.filter(
-                eleve__classe__ecole=ecole,
-                date_paiement__gte=date_limite,
-                statut='VALIDE'
-            )
+            date_paiement=date_rapport,
+            statut='VALIDE',
+        )
         
         donnees_ecole['paiements']['nombre'] = paiements_jour.count()
         donnees_ecole['paiements']['montant_total'] = paiements_jour.aggregate(
@@ -644,6 +639,8 @@ def collecter_donnees_journalieres(date_rapport, user=None):
         # Calculer les remises appliquées
         remises_appliquees = PaiementRemise.objects.filter(
             paiement__in=paiements_jour
+        ).filter(
+            filtre_types_scolarite('paiement__type_paiement')
         ).aggregate(
             total_remises=Sum('montant_remise')
         )['total_remises'] or Decimal('0')
@@ -656,72 +653,25 @@ def collecter_donnees_journalieres(date_rapport, user=None):
         donnees_ecole['paiements']['total_remises'] = remises_appliquees
         donnees_ecole['paiements']['montant_net'] = donnees_ecole['paiements']['montant_total']
         
-        # Séparation frais d'inscription et scolarité (alignée avec rapports/utils.collecter_donnees_periode)
-        frais_inscription = Decimal('0')
-        reinscription = Decimal('0')
-        scolarite = Decimal('0')
-        non_categorises = Decimal('0')
-
-        for p in paiements_jour.select_related('type_paiement'):
-            montant = p.montant or Decimal('0')
-            nom = (getattr(getattr(p, 'type_paiement', None), 'nom', '') or '').lower()
-
-            # "réinscription" contient la sous-chaîne "inscription": on la teste en premier
-            has_reinscription = ('réinscription' in nom) or ('reinscription' in nom)
-            has_inscription = ('inscription' in nom) and not has_reinscription
-            has_scolarite = ('scolar' in nom) or ('tranche' in nom) or ('1ère tranche' in nom) or ('2ème tranche' in nom) or ('3ème tranche' in nom)
-
-            if has_reinscription and has_scolarite:
-                part_ins = min(Decimal('30000'), montant)
-                part_sco = montant - part_ins
-                reinscription += part_ins
-                scolarite += part_sco
-            elif has_reinscription:
-                reinscription += montant
-            elif has_inscription and has_scolarite:
-                # Paiement combiné: 30 000 GNF pour inscription, reste en scolarité
-                part_ins = min(Decimal('30000'), montant)
-                part_sco = montant - part_ins
-                frais_inscription += part_ins
-                scolarite += part_sco
-            elif has_inscription:
-                frais_inscription += montant
-            elif has_scolarite:
-                scolarite += montant
-            else:
-                non_categorises += montant
-
-        # Estimation/fallback: couvrir les frais d'inscription théoriques avec non catégorisés si besoin
-        nb_nouveaux_eleves = donnees_ecole['nouveaux_eleves']
-        theorique_insc = Decimal('30000') * nb_nouveaux_eleves
-        if frais_inscription == 0 and nb_nouveaux_eleves > 0 and non_categorises > 0:
-            a_affecter = min(theorique_insc, non_categorises)
-            frais_inscription += a_affecter
-            non_categorises -= a_affecter
-
-        # Plafond: ne jamais dépasser 30 000 GNF par nouvel élève
-        if nb_nouveaux_eleves > 0 and frais_inscription > theorique_insc:
-            excedent = frais_inscription - theorique_insc
-            frais_inscription = theorique_insc
-            scolarite += excedent
-
-        # Cohérence: si 0 nouveaux élèves, ne pas compter des frais d'inscription → reclasser comme scolarité
-        if nb_nouveaux_eleves == 0 and frais_inscription > 0:
-            scolarite += frais_inscription
-            frais_inscription = Decimal('0')
-
-        # Ajouter le reste non catégorisé à la scolarité par défaut
-        scolarite += non_categorises
+        repartition = repartir_encaissements(
+            paiements_jour.select_related('type_paiement')
+        )
+        frais_inscription = repartition['frais_inscription']
+        reinscription = repartition['reinscription']
+        scolarite = repartition['scolarite']
 
         # Assigner les valeurs finales
         donnees_ecole['paiements']['frais_inscription'] = frais_inscription
         donnees_ecole['paiements']['reinscription'] = reinscription
         donnees_ecole['paiements']['scolarite'] = scolarite
+        donnees_ecole['paiements']['autres'] = repartition['autres']
 
         # Totaux des remises par catégorie (motif du geste commercial sur ce paiement)
         motif_labels = dict(PaiementRemise.MOTIF_CHOICES)
         remises_categorie_qs = PaiementRemise.objects.filter(
             paiement__in=paiements_jour
+        ).filter(
+            filtre_types_scolarite('paiement__type_paiement')
         ).values('motif').annotate(total=Sum('montant_remise')).order_by('-total')
         donnees_ecole['remises_par_categorie'] = [
             {
@@ -745,8 +695,8 @@ def collecter_donnees_journalieres(date_rapport, user=None):
         ).values_list('id', flat=True))
         eleves_concernes_ids |= nouveaux_ids
 
-        # Déterminer l'année scolaire (pivot: août)
-        if date_rapport.month >= 8:
+        # L'année scolaire commence en septembre.
+        if date_rapport.month >= 9:
             annee_scolaire = f"{date_rapport.year}-{date_rapport.year + 1}"
         else:
             annee_scolaire = f"{date_rapport.year - 1}-{date_rapport.year}"
@@ -756,6 +706,8 @@ def collecter_donnees_journalieres(date_rapport, user=None):
         try:
             remises_group = PaiementRemise.objects.filter(
                 paiement__in=paiements_jour
+            ).filter(
+                filtre_types_scolarite('paiement__type_paiement')
             ).values(
                 'paiement__eleve__classe_id'
             ).annotate(
@@ -770,31 +722,29 @@ def collecter_donnees_journalieres(date_rapport, user=None):
         if eleves_concernes_ids:
             # Répartition par classe: accumuler par classe
             par_classe = {}
-            qs_ech = EcheancierPaiement.objects.filter(
-                eleve_id__in=list(eleves_concernes_ids),
-                annee_scolaire=annee_scolaire
-            ).values(
-                'eleve__classe_id', 'eleve__classe__nom',
-                'frais_inscription_du', 'tranche_1_due', 'tranche_2_due', 'tranche_3_due',
-                'frais_inscription_paye', 'tranche_1_payee', 'tranche_2_payee', 'tranche_3_payee'
+            echeanciers = list(
+                EcheancierPaiement.objects.filter(
+                    eleve_id__in=list(eleves_concernes_ids),
+                    annee_scolaire=annee_scolaire,
+                ).select_related('eleve', 'eleve__classe')
             )
-            for row in qs_ech:
-                classe_id = row.get('eleve__classe_id')
-                classe_nom = row.get('eleve__classe__nom') or 'Classe'
-                du = (row.get('frais_inscription_du') or Decimal('0')) \
-                     + (row.get('tranche_1_due') or Decimal('0')) \
-                     + (row.get('tranche_2_due') or Decimal('0')) \
-                     + (row.get('tranche_3_due') or Decimal('0'))
-                paye = (row.get('frais_inscription_paye') or Decimal('0')) \
-                       + (row.get('tranche_1_payee') or Decimal('0')) \
-                       + (row.get('tranche_2_payee') or Decimal('0')) \
-                       + (row.get('tranche_3_payee') or Decimal('0'))
-                solde = du - paye
+            # Même service que les tableaux de bord : une remise reste bornée
+            # aux tranches qu'elle vise, elle n'est jamais déduite en bloc.
+            situations = calculer_situations_echeanciers(
+                echeanciers, date_reference=date_rapport, date_limite=date_rapport
+            )
+            for echeancier in echeanciers:
+                situation = situations[echeancier.pk]
+                classe = getattr(echeancier.eleve, 'classe', None)
+                classe_id = classe.id if classe else None
+                classe_nom = getattr(classe, 'nom', None) or 'Classe'
+                du = situation['total_du']
+                paye = situation['encaisse']
+                solde = situation['reste']
 
                 # Totaux généraux
                 total_du_concernes += du
-                if solde > 0:
-                    reste_a_payer += solde
+                reste_a_payer += solde
 
                 # Accumulation par classe
                 if classe_id not in par_classe:
@@ -810,8 +760,7 @@ def collecter_donnees_journalieres(date_rapport, user=None):
                 pc['effectif'] += 1
                 pc['total_du'] += du
                 pc['total_paye'] += paye
-                if solde > 0:
-                    pc['reste'] += solde
+                pc['reste'] += solde
                 # Ajouter remises pour cette classe (agrégées sur les paiements du jour)
                 try:
                     pc['remises'] = remises_par_classe_map.get(classe_id, pc['remises'])

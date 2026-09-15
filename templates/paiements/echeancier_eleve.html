@@ -318,7 +318,7 @@
         <h5><i class="fas fa-calendar-check me-2"></i>Détail des échéances</h5>
         
         <!-- Frais d'admission : inscription ou réinscription -->
-        <div class="tranche-item {% if echeancier.frais_inscription_paye >= echeancier.frais_inscription_du %}paye{% elif echeancier.frais_inscription_paye > 0 %}partiel{% elif echeancier.date_echeance_inscription < today %}en-retard{% else %}impaye{% endif %}">
+        <div class="tranche-item {% if situation_paiement.restes_par_poste.inscription <= 0 %}paye{% elif situation_paiement.cash_allocation.inscription > 0 or situation_paiement.discount_allocation.inscription > 0 %}partiel{% elif echeancier.date_echeance_inscription < today %}en-retard{% else %}impaye{% endif %}">
             <div class="row align-items-center">
                 <div class="col-md-4">
                     <h6 class="mb-1">
@@ -331,13 +331,16 @@
                     <br><small class="text-muted">Montant dû</small>
                 </div>
                 <div class="col-md-3 text-center">
-                    <strong class="text-success">{{ echeancier.frais_inscription_paye|floatformat:0|intcomma }} GNF</strong>
+                    <strong class="text-success">{{ situation_paiement.cash_allocation.inscription|floatformat:0|intcomma }} GNF</strong>
                     <br><small class="text-muted">Payé</small>
+                    {% if situation_paiement.discount_allocation.inscription %}
+                    <br><small class="text-muted">Remise : {{ situation_paiement.discount_allocation.inscription|floatformat:0|intcomma }} GNF</small>
+                    {% endif %}
                 </div>
                 <div class="col-md-2 text-end">
-                    {% if echeancier.frais_inscription_paye >= echeancier.frais_inscription_du %}
+                    {% if situation_paiement.restes_par_poste.inscription <= 0 %}
                         <span class="badge bg-success"><i class="fas fa-check"></i> Payé</span>
-                    {% elif echeancier.frais_inscription_paye > 0 %}
+                    {% elif situation_paiement.cash_allocation.inscription > 0 or situation_paiement.discount_allocation.inscription > 0 %}
                         <span class="badge bg-warning"><i class="fas fa-clock"></i> Partiel</span>
                     {% elif echeancier.date_echeance_inscription < today %}
                         <span class="badge bg-danger"><i class="fas fa-exclamation"></i> Retard</span>
@@ -349,7 +352,7 @@
         </div>
 
         <!-- Tranche 1 -->
-        <div class="tranche-item {% if echeancier.tranche_1_payee >= echeancier.tranche_1_due %}paye{% elif echeancier.tranche_1_payee > 0 %}partiel{% elif echeancier.date_echeance_tranche_1 < today %}en-retard{% else %}impaye{% endif %}">
+        <div class="tranche-item {% if situation_paiement.restes_par_poste.tranche_1 <= 0 %}paye{% elif situation_paiement.cash_allocation.tranche_1 > 0 or situation_paiement.discount_allocation.tranche_1 > 0 %}partiel{% elif echeancier.date_echeance_tranche_1 < today %}en-retard{% else %}impaye{% endif %}">
             <div class="row align-items-center">
                 <div class="col-md-4">
                     <h6 class="mb-1">
@@ -362,13 +365,16 @@
                     <br><small class="text-muted">Montant dû</small>
                 </div>
                 <div class="col-md-3 text-center">
-                    <strong class="text-success">{{ echeancier.tranche_1_payee|floatformat:0|intcomma }} GNF</strong>
+                    <strong class="text-success">{{ situation_paiement.cash_allocation.tranche_1|floatformat:0|intcomma }} GNF</strong>
                     <br><small class="text-muted">Payé</small>
+                    {% if situation_paiement.discount_allocation.tranche_1 %}
+                    <br><small class="text-muted">Remise : {{ situation_paiement.discount_allocation.tranche_1|floatformat:0|intcomma }} GNF</small>
+                    {% endif %}
                 </div>
                 <div class="col-md-2 text-end">
-                    {% if echeancier.tranche_1_payee >= echeancier.tranche_1_due %}
+                    {% if situation_paiement.restes_par_poste.tranche_1 <= 0 %}
                         <span class="badge bg-success"><i class="fas fa-check"></i> Payé</span>
-                    {% elif echeancier.tranche_1_payee > 0 %}
+                    {% elif situation_paiement.cash_allocation.tranche_1 > 0 or situation_paiement.discount_allocation.tranche_1 > 0 %}
                         <span class="badge bg-warning"><i class="fas fa-clock"></i> Partiel</span>
                     {% elif echeancier.date_echeance_tranche_1 < today %}
                         <span class="badge bg-danger"><i class="fas fa-exclamation"></i> Retard</span>
@@ -380,7 +386,7 @@
         </div>
 
         <!-- Tranche 2 -->
-        <div class="tranche-item {% if echeancier.tranche_2_payee >= echeancier.tranche_2_due %}paye{% elif echeancier.tranche_2_payee > 0 %}partiel{% elif echeancier.date_echeance_tranche_2 < today %}en-retard{% else %}impaye{% endif %}">
+        <div class="tranche-item {% if situation_paiement.restes_par_poste.tranche_2 <= 0 %}paye{% elif situation_paiement.cash_allocation.tranche_2 > 0 or situation_paiement.discount_allocation.tranche_2 > 0 %}partiel{% elif echeancier.date_echeance_tranche_2 < today %}en-retard{% else %}impaye{% endif %}">
             <div class="row align-items-center">
                 <div class="col-md-4">
                     <h6 class="mb-1">
@@ -393,13 +399,16 @@
                     <br><small class="text-muted">Montant dû</small>
                 </div>
                 <div class="col-md-3 text-center">
-                    <strong class="text-success">{{ echeancier.tranche_2_payee|floatformat:0|intcomma }} GNF</strong>
+                    <strong class="text-success">{{ situation_paiement.cash_allocation.tranche_2|floatformat:0|intcomma }} GNF</strong>
                     <br><small class="text-muted">Payé</small>
+                    {% if situation_paiement.discount_allocation.tranche_2 %}
+                    <br><small class="text-muted">Remise : {{ situation_paiement.discount_allocation.tranche_2|floatformat:0|intcomma }} GNF</small>
+                    {% endif %}
                 </div>
                 <div class="col-md-2 text-end">
-                    {% if echeancier.tranche_2_payee >= echeancier.tranche_2_due %}
+                    {% if situation_paiement.restes_par_poste.tranche_2 <= 0 %}
                         <span class="badge bg-success"><i class="fas fa-check"></i> Payé</span>
-                    {% elif echeancier.tranche_2_payee > 0 %}
+                    {% elif situation_paiement.cash_allocation.tranche_2 > 0 or situation_paiement.discount_allocation.tranche_2 > 0 %}
                         <span class="badge bg-warning"><i class="fas fa-clock"></i> Partiel</span>
                     {% elif echeancier.date_echeance_tranche_2 < today %}
                         <span class="badge bg-danger"><i class="fas fa-exclamation"></i> Retard</span>
@@ -411,7 +420,7 @@
         </div>
 
         <!-- Tranche 3 -->
-        <div class="tranche-item {% if echeancier.tranche_3_payee >= echeancier.tranche_3_due %}paye{% elif echeancier.tranche_3_payee > 0 %}partiel{% elif echeancier.date_echeance_tranche_3 < today %}en-retard{% else %}impaye{% endif %}">
+        <div class="tranche-item {% if situation_paiement.restes_par_poste.tranche_3 <= 0 %}paye{% elif situation_paiement.cash_allocation.tranche_3 > 0 or situation_paiement.discount_allocation.tranche_3 > 0 %}partiel{% elif echeancier.date_echeance_tranche_3 < today %}en-retard{% else %}impaye{% endif %}">
             <div class="row align-items-center">
                 <div class="col-md-4">
                     <h6 class="mb-1">
@@ -424,13 +433,16 @@
                     <br><small class="text-muted">Montant dû</small>
                 </div>
                 <div class="col-md-3 text-center">
-                    <strong class="text-success">{{ echeancier.tranche_3_payee|floatformat:0|intcomma }} GNF</strong>
+                    <strong class="text-success">{{ situation_paiement.cash_allocation.tranche_3|floatformat:0|intcomma }} GNF</strong>
                     <br><small class="text-muted">Payé</small>
+                    {% if situation_paiement.discount_allocation.tranche_3 %}
+                    <br><small class="text-muted">Remise : {{ situation_paiement.discount_allocation.tranche_3|floatformat:0|intcomma }} GNF</small>
+                    {% endif %}
                 </div>
                 <div class="col-md-2 text-end">
-                    {% if echeancier.tranche_3_payee >= echeancier.tranche_3_due %}
+                    {% if situation_paiement.restes_par_poste.tranche_3 <= 0 %}
                         <span class="badge bg-success"><i class="fas fa-check"></i> Payé</span>
-                    {% elif echeancier.tranche_3_payee > 0 %}
+                    {% elif situation_paiement.cash_allocation.tranche_3 > 0 or situation_paiement.discount_allocation.tranche_3 > 0 %}
                         <span class="badge bg-warning"><i class="fas fa-clock"></i> Partiel</span>
                     {% elif echeancier.date_echeance_tranche_3 < today %}
                         <span class="badge bg-danger"><i class="fas fa-exclamation"></i> Retard</span>

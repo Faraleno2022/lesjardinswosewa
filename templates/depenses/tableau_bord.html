@@ -81,7 +81,7 @@
     .depenses-card:hover {
         transform: translateY(-5px);
         box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-        border-color: #007bff;
+        border-color: var(--school-primary);
     }
 
     .depenses-card-icon {
@@ -103,25 +103,25 @@
         margin: 0;
     }
 
-    .depenses-card.primary { border-left: 5px solid #007bff; }
-    .depenses-card.primary:hover { background: linear-gradient(135deg, #e7f1ff 0%, #ffffff 100%); }
-    .depenses-card.primary .depenses-card-icon { color: #007bff; }
+    .depenses-card.primary { border-left: 5px solid var(--school-primary); }
+    .depenses-card.primary:hover { background: linear-gradient(135deg, var(--school-primary-light) 0%, #ffffff 100%); }
+    .depenses-card.primary .depenses-card-icon { color: var(--school-primary); }
 
-    .depenses-card.success { border-left: 5px solid #28a745; }
-    .depenses-card.success:hover { background: linear-gradient(135deg, #e3eaf2 0%, #ffffff 100%); }
-    .depenses-card.success .depenses-card-icon { color: #28a745; }
+    .depenses-card.success { border-left: 5px solid var(--school-success); }
+    .depenses-card.success:hover { background: linear-gradient(135deg, var(--school-success-light) 0%, #ffffff 100%); }
+    .depenses-card.success .depenses-card-icon { color: var(--school-success); }
 
-    .depenses-card.info { border-left: 5px solid #17a2b8; }
-    .depenses-card.info:hover { background: linear-gradient(135deg, #e8edf3 0%, #ffffff 100%); }
-    .depenses-card.info .depenses-card-icon { color: #17a2b8; }
+    .depenses-card.info { border-left: 5px solid var(--school-info); }
+    .depenses-card.info:hover { background: linear-gradient(135deg, var(--school-info-light) 0%, #ffffff 100%); }
+    .depenses-card.info .depenses-card-icon { color: var(--school-info); }
 
-    .depenses-card.warning { border-left: 5px solid #ffc107; }
-    .depenses-card.warning:hover { background: linear-gradient(135deg, #fff8e1 0%, #ffffff 100%); }
-    .depenses-card.warning .depenses-card-icon { color: #e6a700; }
+    .depenses-card.warning { border-left: 5px solid var(--school-warning); }
+    .depenses-card.warning:hover { background: linear-gradient(135deg, var(--school-warning-light) 0%, #ffffff 100%); }
+    .depenses-card.warning .depenses-card-icon { color: var(--school-warning); }
 
-    .depenses-card.danger { border-left: 5px solid #003d82; }
-    .depenses-card.danger:hover { background: linear-gradient(135deg, #e6eef7 0%, #ffffff 100%); }
-    .depenses-card.danger .depenses-card-icon { color: #003d82; }
+    .depenses-card.danger { border-left: 5px solid var(--school-danger); }
+    .depenses-card.danger:hover { background: linear-gradient(135deg, var(--school-danger-light) 0%, #ffffff 100%); }
+    .depenses-card.danger .depenses-card-icon { color: var(--school-danger); }
 
     .depenses-modules-title {
         color: #2c3e50;
@@ -224,10 +224,10 @@
             </a>
         </div>
         <div class="col-md-6 col-lg-3">
-            <a href="{% url 'depenses:salaires_dashboard' %}" class="depenses-card danger">
+            <a href="{% url 'depenses:personnel_dashboard' %}" class="depenses-card danger">
                 <i class="fas fa-money-check-alt depenses-card-icon"></i>
-                <h3 class="depenses-card-title">Salaires</h3>
-                <p class="depenses-card-description">Tableau de bord du recouvrement lié aux salaires</p>
+                <h3 class="depenses-card-title">Salaires du personnel</h3>
+                <p class="depenses-card-description">Montants mensuels par personne : maternelle et primaire, collège, direction</p>
             </a>
         </div>
     </div>

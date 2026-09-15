@@ -1,13 +1,14 @@
 {
   "_README": "Copiez ce fichier en 'sync_config.json' (a cote de MySchoolGN.exe) et renseignez les valeurs pour activer la synchronisation automatique avec le serveur EN LIGNE. Redemarrez ensuite l'application.",
-
   "MYSCHOOL_SYNC_SERVER_URL": "https://votre-serveur-en-ligne.exemple",
   "MYSCHOOL_SYNC_ECOLE_ID": "1",
   "MYSCHOOL_SYNC_DEVICE_ID": "a-obtenir-via-enregistrement",
   "MYSCHOOL_SYNC_TOKEN": "a-obtenir-via-enregistrement",
-
-  "MYSCHOOL_SYNC_INTERVAL": "60",
-
+  "_CADENCE": "Un ajout fait sur ce poste part immediatement, sans attendre : ces deux valeurs ne reglent que la detection de ce qui vient des AUTRES postes. INTERVAL = verification au repos (plafonnee a 15 s), FAST_INTERVAL = cadence des que des donnees circulent.",
+  "MYSCHOOL_SYNC_INTERVAL": "10",
+  "MYSCHOOL_SYNC_FAST_INTERVAL": "2",
+  "_MISES_A_JOUR": "Le poste verifie tout seul si une nouvelle version de MySchoolGN est publiee, la telecharge en tache de fond et l'installe au demarrage suivant. Valeur en secondes ; 21600 = toutes les 6 heures.",
+  "MYSCHOOL_UPDATE_INTERVAL": "21600",
   "_AIDE_ENREGISTREMENT": "Pour obtenir DEVICE_ID et TOKEN, enregistrez le poste aupres du serveur en ligne (une fois, avec un jeton admin) :",
   "_COMMANDE": "MySchoolGN.exe (ou python manage.py) register_sync_device --server-url https://votre-serveur --admin-token JETON_ADMIN --ecole-id 1 --nom \"Poste Secretariat\""
 }

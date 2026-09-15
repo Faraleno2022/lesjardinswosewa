@@ -17,6 +17,12 @@
         <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#filtresModal">
             <i class="fas fa-filter me-1"></i>Filtres
         </button>
+        <a href="{% url 'paiements:rapport_comptable' %}" class="btn btn-outline-primary">
+            <i class="fas fa-book-open me-1"></i>Rapport comptable
+        </a>
+        <a href="{% url 'paiements:garde_prolongee_report' %}" class="btn btn-outline-primary">
+            <i class="fas fa-clock me-1"></i>Garde prolongée
+        </a>
         <div class="btn-group">
             <button type="button" class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="fas fa-download me-1"></i>Exporter
@@ -43,11 +49,20 @@
                         <i class="fas fa-file-excel me-2"></i>Excel (récap par classe)
                     </a>
                 </li>
-                <li><a class="dropdown-item" href="?export=pdf"><i class="fas fa-file-pdf me-2"></i>PDF</a></li>
+                <li>
+                    <a class="dropdown-item" href="#" onclick="exportFiltresPdf(); return false;">
+                        <i class="fas fa-file-pdf me-2"></i>PDF (liste affichée)
+                    </a>
+                </li>
                 <li><hr class="dropdown-divider"></li>
                 <li>
                     <a class="dropdown-item" href="#" onclick="exportTranchesParClassePdf(); return false;">
                         <i class="fas fa-file-pdf me-2"></i>Tranches par classe (PDF)
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item" href="#" onclick="exportTranchesParClasseExcel(); return false;">
+                        <i class="fas fa-file-excel me-2"></i>Tranches par classe (Excel)
                     </a>
                 </li>
                 <li><hr class="dropdown-divider"></li>
@@ -64,13 +79,13 @@
             <div class="modal-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title"><i class="fas fa-book me-2"></i>Rapport comptable complet</h5>
+                        <h5 class="modal-title"><i class="fas fa-book me-2"></i>Rapport comptable des encaissements</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
                     </div>
                     <div class="modal-body">
                         <p class="text-muted small mb-3">
-                            Paiements, retards et relances par classe, avec statistiques de
-                            rapprochement par mode (Espèces, Chèque, Virement…).
+                            Encaissements, remises et affectation réelle entre inscription,
+                            réinscription et tranches, avec contrôle des références par mode.
                         </p>
                         <div class="mb-3">
                             <label class="form-label">Classe (vide = tout l'établissement)</label>
@@ -92,12 +107,15 @@
                             </div>
                         </div>
                     </div>
-                    <div class="modal-footer">
+                    <div class="modal-footer flex-wrap">
                         <button type="button" class="btn btn-primary" onclick="ouvrirRapportComptable('web')">
-                            <i class="fas fa-eye me-1"></i>Voir à l'écran
+                            <i class="fas fa-chart-bar me-1"></i>Rapport détaillé
+                        </button>
+                        <button type="button" class="btn btn-outline-danger" onclick="ouvrirRapportComptable('preview')">
+                            <i class="fas fa-eye me-1"></i>Aperçu PDF
                         </button>
                         <button type="button" class="btn btn-danger" onclick="ouvrirRapportComptable('pdf')">
-                            <i class="fas fa-file-pdf me-1"></i>PDF
+                            <i class="fas fa-download me-1"></i>Télécharger PDF
                         </button>
                         <button type="button" class="btn btn-success" onclick="ouvrirRapportComptable('excel')">
                             <i class="fas fa-file-excel me-1"></i>Excel
@@ -468,6 +486,22 @@ function exportTranchesParClassePdf() {
     window.open(out.toString(), '_blank');
 }
 
+// Ouvre le même état au format Excel avec exactement les mêmes filtres
+function exportTranchesParClasseExcel() {
+    const u = new URL(window.location.href);
+    const base = '{% url "paiements:export_tranches_par_classe_excel" %}';
+    const out = new URL(base, window.location.origin);
+    const annee = u.searchParams.get('annee_scolaire');
+    const classe = u.searchParams.get('classe') || u.searchParams.get('classe_id');
+    const ecole = u.searchParams.get('ecole');
+
+    if (annee) out.searchParams.set('annee_scolaire', annee);
+    if (classe) out.searchParams.set('classe', classe);
+    if (ecole) out.searchParams.set('ecole', ecole);
+
+    window.open(out.toString(), '_blank');
+}
+
 // Export des résultats filtrés (reprend tous les filtres actifs du formulaire)
 function _urlExportFiltres(base) {
     const out = new URL(base, window.location.origin);
@@ -492,9 +526,11 @@ function exportFiltresPdf() {
 function ouvrirRapportComptable(format) {
     const base = format === 'web'
         ? '{% url "paiements:rapport_comptable" %}'
-        : (format === 'pdf'
-            ? '{% url "paiements:export_comptabilite_pdf" %}'
-            : '{% url "paiements:export_comptabilite_excel" %}');
+        : (format === 'preview'
+            ? '{% url "paiements:apercu_comptabilite_pdf" %}'
+            : (format === 'pdf'
+                ? '{% url "paiements:export_comptabilite_pdf" %}'
+                : '{% url "paiements:export_comptabilite_excel" %}'));
     const out = new URL(base, window.location.origin);
     const classe = document.getElementById('rcClasse').value;
     const du = document.getElementById('rcDu').value;

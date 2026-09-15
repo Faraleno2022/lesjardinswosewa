@@ -46,6 +46,9 @@ class FournituresScolairesTests(TestCase):
             },
         )
         self.client.force_login(self.user)
+        session = self.client.session
+        session["phone_verified"] = True
+        session.save()
         self.produit = ProduitFourniture.objects.create(
             ecole=self.ecole,
             code_produit="CAH-100",

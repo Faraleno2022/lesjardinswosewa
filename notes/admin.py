@@ -1,6 +1,7 @@
 from django.contrib import admin
 from .models import NoteSuivi, Devoir, RemiseDevoir, CreneauEmploiDuTemps
 from .models import ClasseNote, MatiereNote, Evaluation, NoteEleve, NoteMensuelle, CompositionNote, AppreciationMaternelle, ThemeBulletin, ActiviteJournaliere, PieceJointeActivite
+from .forms import ThemeBulletinForm
 
 @admin.register(ClasseNote)
 class ClasseNoteAdmin(admin.ModelAdmin):
@@ -149,6 +150,7 @@ class AppreciationMaternelleAdmin(admin.ModelAdmin):
 
 @admin.register(ThemeBulletin)
 class ThemeBulletinAdmin(admin.ModelAdmin):
+    form = ThemeBulletinForm
     list_display = ['nom', 'ecole', 'actif', 'par_defaut', 'date_creation']
     list_filter = ['actif', 'par_defaut', 'ecole']
     search_fields = ['nom']

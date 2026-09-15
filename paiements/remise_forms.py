@@ -51,6 +51,16 @@ class PaiementRemiseForm(forms.Form):
         label="Tranches concernées",
     )
 
+    # Une remise décidée après la saisie du montant brut doit pouvoir ramener
+    # le reçu au net : sinon l'encaissement et la remise couvrent deux fois la
+    # même dette et le contrôle anti trop-perçu refuse l'opération.
+    reduire_paiement = forms.BooleanField(
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        label="Déduire la remise du montant du reçu",
+    )
+
     # Base sur laquelle la remise est calculée pour les tranches cochées.
     base_calcul = forms.ChoiceField(
         choices=PaiementRemise.BASE_CALCUL_CHOICES,
@@ -79,6 +89,11 @@ class PaiementRemiseForm(forms.Form):
             ).exclude(motif='').first()
             if deja_applique:
                 self.fields['motif'].initial = deja_applique.motif
+            # Rouvrir l'écran doit repartir de la décision précédente, sinon
+            # décocher par inadvertance restaurerait le montant brut du reçu.
+            self.fields['reduire_paiement'].initial = PaiementRemise.objects.filter(
+                paiement=paiement, deduite_du_paiement=True
+            ).exists()
             deja_avec_tranches = PaiementRemise.objects.filter(
                 paiement=paiement
             ).exclude(tranches_concernees='').first()

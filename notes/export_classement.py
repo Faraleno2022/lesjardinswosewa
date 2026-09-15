@@ -1,3 +1,4 @@
+from .classes_utils import trouver_classe_eleve
 """
 Module pour exporter les classements par classe (Excel et PDF)
 """
@@ -20,6 +21,7 @@ from reportlab.pdfbase import pdfmetrics
 from .models import ClasseNote, MatiereNote, NoteMensuelle, CompositionNote
 from eleves.models import Eleve, Classe as ClasseEleve
 from .calculs_moyennes import calculer_moyenne_generale_eleve, calculer_classement_classe, detecter_niveau_scolaire
+from ecole_moderne.branding import get_pdf_palette
 
 
 def formater_rang(rang, sexe=None):
@@ -97,68 +99,8 @@ def exporter_classement_classe(request):
     # Récupérer la classe élève correspondante avec mapping spécial (même logique que les autres vues)
     try:
         # Mapping spécial pour les classes avec noms différents
-        mapping_classes = {
-            61: 56,  # ClasseNote '12ème Année' -> ClasseEleve '12ÈME ANNÉE'
-            59: 8,   # ClasseNote '11ème Série littéraire' -> ClasseEleve '11ème série littéraire'
-        }
         
-        if classe_note.id in mapping_classes:
-            classe_eleve = ClasseEleve.objects.filter(
-                id=mapping_classes[classe_note.id]
-            ).first()
-        else:
-            # Essai 1: Correspondance exacte
-            classe_eleve = ClasseEleve.objects.filter(
-                nom=classe_note.nom,
-                annee_scolaire=classe_note.annee_scolaire,
-                ecole=classe_note.ecole
-            ).first()
-            
-            # Essai 2: Correspondance insensible à la casse
-            if not classe_eleve:
-                classe_eleve = ClasseEleve.objects.filter(
-                    nom__iexact=classe_note.nom,
-                    annee_scolaire=classe_note.annee_scolaire,
-                    ecole=classe_note.ecole
-                ).first()
-            
-            # Essai 3: Recherche par mots-clés (ex: "12ème Série scientifique" → "12" + "SCIENCES")
-            if not classe_eleve:
-                # Extraire le niveau (ex: "12")
-                import re
-                match = re.search(r'(\d+)', classe_note.nom)
-                if match:
-                    niveau_num = match.group(1)
-                    
-                    # Chercher d'abord avec l'école
-                    classes_possibles = ClasseEleve.objects.filter(
-                        nom__icontains=niveau_num,
-                        annee_scolaire=classe_note.annee_scolaire,
-                        ecole=classe_note.ecole
-                    )
-                    
-                    # Si aucune classe trouvée avec l'école, chercher sans filtrer par école
-                    if not classes_possibles.exists():
-                        classes_possibles = ClasseEleve.objects.filter(
-                            nom__icontains=niveau_num,
-                            annee_scolaire=classe_note.annee_scolaire
-                        )
-                    
-                    classe_eleve = classes_possibles.first()
-                    
-                    # Si plusieurs classes trouvées, essayer d'affiner avec les mots-clés
-                    if classe_eleve and classes_possibles.count() > 1:
-                        # Chercher des mots-clés spécifiques dans le nom de la classe
-                        if 'scientifique' in classe_note.nom.lower() or 'science' in classe_note.nom.lower():
-                            for c in classes_possibles:
-                                if 'SCIENCE' in c.nom.upper():
-                                    classe_eleve = c
-                                    break
-                        elif 'littéraire' in classe_note.nom.lower() or 'lettre' in classe_note.nom.lower():
-                            for c in classes_possibles:
-                                if 'LETTRE' in c.nom.upper():
-                                    classe_eleve = c
-                                    break
+        classe_eleve = trouver_classe_eleve(classe_note)
         
         if not classe_eleve:
             return HttpResponse(
@@ -732,66 +674,8 @@ def exporter_classement_classe_pdf(request):
     # Récupérer la classe élève correspondante avec mapping spécial (même logique que les autres vues)
     try:
         # Mapping spécial pour les classes avec noms différents
-        mapping_classes = {
-            61: 56,  # ClasseNote '12ème Année' -> ClasseEleve '12ÈME ANNÉE'
-            59: 8,   # ClasseNote '11ème Série littéraire' -> ClasseEleve '11ème série littéraire'
-        }
         
-        if classe_note.id in mapping_classes:
-            classe_eleve = ClasseEleve.objects.filter(
-                id=mapping_classes[classe_note.id]
-            ).first()
-        else:
-            # Essai 1: Correspondance exacte
-            classe_eleve = ClasseEleve.objects.filter(
-                nom=classe_note.nom,
-                annee_scolaire=classe_note.annee_scolaire,
-                ecole=classe_note.ecole
-            ).first()
-            
-            # Essai 2: Correspondance insensible à la casse
-            if not classe_eleve:
-                classe_eleve = ClasseEleve.objects.filter(
-                    nom__iexact=classe_note.nom,
-                    annee_scolaire=classe_note.annee_scolaire,
-                    ecole=classe_note.ecole
-                ).first()
-            
-            # Essai 3: Recherche par mots-clés
-            if not classe_eleve:
-                import re
-                match = re.search(r'(\d+)', classe_note.nom)
-                if match:
-                    niveau_num = match.group(1)
-                    
-                    # Chercher d'abord avec l'école
-                    classes_possibles = ClasseEleve.objects.filter(
-                        nom__icontains=niveau_num,
-                        annee_scolaire=classe_note.annee_scolaire,
-                        ecole=classe_note.ecole
-                    )
-                    
-                    # Si aucune classe trouvée avec l'école, chercher sans filtrer par école
-                    if not classes_possibles.exists():
-                        classes_possibles = ClasseEleve.objects.filter(
-                            nom__icontains=niveau_num,
-                            annee_scolaire=classe_note.annee_scolaire
-                        )
-                    
-                    classe_eleve = classes_possibles.first()
-                    
-                    # Si plusieurs classes trouvées, essayer d'affiner avec les mots-clés
-                    if classe_eleve and classes_possibles.count() > 1:
-                        if 'scientifique' in classe_note.nom.lower() or 'science' in classe_note.nom.lower():
-                            for c in classes_possibles:
-                                if 'SCIENCE' in c.nom.upper():
-                                    classe_eleve = c
-                                    break
-                        elif 'littéraire' in classe_note.nom.lower() or 'lettre' in classe_note.nom.lower():
-                            for c in classes_possibles:
-                                if 'LETTRE' in c.nom.upper():
-                                    classe_eleve = c
-                                    break
+        classe_eleve = trouver_classe_eleve(classe_note)
         
         if not classe_eleve:
             return HttpResponse(
@@ -829,6 +713,7 @@ def exporter_classement_classe_pdf(request):
     c = canvas.Canvas(buffer, pagesize=A4)
     page_width, page_height = A4
     margin = 2*cm
+    palette = get_pdf_palette(classe_note.ecole, bulletin=True)
     
     # Filigrane
     _draw_watermark(c, classe_note.ecole, page_width, page_height)
@@ -879,7 +764,7 @@ def exporter_classement_classe_pdf(request):
         col_x.append(col_x[-1] + w)
 
     # Fond gris pour les en-têtes
-    c.setFillColorRGB(0.2, 0.3, 0.4)
+    c.setFillColor(palette['header'])
     c.rect(margin, y-15, sum(col_widths), 15, fill=1, stroke=0)
 
     # Texte des en-têtes (adapter selon le niveau)
@@ -911,7 +796,7 @@ def exporter_classement_classe_pdf(request):
             y -= 20
             
             # Redessiner les en-têtes
-            c.setFillColorRGB(0.2, 0.3, 0.4)
+            c.setFillColor(palette['header'])
             c.rect(margin, y-15, sum(col_widths), 15, fill=1, stroke=0)
             c.setFillColorRGB(1, 1, 1)
             c.setFont('Helvetica-Bold', 10)
@@ -924,7 +809,7 @@ def exporter_classement_classe_pdf(request):
         
         # Fond alterné pour faciliter la lecture
         if line_count % 2 == 0:
-            c.setFillColorRGB(0.95, 0.95, 0.95)
+            c.setFillColor(palette['table_light'])
             c.rect(margin, y - line_height + 2, sum(col_widths), line_height, fill=1, stroke=0)
             c.setFillColorRGB(0, 0, 0)
         

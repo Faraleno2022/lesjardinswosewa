@@ -1,9 +1,21 @@
+{% load branding %}
+{% school_document_branding ecole bulletin=True as palette %}
 <!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <title>Fiche de Report des Notes - {{ classe.nom }}</title>
     <style>
+        :root {
+            --brand-primary: {{ palette.primary }};
+            --brand-header: {{ palette.header }};
+            --brand-header-text: {{ palette.header_text }};
+            --brand-secondary: {{ palette.secondary }};
+            --brand-text: {{ palette.text }};
+            --brand-border: {{ palette.border }};
+            --brand-danger: {{ palette.danger }};
+            --brand-success: {{ palette.success }};
+        }
         @page {
             size: A4 landscape;
             margin: 0.5cm;
@@ -52,7 +64,7 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 8px;
-            border-bottom: 2px solid #1a5276;
+            border-bottom: 2px solid var(--brand-primary);
             padding-bottom: 5px;
         }
         
@@ -68,13 +80,13 @@
         
         .header-center h1 {
             font-size: 18px;
-            color: #1a5276;
+            color: var(--brand-primary);
             margin-bottom: 2px;
         }
         
         .header-center h2 {
             font-size: 13px;
-            color: #333;
+            color: var(--brand-text);
         }
         
         .header-right {
@@ -102,15 +114,15 @@
         }
         
         th, td {
-            border: 1px solid #333;
+            border: 1px solid var(--brand-border);
             padding: 3px 2px;
             text-align: center;
             font-size: 8.5px;
         }
         
         th {
-            background: #1a5276;
-            color: white;
+            background: var(--brand-header);
+            color: var(--brand-header-text);
             font-weight: bold;
             font-size: 8px;
             writing-mode: vertical-rl;
@@ -148,19 +160,19 @@
         th.col-matiere {
             min-width: 25px;
             max-width: 40px;
-            background: #2c3e50;
+            background: var(--brand-secondary);
         }
         
         th.col-moyenne {
             min-width: 30px;
-            background: #27ae60;
+            background: var(--brand-success);
             writing-mode: horizontal-tb;
             height: auto;
         }
         
         th.col-rang {
             min-width: 25px;
-            background: #e74c3c;
+            background: var(--brand-danger);
             writing-mode: horizontal-tb;
             height: auto;
         }
@@ -187,7 +199,7 @@
         }
         
         .signature-box {
-            border: 1px solid #333;
+            border: 1px solid var(--brand-border);
             padding: 4px;
             width: 180px;
             text-align: center;
@@ -208,7 +220,7 @@
         .legend {
             margin-top: 8px;
             font-size: 9px;
-            color: #333;
+            color: var(--brand-text);
         }
         
         .legend span {

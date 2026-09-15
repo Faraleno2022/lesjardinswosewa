@@ -11,6 +11,11 @@ urlpatterns = [
     path('enseignants/', views.liste_enseignants, name='liste_enseignants'),
     path('enseignants/export/csv/', views.export_enseignants_csv, name='export_enseignants_csv'),
     path('enseignants/export/pdf/', views.export_enseignants_pdf, name='export_enseignants_pdf'),
+    path(
+        'enseignants/classes-disponibles/',
+        views.classes_disponibles_enseignant,
+        name='classes_disponibles_enseignant',
+    ),
     path('enseignants/ajouter/', views.ajouter_enseignant, name='ajouter_enseignant'),
     path('enseignants/<int:enseignant_id>/', views.detail_enseignant, name='detail_enseignant'),
     path('enseignants/<int:enseignant_id>/modifier/', views.modifier_enseignant, name='modifier_enseignant'),
@@ -26,8 +31,27 @@ urlpatterns = [
     path('etats/export/pdf/', views.export_etats_salaire_pdf, name='export_etats_salaire_pdf'),
     path('etats/<int:etat_id>/fiche-paie/', views.fiche_paie_pdf, name='fiche_paie_pdf'),
     path('calculer/<int:periode_id>/', views.calculer_salaires, name='calculer_salaires'),
+    path(
+        'periodes/<int:periode_id>/heures-mensuelles/',
+        views.saisir_heures_mensuelles,
+        name='saisir_heures_mensuelles',
+    ),
+    path('etats/<int:etat_id>/ajuster/', views.ajuster_etat_salaire, name='ajuster_etat_salaire'),
     path('valider/<int:etat_id>/', views.valider_etat_salaire, name='valider_etat_salaire'),
     path('marquer-paye/<int:etat_id>/', views.marquer_paye, name='marquer_paye'),
+
+    # Avances sur salaire (annulation conservée pour audit, jamais de suppression)
+    path('avances/', views.avances_salaire, name='avances_salaire'),
+    path(
+        'avances/<int:avance_id>/modifier/',
+        views.modifier_avance_salaire,
+        name='modifier_avance_salaire',
+    ),
+    path(
+        'avances/<int:avance_id>/annuler/',
+        views.annuler_avance_salaire,
+        name='annuler_avance_salaire',
+    ),
     
     # Gestion des périodes
     path('periodes/', views.gestion_periodes, name='gestion_periodes'),

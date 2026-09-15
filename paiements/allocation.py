@@ -73,7 +73,15 @@ def allocate_amount_sequentially(amount, balances):
 
 def build_payment_allocation_history(echeancier, payments):
     """Reconstruit l'affectation de chaque paiement validé dans l'ordre."""
-    balances = due_balances(echeancier)
+    payments = list(payments)
+    discounts = []
+    for payment in payments:
+        manager = getattr(payment, 'remises', None)
+        if manager is not None:
+            discounts.extend(manager.all())
+    cash_total = sum((as_decimal(payment.montant) for payment in payments), Decimal('0'))
+    _, discount_allocation, _, _ = allocate_cash_and_discounts(echeancier, cash_total, discounts)
+    balances = {key: due - discount_allocation[key] for key, due in due_balances(echeancier).items()}
     allocations = {}
 
     for payment in payments:
@@ -83,3 +91,115 @@ def build_payment_allocation_history(echeancier, payments):
         allocations[payment.pk] = allocation
 
     return allocations, balances
+
+
+def _document_last_key(payment, discounts):
+    """Dernier poste explicitement couvert par le libellé du reçu remisé."""
+    if not discounts:
+        return None
+    from .calculs import normaliser_libelle
+
+    label = normaliser_libelle(
+        getattr(getattr(payment, "type_paiement", None), "nom", "")
+    )
+    compact = "".join(label.split())
+    if "annuel" in compact or "tranche3" in compact:
+        return "tranche_3"
+    if "tranche2" in compact:
+        return "tranche_2"
+    if "tranche1" in compact:
+        return "tranche_1"
+    return None
+
+
+def build_document_payment_allocation_history(echeancier, payments):
+    """Reconstruit l'affectation nette présentée sur les documents.
+
+    Cette fonction ne modifie ni le paiement ni l'échéancier. Le montant brut
+    encaissé reste disponible dans les totaux comptables, tandis que les
+    colonnes Inscription/T1/T2/T3 ne répètent jamais une remise.
+    """
+    balances = due_balances(echeancier)
+    allocations = {}
+
+    for payment in payments:
+        manager = getattr(payment, "remises", None)
+        discounts = list(manager.all()) if manager is not None else []
+        _, discounted_balances = allocate_discounts(
+            echeancier, discounts, balances=balances
+        )
+
+        last_key = _document_last_key(payment, discounts)
+        allocation_balances = dict(discounted_balances)
+        if last_key is not None:
+            last_index = ALLOCATION_KEYS.index(last_key)
+            for key in ALLOCATION_KEYS[last_index + 1:]:
+                # Le reçu n'annonçait pas ces tranches : une remise sur la
+                # dernière tranche citée ne doit pas y créer un faux paiement.
+                allocation_balances[key] = Decimal("0")
+
+        allocation, _, _ = allocate_amount_sequentially(
+            getattr(payment, "montant", 0), allocation_balances
+        )
+        balances = {
+            key: max(Decimal("0"), discounted_balances[key] - allocation[key])
+            for key in ALLOCATION_KEYS
+        }
+        allocations[payment.pk] = allocation
+
+    return allocations, balances
+
+
+def allocate_discounts(echeancier, discounts, balances=None, *, budget=None):
+    """Ventile les remises validées sur les tranches réellement concernées.
+
+    Les remises ne couvrent jamais l'inscription/réinscription. Les anciennes
+    remises sans information de tranche sont appliquées à T1, T2 puis T3 afin
+    de rester compatibles avec les données antérieures.
+    """
+    current_balances = dict(remaining_balances(echeancier) if balances is None else balances)
+    available_budget = None if budget is None else max(Decimal('0'), as_decimal(budget))
+    allocation = {key: Decimal('0') for key in ALLOCATION_KEYS}
+
+    for discount in discounts:
+        selected = [
+            f"tranche_{number}"
+            for number in getattr(discount, 'tranches_concernees_liste', [])
+            if number in (1, 2, 3)
+        ]
+        if not selected:
+            selected = ['tranche_1', 'tranche_2', 'tranche_3']
+
+        amount = max(Decimal('0'), as_decimal(getattr(discount, 'montant_remise', 0)))
+        if available_budget is not None:
+            amount = min(amount, available_budget)
+        for key in selected:
+            if amount <= 0:
+                break
+            available = max(Decimal('0'), as_decimal(current_balances.get(key, 0)))
+            take = min(amount, available)
+            allocation[key] += take
+            current_balances[key] = available - take
+            amount -= take
+            if available_budget is not None:
+                available_budget -= take
+
+    return allocation, current_balances
+
+
+def allocate_cash_and_discounts(echeancier, cash_total, discounts):
+    """Réserve les remises sur leurs tranches avant de ventiler le cash.
+
+    Sinon un versement ultérieur remplirait T1 à la place de sa remise et
+    ferait réapparaître cette réduction dans le solde dû. Le budget annuel
+    garantit que les remises ne masquent jamais un encaissement réel, même
+    après un transfert vers un tarif inférieur. Aucun montant de reçu ou de
+    remise enregistré n'est modifié.
+    """
+    dues = due_balances(echeancier)
+    budget = max(Decimal('0'), sum(dues.values(), Decimal('0')) - as_decimal(cash_total))
+    discounts_allocation, net_dues = allocate_discounts(
+        echeancier, discounts, balances=dues, budget=budget,
+    )
+    cash_allocation, balances, credit = allocate_amount_sequentially(cash_total, net_dues)
+    return cash_allocation, discounts_allocation, balances, credit

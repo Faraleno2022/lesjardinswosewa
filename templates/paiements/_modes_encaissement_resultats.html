@@ -1,0 +1,188 @@
+{% load humanize %}
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl">
+    <div class="card h-100 border-primary">
+      <div class="card-body py-3">
+        <small class="text-muted">Montant filtré</small>
+        <div class="h5 mb-0 text-primary">{{ total_amount|floatformat:0|intcomma }} GNF</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl">
+    <div class="card h-100 border-info">
+      <div class="card-body py-3">
+        <small class="text-muted">Opérations</small>
+        <div class="h5 mb-0">{{ operation_count|intcomma }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl">
+    <div class="card h-100 border-secondary">
+      <div class="card-body py-3">
+        <small class="text-muted">Élèves distincts</small>
+        <div class="h5 mb-0">{{ student_count|intcomma }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl">
+    <div class="card h-100 border-success">
+      <div class="card-body py-3">
+        <small class="text-muted">Élèves soldés</small>
+        <div class="h5 mb-0 text-success">{{ settled_count|intcomma }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-6 col-xl">
+    <div class="card h-100 border-danger">
+      <div class="card-body py-3">
+        <small class="text-muted">Solde restant</small>
+        <div class="h5 mb-0 text-danger">{{ remaining_total|floatformat:0|intcomma }} GNF</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if mode_totals %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header fw-semibold">Synthèse des résultats par mode</div>
+  <div class="table-responsive">
+    <table class="table table-sm table-striped align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Mode d'encaissement</th>
+          <th class="text-end">Élèves</th>
+          <th class="text-end">Opérations</th>
+          <th class="text-end">Montant filtré</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for mode in mode_totals %}
+        <tr>
+          <td class="fw-semibold">{{ mode.name }}</td>
+          <td class="text-end">{{ mode.students|intcomma }}</td>
+          <td class="text-end">{{ mode.operations|intcomma }}</td>
+          <td class="text-end fw-semibold">{{ mode.amount|floatformat:0|intcomma }} GNF</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="card shadow-sm">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+      <span class="fw-semibold">Élèves, encaissements et soldes</span>
+      <small class="text-muted ms-2">
+        {{ page_obj.paginator.count|intcomma }} ligne{{ page_obj.paginator.count|pluralize }}
+      </small>
+    </div>
+    <small class="text-muted">
+      Solde de scolarité arrêté au {{ date_fin|date:'d/m/Y' }}
+    </small>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover table-striped align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Mode</th>
+          <th>Élève</th>
+          <th>Classe</th>
+          <th class="text-end">Opérations</th>
+          <th class="text-end">Montant filtré</th>
+          <th class="text-end">Scolarité encaissée</th>
+          <th class="text-end">Remises</th>
+          <th class="text-end">Dû annuel</th>
+          <th class="text-end">Solde</th>
+          <th>Situation</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td>
+            <span class="badge text-bg-primary">{{ row.mode }}</span>
+            <div><small class="text-muted">Dernier : {{ row.last_payment|date:'d/m/Y' }}</small></div>
+          </td>
+          <td>
+            <div class="fw-semibold">{{ row.student }}</div>
+            <small class="text-muted">{{ row.matricule }} · {{ row.school_year }}</small>
+          </td>
+          <td>
+            {{ row.class }}
+            {% if schools|length > 1 %}<div><small class="text-muted">{{ row.school }}</small></div>{% endif %}
+          </td>
+          <td class="text-end">{{ row.operation_count|intcomma }}</td>
+          <td class="text-end fw-semibold">{{ row.period_amount|floatformat:0|intcomma }}</td>
+          <td class="text-end">
+            {% if row.paid is not None %}{{ row.paid|floatformat:0|intcomma }}{% else %}—{% endif %}
+          </td>
+          <td class="text-end">
+            {% if row.discount is not None %}{{ row.discount|floatformat:0|intcomma }}{% else %}—{% endif %}
+          </td>
+          <td class="text-end">
+            {% if row.total_due is not None %}{{ row.total_due|floatformat:0|intcomma }}{% else %}—{% endif %}
+          </td>
+          <td class="text-end fw-bold {% if row.situation_code == 'solde' %}text-success{% elif row.situation_code == 'reste' %}text-danger{% else %}text-muted{% endif %}">
+            {% if row.remaining is not None %}{{ row.remaining|floatformat:0|intcomma }}{% else %}—{% endif %}
+          </td>
+          <td>
+            {% if row.situation_code == 'solde' %}
+              <span class="badge text-bg-success">{{ row.situation }}</span>
+            {% elif row.situation_code == 'reste' %}
+              <span class="badge text-bg-warning">{{ row.situation }}</span>
+            {% else %}
+              <span class="badge text-bg-secondary">{{ row.situation }}</span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <a href="{% url 'paiements:echeancier_eleve' row.student_id %}"
+               class="btn btn-sm btn-outline-primary" title="Voir l'échéancier">
+              <i class="fas fa-calendar-alt"></i>
+              <span class="visually-hidden">Voir l'échéancier de {{ row.student }}</span>
+            </a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="11" class="text-center text-muted py-5">
+            <i class="fas fa-search fa-2x mb-3 d-block"></i>
+            Aucun élève ne correspond aux filtres sélectionnés.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.paginator.num_pages > 1 %}
+  <div class="card-footer d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <small class="text-muted">
+      Page {{ page_obj.number }} sur {{ page_obj.paginator.num_pages }}
+    </small>
+    <nav aria-label="Pagination des élèves par mode">
+      <ul class="pagination pagination-sm mb-0">
+        {% if page_obj.has_previous %}
+        <li class="page-item">
+          <a class="page-link" data-modes-page href="?{% if query_string %}{{ query_string }}&{% endif %}page={{ page_obj.previous_page_number }}">Précédent</a>
+        </li>
+        {% endif %}
+        <li class="page-item active"><span class="page-link">{{ page_obj.number }}</span></li>
+        {% if page_obj.has_next %}
+        <li class="page-item">
+          <a class="page-link" data-modes-page href="?{% if query_string %}{{ query_string }}&{% endif %}page={{ page_obj.next_page_number }}">Suivant</a>
+        </li>
+        {% endif %}
+      </ul>
+    </nav>
+  </div>
+  {% endif %}
+</div>
+
+<div class="alert alert-light border mt-3 mb-0 small text-muted">
+  Le « montant filtré » suit le mode, la période et le statut choisis. Le solde est
+  calculé par le moteur des échéanciers avec les paiements de scolarité validés et
+  les remises appliquées jusqu'au {{ date_fin|date:'d/m/Y' }}.
+</div>
