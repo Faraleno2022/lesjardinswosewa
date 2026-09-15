@@ -10,6 +10,7 @@ OPTIMISATIONS v3.0 - ULTRA PERFORMANCE:
 - Performance: < 30ms pour 50 élèves, < 100ms pour 200 élèves
 """
 from decimal import Decimal, ROUND_HALF_UP
+from hashlib import sha256
 from typing import Dict, List, Tuple, Optional
 from django.core.cache import cache
 from .models import Evaluation, NoteEleve, MatiereNote, NoteMensuelle, CompositionNote
@@ -21,15 +22,40 @@ logger = logging.getLogger(__name__)
 # Constantes de cache
 CACHE_TIMEOUT_MOYENNES = 600  # 10 minutes
 CACHE_TIMEOUT_CLASSEMENT = 600  # 10 minutes
-CALCUL_CACHE_SCHEMA_VERSION = 2
+CALCUL_CACHE_SCHEMA_VERSION = 3
 
 # Règles de calcul utilisées par les bulletins et les classements.
 # Secondaire guinéen: moyenne de période = 40% cours + 60% composition.
 PONDERATION_COURS_SECONDAIRE = Decimal('0.4')
 PONDERATION_COMPOSITION_SECONDAIRE = Decimal('0.6')
 
+
+PERIODES_ALIASES = {
+    "1er Trimestre": "TRIMESTRE_1", "2ème Trimestre": "TRIMESTRE_2",
+    "3ème Trimestre": "TRIMESTRE_3", "1er Semestre": "SEMESTRE_1",
+    "2ème Semestre": "SEMESTRE_2",
+}
+
+
+def normaliser_periode(periode):
+    return PERIODES_ALIASES.get(periode, periode)
+
+
+def _cle_cache_selection(prefixe, classe, periode, system_type, eleves_ids, matieres_ids):
+    # L'ordre des matières détermine celui des détails renvoyés aux bulletins.
+    selection = ",".join(map(str, eleves_ids)) + "|" + ",".join(map(str, matieres_ids))
+    signature = sha256(selection.encode("utf-8")).hexdigest()[:20]
+    version = cache.get(f"moy_version_classe_{classe.pk}", 0)
+    return f"{prefixe}_s{CALCUL_CACHE_SCHEMA_VERSION}_{classe.pk}_{periode}_{system_type}_v{version}_{signature}"
+
+
+def _bareme_matiere(matiere):
+    classe = matiere.classe
+    primaire = classe.niveau_enseignement == "PRIMAIRE" or detecter_niveau_scolaire(classe.nom) == "PRIMAIRE"
+    return 10 if primaire else 20
+
 # Bonus de suivi continu (notes de cours/orales/écrites/devoirs/participation).
-# Ajouté à la note MENSUELLE, plafonné, sans jamais dépasser 20.
+# Ajouté à la note MENSUELLE sans dépasser le barème de la matière.
 # Un élève sans note de suivi a un bonus de 0 (comportement inchangé).
 BONUS_SUIVI_MAX = Decimal('2')
 
@@ -61,10 +87,10 @@ def bonus_suivi_batch(eleve_ids, matiere_ids, mois_list, annee_scolaire):
     from .models import NoteSuivi, RemiseDevoir, MatiereNote
 
     # Le bonus n'est calculé que si l'école l'a explicitement activé.
-    _actif = MatiereNote.objects.filter(
+    matiere_ids = list(MatiereNote.objects.filter(
         id__in=matiere_ids, classe__ecole__bonus_suivi_actif=True
-    ).exists()
-    if not _actif:
+    ).values_list("id", flat=True))
+    if not matiere_ids:
         return {}
 
     groupes = {}
@@ -106,11 +132,11 @@ def bonus_suivi(eleve_id, matiere_id, mois, annee_scolaire):
         (eleve_id, matiere_id, mois), 0.0)
 
 
-def _appliquer_bonus(note_value, bonus):
-    """Ajoute le bonus à une note mensuelle, plafonné à 20."""
+def _appliquer_bonus(note_value, bonus, maximum=20):
+    """Ajoute le bonus sans dépasser le barème de la matière."""
     if note_value is None:
         return None
-    return min(20.0, float(note_value) + float(bonus or 0.0))
+    return min(float(maximum), float(note_value) + float(bonus or 0.0))
 
 
 def _arrondir_deux_decimales(valeur):
@@ -150,39 +176,42 @@ _SEMESTRE_FALLBACK_TRIMESTRES = {
 
 
 def _compositions_semestre_depuis_trimestres(eleves_ids, matieres_ids, periode, annee_scolaire):
-    """Dérive les compositions semestrielles depuis les compositions trimestrielles.
+    """Repli trimestriel, avec zéro pour les compositions absentes ou manquantes.
 
-    Utilisé UNIQUEMENT en repli, quand la composition semestrielle n'a pas été
-    saisie (école en mode trimestre consultée en mode semestre).
-    Retourne {(eleve_id, matiere_id): note}.
+    Le dénominateur dépend des trimestres évalués dans chaque matière de la
+    classe, et non des seules notes disponibles pour l'élève sélectionné.
     """
-    p = periode or ''
-    if 'SEMESTRE_1' in p or p == '1er Semestre':
-        code = 'SEMESTRE_1'
-    elif 'SEMESTRE_2' in p or p == '2ème Semestre':
-        code = 'SEMESTRE_2'
-    else:
+    code = normaliser_periode(periode)
+    trimestres = _SEMESTRE_FALLBACK_TRIMESTRES.get(code)
+    if not trimestres or not eleves_ids or not matieres_ids:
         return {}
 
     rows = CompositionNote.objects.filter(
-        eleve_id__in=eleves_ids,
-        matiere_id__in=matieres_ids,
-        periode__in=_SEMESTRE_FALLBACK_TRIMESTRES[code],
+        matiere_id__in=matieres_ids, periode__in=trimestres,
         annee_scolaire=annee_scolaire,
-    ).values('eleve_id', 'matiere_id', 'note', 'absent')
-
-    groupes = {}
-    for r in rows:
-        if r['absent'] or r['note'] is None:
-            continue
-        groupes.setdefault((r['eleve_id'], r['matiere_id']), []).append(float(r['note']))
-
-    return {k: sum(v) / len(v) for k, v in groupes.items()}
+    ).values("eleve_id", "matiere_id", "periode", "note", "absent")
+    demandes = set(eleves_ids)
+    periodes_par_matiere = {}
+    notes = {}
+    for row in rows:
+        periodes_par_matiere.setdefault(row["matiere_id"], set()).add(row["periode"])
+        if row["eleve_id"] in demandes:
+            valeur = Decimal("0") if row["absent"] or row["note"] is None else row["note"]
+            notes[(row["eleve_id"], row["matiere_id"], row["periode"])] = valeur
+    return {
+        (eleve_id, matiere_id): float(
+            sum((notes.get((eleve_id, matiere_id, p), Decimal("0")) for p in periodes), Decimal("0"))
+            / Decimal(len(periodes))
+        )
+        for matiere_id, periodes in periodes_par_matiere.items()
+        for eleve_id in eleves_ids
+    }
 
 
 def _periodes_composition_equivalentes(periode, system_type):
     """Périodes de composition à considérer pour une période donnée
     (inclut le repli trimestres -> semestres)."""
+    periode = normaliser_periode(periode)
     p = periode or ''
     if system_type in ['semestriel', 'semestre']:
         if 'SEMESTRE_1' in p or p == '1er Semestre':
@@ -379,6 +408,7 @@ def calculer_moyenne_matiere(eleve, matiere, periode, system_type='mensuel'):
             - moyenne_matiere: float ou None (moyenne finale calculée)
             - points: float ou None (moyenne × coefficient)
     """
+    periode = normaliser_periode(periode)
     moyenne_continue = None
     note_composition = None
     
@@ -393,7 +423,7 @@ def calculer_moyenne_matiere(eleve, matiere, periode, system_type='mensuel'):
             )
             if not note_mensuelle.absent and note_mensuelle.note is not None:
                 _b = bonus_suivi(eleve.id, matiere.id, periode, matiere.classe.annee_scolaire)
-                moyenne_continue = _appliquer_bonus(float(note_mensuelle.note), _b)
+                moyenne_continue = _appliquer_bonus(float(note_mensuelle.note), _b, _bareme_matiere(matiere))
         except NoteMensuelle.DoesNotExist:
             pass
     else:
@@ -430,7 +460,7 @@ def calculer_moyenne_matiere(eleve, matiere, periode, system_type='mensuel'):
                     )
                     if not note_mensuelle.absent and note_mensuelle.note is not None:
                         _b = bonus_suivi(eleve.id, matiere.id, mois, matiere.classe.annee_scolaire)
-                        _val = _appliquer_bonus(float(note_mensuelle.note), _b)
+                        _val = _appliquer_bonus(float(note_mensuelle.note), _b, _bareme_matiere(matiere))
                         total_notes += Decimal(str(_val))
                         count_notes += 1
                 except NoteMensuelle.DoesNotExist:
@@ -441,6 +471,7 @@ def calculer_moyenne_matiere(eleve, matiere, periode, system_type='mensuel'):
                 moyenne_continue = float(total_notes / count_notes)
 
         # Récupérer la note de composition (TOUJOURS chercher, même sans notes mensuelles)
+        compo = None
         try:
             compo = CompositionNote.objects.get(
                 eleve=eleve,
@@ -454,7 +485,7 @@ def calculer_moyenne_matiere(eleve, matiere, periode, system_type='mensuel'):
             pass
 
         # Repli: compositions saisies en trimestres mais consultation semestrielle
-        if note_composition is None and system_type in ['semestriel', 'semestre']:
+        if compo is None and system_type in ['semestriel', 'semestre']:
             fb = _compositions_semestre_depuis_trimestres(
                 [eleve.id], [matiere.id], periode, matiere.classe.annee_scolaire
             )
@@ -612,6 +643,7 @@ def calculer_moyennes_classe_optimise(eleves, matieres, periode, system_type='me
     Returns:
         dict {eleve_id: {'moyenne_generale': float, 'details_matieres': list, ...}}
     """
+    periode = normaliser_periode(periode)
     # Gérer le cas où matieres est une liste au lieu d'un QuerySet
     matieres_is_list = isinstance(matieres, list)
     eleves_is_list = isinstance(eleves, list)
@@ -642,8 +674,9 @@ def calculer_moyennes_classe_optimise(eleves, matieres, periode, system_type='me
 
     # ── Cache: évite de recalculer si déjà fait dans les 10 dernières minutes ──
     # La version est incrémentée à chaque sauvegarde de note pour invalider le cache
-    _version = cache.get(f"moy_version_classe_{classe.id}", 0)
-    _cache_key = f"moy_classe_s{CALCUL_CACHE_SCHEMA_VERSION}_{classe.id}_{periode}_{system_type}_v{_version}"
+    _cache_key = _cle_cache_selection(
+        "moy_classe", classe, periode, system_type, eleves_ids, matieres_ids,
+    )
     if use_cache:
         _cached = cache.get(_cache_key)
         if _cached is not None:
@@ -745,7 +778,12 @@ def calculer_moyennes_classe_optimise(eleves, matieres, periode, system_type='me
 
     # RÈGLE STRICTE: matières où la classe a composé — un élève sans
     # composition y prend 0 (ne pas favoriser les absents)
-    matieres_avec_compo = {mid for (_eid, mid) in compositions_dict.keys()}
+    matieres_avec_compo = set()
+    if system_type != "mensuel":
+        matieres_avec_compo = set(CompositionNote.objects.filter(
+            matiere_id__in=matieres_ids, annee_scolaire=annee_scolaire,
+            periode__in=_periodes_composition_equivalentes(periode, system_type),
+        ).values_list("matiere_id", flat=True).distinct())
 
     # Calculer les moyennes pour chaque élève (sans requêtes supplémentaires)
     resultats = {}
@@ -766,7 +804,7 @@ def calculer_moyennes_classe_optimise(eleves, matieres, periode, system_type='me
                 note_data = notes_dict.get(key)
                 if note_data and not note_data['absent'] and note_data['note'] is not None:
                     _b = bonus_map.get((eleve.id, matiere_id, periode), 0.0)
-                    moyenne_continue = _appliquer_bonus(float(note_data['note']), _b)
+                    moyenne_continue = _appliquer_bonus(float(note_data['note']), _b, _bareme_matiere(matiere))
             else:
                 # Moyenne des mois de la période (chaque mois + bonus de suivi)
                 if mois_periode:
@@ -777,7 +815,7 @@ def calculer_moyennes_classe_optimise(eleves, matieres, periode, system_type='me
                         note_data = notes_dict.get(key)
                         if note_data and not note_data['absent'] and note_data['note'] is not None:
                             _b = bonus_map.get((eleve.id, matiere_id, mois), 0.0)
-                            _val = _appliquer_bonus(float(note_data['note']), _b)
+                            _val = _appliquer_bonus(float(note_data['note']), _b, _bareme_matiere(matiere))
                             total_notes += Decimal(str(_val))
                             count_notes += 1
                     if count_notes > 0:
@@ -968,21 +1006,14 @@ def calculer_classement_classe(eleves, matieres, periode, system_type='mensuel',
             - rang_map: dict {eleve_id: rang}
             - details_par_eleve: dict {eleve_id: dict complet des calculs}
     """
-    # Gérer le cas où matieres est une liste au lieu d'un QuerySet
-    if isinstance(matieres, list):
-        if matieres:
-            classe_id = matieres[0].classe_id
-            cache_key = f"classement_classe_s{CALCUL_CACHE_SCHEMA_VERSION}_{classe_id}_periode_{periode}_type_{system_type}"
-        else:
-            cache_key = None
-    else:
-        # Générer une clé de cache basée sur les paramètres
-        if matieres.exists():
-            classe_id = matieres.first().classe_id
-            cache_key = f"classement_classe_s{CALCUL_CACHE_SCHEMA_VERSION}_{classe_id}_periode_{periode}_type_{system_type}"
-        else:
-            cache_key = None
-    
+    periode = normaliser_periode(periode)
+    matieres = list(matieres)
+    eleves = list(eleves)
+    cache_key = _cle_cache_selection(
+        "classement_classe", matieres[0].classe, periode, system_type,
+        [eleve.pk for eleve in eleves], [matiere.pk for matiere in matieres],
+    ) if matieres else None
+
     # Vérifier le cache
     if cache_key and use_cache:
         cached_result = cache.get(cache_key)
@@ -1400,6 +1431,7 @@ def calculer_bulletin_intelligent(eleve, matiere, periode, system_type):
     Returns:
         dict avec toutes les données nécessaires pour l'affichage du bulletin
     """
+    periode = normaliser_periode(periode)
     # Détecter le niveau scolaire pour les coefficients
     niveau = detecter_niveau_scolaire(matiere.classe.nom if hasattr(matiere.classe, 'nom') else '')
     est_primaire = (niveau == 'PRIMAIRE')
@@ -1435,7 +1467,7 @@ def calculer_bulletin_intelligent(eleve, matiere, periode, system_type):
         ).first()
         if note_mensuelle and not note_mensuelle.absent and note_mensuelle.note is not None:
             _b = bonus_suivi(eleve.id, matiere.id, periode, matiere.classe.annee_scolaire)
-            _val = _appliquer_bonus(float(note_mensuelle.note), _b)
+            _val = _appliquer_bonus(float(note_mensuelle.note), _b, _bareme_matiere(matiere))
             result['moyenne_continue'] = _val
             result['moyenne'] = _val
     
@@ -1466,7 +1498,7 @@ def calculer_bulletin_intelligent(eleve, matiere, periode, system_type):
                 ).first()
                 if note_mensuelle and not note_mensuelle.absent and note_mensuelle.note is not None:
                     _b = bonus_suivi(eleve.id, matiere.id, mois, matiere.classe.annee_scolaire)
-                    _val = _appliquer_bonus(float(note_mensuelle.note), _b)
+                    _val = _appliquer_bonus(float(note_mensuelle.note), _b, _bareme_matiere(matiere))
                     total_notes += Decimal(str(_val))
                     count_notes += 1
                     moyennes_detail.append({
@@ -1538,7 +1570,7 @@ def calculer_bulletin_intelligent(eleve, matiere, periode, system_type):
                 ).first()
                 if note_mensuelle and not note_mensuelle.absent and note_mensuelle.note is not None:
                     _b = bonus_suivi(eleve.id, matiere.id, mois, matiere.classe.annee_scolaire)
-                    _val = _appliquer_bonus(float(note_mensuelle.note), _b)
+                    _val = _appliquer_bonus(float(note_mensuelle.note), _b, _bareme_matiere(matiere))
                     total_notes += Decimal(str(_val))
                     count_notes += 1
                     moyennes_detail.append({
@@ -1569,7 +1601,7 @@ def calculer_bulletin_intelligent(eleve, matiere, periode, system_type):
             result['note_composition'] = float(compo.note)
 
         # Repli: compositions saisies en trimestres mais consultation semestrielle
-        if result['note_composition'] is None:
+        if compo is None:
             fb = _compositions_semestre_depuis_trimestres(
                 [eleve.id], [matiere.id], periode, matiere.classe.annee_scolaire
             )

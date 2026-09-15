@@ -761,7 +761,7 @@ class RemiseReduction(SyncTrackedModel):
                 Decimal('1'), rounding=ROUND_HALF_UP
             )
         else:
-            remise = self.valeur
+            remise = Decimal(str(self.valeur)).quantize(Decimal('1'), rounding=ROUND_HALF_UP)
         # La remise ne peut pas dépasser le montant de base ni être négative
         return max(Decimal('0'), min(remise, montant_base))
 
