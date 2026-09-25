@@ -10,7 +10,9 @@ from .models import (
     EtatSalaire,
     PeriodeSalaire,
     PresenceEnseignant,
+    JOURS_EMPLOI_DU_TEMPS,
     NIVEAUX_CLASSES_ENSEIGNANT,
+    ParametresPaie,
     StatutAvanceSalaire,
     StatutEnseignant,
     TypeEnseignant,
@@ -100,8 +102,10 @@ class EnseignantForm(forms.ModelForm):
         fields = [
             'nom', 'prenoms', 'telephone', 'adresse',
             'ecole', 'type_enseignant', 'statut', 
-            'taux_horaire', 'salaire_fixe', 'heures_mensuelles', 'date_embauche'
-        ]
+            'taux_horaire', 'salaire_fixe', 'heures_mensuelles', 'date_embauche',
+            'matricule', 'fonction', 'prime_fonction', 'prime_craie',
+            'distance_km',
+        ] + [champ for champ, _, _ in JOURS_EMPLOI_DU_TEMPS]
         widgets = {
             'nom': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -149,6 +153,30 @@ class EnseignantForm(forms.ModelForm):
                 'class': 'form-control',
                 'type': 'date'
             }),
+            'matricule': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ex. 0499120'
+            }),
+            'fonction': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ex. Directrice, Chargé de cours (CP1), Anglais'
+            }),
+            'prime_fonction': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '0', 'step': '1'
+            }),
+            'prime_craie': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '0', 'step': '1'
+            }),
+            'distance_km': forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '0', 'step': '0.5'
+            }),
+            **{
+                champ: forms.NumberInput(attrs={
+                    'class': 'form-control', 'min': '0', 'max': '24',
+                    'step': '0.5',
+                })
+                for champ, _, _ in JOURS_EMPLOI_DU_TEMPS
+            },
         }
         labels = {
             'nom': 'Nom de famille *',
@@ -162,6 +190,12 @@ class EnseignantForm(forms.ModelForm):
             'salaire_fixe': 'Salaire fixe (GNF)',
             'heures_mensuelles': 'Volume mensuel indicatif',
             'date_embauche': 'Date d\'embauche *',
+            'matricule': 'Matricule',
+            'fonction': 'Charge ou fonction',
+            'prime_fonction': 'Prime de fonction (GNF / mois)',
+            'prime_craie': 'Prime de craie / révision (GNF / mois)',
+            'distance_km': 'Distance domicile-école (km)',
+            **{champ: libelle for champ, libelle, _ in JOURS_EMPLOI_DU_TEMPS},
         }
         help_texts = {
             'taux_horaire': 'Pour le secondaire. Le salaire est calculé avec les heures réelles.',
@@ -169,6 +203,11 @@ class EnseignantForm(forms.ModelForm):
             'heures_mensuelles': 'Optionnel et indicatif. Les heures payées viennent des pointages ou de la saisie globale du mois.',
             'date_embauche': 'Date d\'entrée en fonction',
         }
+
+    CHAMPS_FACULTATIFS_A_ZERO = (
+        'prime_fonction', 'prime_craie', 'distance_km',
+        *(champ for champ, _, _ in JOURS_EMPLOI_DU_TEMPS),
+    )
 
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop('user', None)
@@ -181,7 +220,9 @@ class EnseignantForm(forms.ModelForm):
         self.fields['ecole'].required = True
         self.fields['type_enseignant'].required = True
         self.fields['date_embauche'].required = True
-        
+        for champ in self.CHAMPS_FACULTATIFS_A_ZERO:
+            self.fields[champ].required = False
+
         # Restreindre les écoles visibles selon l'utilisateur
         if self.user:
             from utilisateurs.utils import user_is_admin, user_school
@@ -254,6 +295,13 @@ class EnseignantForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         type_enseignant = cleaned_data.get('type_enseignant')
+        for champ in self.CHAMPS_FACULTATIFS_A_ZERO:
+            if champ in self.fields and cleaned_data.get(champ) is None:
+                cleaned_data[champ] = Decimal('0')
+        if type_enseignant != TypeEnseignant.SECONDAIRE:
+            # L'emploi du temps horaire ne concerne que le secondaire.
+            for champ, _, _ in JOURS_EMPLOI_DU_TEMPS:
+                cleaned_data[champ] = Decimal('0')
         taux_horaire = cleaned_data.get('taux_horaire')
         salaire_fixe = cleaned_data.get('salaire_fixe')
         heures_mensuelles = cleaned_data.get('heures_mensuelles')
@@ -621,14 +669,42 @@ class PresenceForm(forms.ModelForm):
         return cleaned_data
 
 
+CHAMPS_VARIABLES_MOIS = (
+    'jours_chomes', 'effectif_eleves', 'prime_performance', 'prime_exceptionnelle',
+)
+CHAMPS_VARIABLES_SECONDAIRE = (
+    'heures_absence', 'heures_revision', 'classes_professeur_principal',
+)
+LIBELLES_VARIABLES = {
+    'jours_chomes': 'Jours chômés',
+    'effectif_eleves': 'Effectif de la classe',
+    'prime_performance': 'Prime de performance (GNF)',
+    'prime_exceptionnelle': 'Prime exceptionnelle (GNF)',
+    'heures_absence': "Heures d'absence",
+    'heures_revision': 'Heures de révision',
+    'classes_professeur_principal': 'Classes en professeur principal',
+}
+
+
+def _widget_nombre(step='1', **attrs):
+    return forms.NumberInput(attrs={
+        'class': 'form-control', 'min': '0', 'step': step, **attrs,
+    })
+
+
 class EtatSalaireAjustementForm(forms.ModelForm):
-    """Modification contrôlée du calcul avant validation définitive."""
+    """Modification contrôlée du calcul avant validation définitive.
+
+    Les primes de fonction, craie (hors effectif), ancienneté et éloignement proviennent de la
+    fiche du personnel et du barème : elles sont affichées mais recalculées.
+    """
 
     class Meta:
         model = EtatSalaire
         fields = [
             'salaire_base', 'total_heures', 'taux_horaire_applique',
-            'primes', 'deductions', 'observations',
+            *CHAMPS_VARIABLES_MOIS, *CHAMPS_VARIABLES_SECONDAIRE,
+            'deductions', 'observations',
         ]
         widgets = {
             'salaire_base': forms.NumberInput(attrs={
@@ -640,9 +716,13 @@ class EtatSalaireAjustementForm(forms.ModelForm):
             'taux_horaire_applique': forms.NumberInput(attrs={
                 'class': 'form-control', 'min': '0', 'step': '0.01'
             }),
-            'primes': forms.NumberInput(attrs={
-                'class': 'form-control', 'min': '0', 'step': '0.01'
-            }),
+            'jours_chomes': _widget_nombre(max='31'),
+            'effectif_eleves': _widget_nombre(max='500'),
+            'prime_performance': _widget_nombre(),
+            'prime_exceptionnelle': _widget_nombre(),
+            'heures_absence': _widget_nombre('0.5'),
+            'heures_revision': _widget_nombre('0.5'),
+            'classes_professeur_principal': _widget_nombre(max='20'),
             'deductions': forms.NumberInput(attrs={
                 'class': 'form-control', 'min': '0', 'step': '0.01'
             }),
@@ -651,10 +731,18 @@ class EtatSalaireAjustementForm(forms.ModelForm):
                 'placeholder': 'Motif des primes ou retenues',
             }),
         }
+        labels = {**LIBELLES_VARIABLES, 'deductions': 'Autres retenues / sanctions (GNF)'}
 
     def __init__(self, *args, heures_pointage=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.heures_pointage = Decimal(heures_pointage or 0)
+        self.parametres = ParametresPaie.pour_ecole(self.instance.periode.ecole)
+        for champ in (*CHAMPS_VARIABLES_MOIS, *CHAMPS_VARIABLES_SECONDAIRE):
+            self.fields[champ].required = False
+
+        if not self.instance.enseignant.est_taux_horaire:
+            for champ in CHAMPS_VARIABLES_SECONDAIRE:
+                self.fields.pop(champ)
 
         if self.instance.enseignant.est_taux_horaire:
             self.fields.pop('salaire_base')
@@ -676,8 +764,33 @@ class EtatSalaireAjustementForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        primes = cleaned_data.get('primes') or 0
-        deductions = cleaned_data.get('deductions') or 0
+        for champ in (*CHAMPS_VARIABLES_MOIS, *CHAMPS_VARIABLES_SECONDAIRE):
+            if champ in self.fields and cleaned_data.get(champ) is None:
+                cleaned_data[champ] = 0
+        parametres = self.parametres
+        etat = self.instance
+        # Primes automatiques (fiche + barème) et primes saisies ce mois-ci.
+        from .services import annees_anciennete
+
+        enseignant = etat.enseignant
+        primes = (
+            (enseignant.prime_fonction or 0)
+            + (enseignant.prime_craie or 0)
+            + cleaned_data.get('effectif_eleves', 0) * parametres.prime_craie_par_eleve
+            + annees_anciennete(enseignant, etat.periode)
+            * parametres.prime_anciennete_par_an
+            + (enseignant.distance_km or 0) * parametres.prime_eloignement_par_km
+            + cleaned_data.get('prime_performance', 0)
+            + cleaned_data.get('prime_exceptionnelle', 0)
+            + cleaned_data.get('classes_professeur_principal', 0)
+            * parametres.prime_professeur_principal
+            + cleaned_data.get('heures_revision', 0)
+            * parametres.prime_heure_revision
+        )
+        deductions = (
+            (cleaned_data.get('deductions') or 0)
+            + cleaned_data.get('jours_chomes', 0) * parametres.retenue_par_jour_chome
+        )
         if self.instance.enseignant.est_taux_horaire:
             heures = cleaned_data.get('total_heures')
             taux = cleaned_data.get('taux_horaire_applique')
@@ -800,11 +913,7 @@ class AvanceSalaireForm(forms.ModelForm):
                 if self.instance.pk:
                     autres = autres.exclude(pk=self.instance.pk)
                 total_autres = autres.aggregate(total=Sum('montant'))['total'] or 0
-                disponible = (
-                    (etat.salaire_base or 0)
-                    + (etat.primes or 0)
-                    - (etat.deductions or 0)
-                )
+                disponible = etat.montant_disponible
                 if total_autres + montant > disponible:
                     self.add_error(
                         'montant',
@@ -824,3 +933,82 @@ class AnnulationAvanceSalaireForm(forms.Form):
             'placeholder': "Expliquez pourquoi cette avance est annulée",
         }),
     )
+
+
+class ParametresPaieForm(forms.ModelForm):
+    """Barème des primes et retenues automatiques d'une école."""
+
+    # Valeurs du classeur de paie de référence, proposées comme exemples.
+    EXEMPLES = {
+        'prime_anciennete_par_an': '10000',
+        'prime_craie_par_eleve': '500',
+        'prime_eloignement_par_km': '2000',
+        'retenue_par_jour_chome': '30000',
+        'prime_professeur_principal': '50000',
+        'prime_heure_revision': '10000',
+    }
+
+    class Meta:
+        model = ParametresPaie
+        fields = [
+            'prime_anciennete_par_an',
+            'prime_craie_par_eleve',
+            'prime_eloignement_par_km',
+            'retenue_par_jour_chome',
+            'prime_professeur_principal',
+            'prime_heure_revision',
+        ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for nom, champ in self.fields.items():
+            champ.widget = forms.NumberInput(attrs={
+                'class': 'form-control', 'min': '0', 'step': '1',
+                'placeholder': f"Ex. {self.EXEMPLES[nom]}",
+            })
+
+
+class VariablesPaiePeriodeForm(forms.Form):
+    """Saisie groupée des variables du mois pour tous les états d'une période."""
+
+    def __init__(self, *args, etats, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.etats = list(etats)
+        for etat in self.etats:
+            champs = list(CHAMPS_VARIABLES_MOIS)
+            if etat.enseignant.est_taux_horaire:
+                champs += list(CHAMPS_VARIABLES_SECONDAIRE)
+            verrouille = etat.valide or etat.paye
+            for champ in champs:
+                entier = champ in (
+                    'jours_chomes', 'effectif_eleves', 'classes_professeur_principal',
+                )
+                classe = forms.IntegerField if entier else forms.DecimalField
+                options = {} if entier else {'max_digits': 12, 'decimal_places': 2}
+                self.fields[self.nom_champ(etat, champ)] = classe(
+                    required=False,
+                    min_value=0,
+                    max_value={'jours_chomes': 31, 'effectif_eleves': 500}.get(champ),
+                    label=LIBELLES_VARIABLES[champ],
+                    initial=getattr(etat, champ),
+                    disabled=verrouille,
+                    widget=forms.NumberInput(attrs={
+                        'class': 'form-control form-control-sm',
+                        'min': '0',
+                        'step': '1' if entier else '0.5',
+                    }),
+                    **options,
+                )
+
+    @staticmethod
+    def nom_champ(etat, champ):
+        return f'{champ}_{etat.pk}'
+
+    def valeurs(self, etat):
+        """Valeurs saisies pour un état (zéro lorsque la case est vide)."""
+        resultat = {}
+        for champ in (*CHAMPS_VARIABLES_MOIS, *CHAMPS_VARIABLES_SECONDAIRE):
+            nom = self.nom_champ(etat, champ)
+            if nom in self.fields:
+                resultat[champ] = self.cleaned_data.get(nom) or 0
+        return resultat

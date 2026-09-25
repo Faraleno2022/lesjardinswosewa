@@ -61,15 +61,43 @@
                         </div>
                         {% endif %}
 
-                        <div class="mb-3">
-                            <label class="form-label" for="{{ form.primes.id_for_label }}">Primes (GNF)</label>
-                            {{ form.primes }}
-                            <div class="form-text">Total des primes de cette période, ajouté au salaire net. Indiquez leur motif dans les observations.</div>
-                            {% for error in form.primes.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                        <h6 class="mt-4">Primes automatiques</h6>
+                        <p class="form-text mt-0">
+                            Calculées depuis la fiche du personnel et le
+                            <a href="{% url 'salaires:parametres_paie' %}">barème de l'école</a>,
+                            elles se mettent à jour à chaque enregistrement.
+                        </p>
+                        <table class="table table-sm align-middle mb-4">
+                            <tbody>
+                                <tr><td>Prime de fonction</td><td class="text-end">{{ etat.prime_fonction|floatformat:0|intcomma }} GNF</td></tr>
+                                <tr><td>Prime de craie / révision</td><td class="text-end">{{ etat.prime_craie|floatformat:0|intcomma }} GNF</td></tr>
+                                <tr><td>Prime d'ancienneté</td><td class="text-end">{{ etat.prime_anciennete|floatformat:0|intcomma }} GNF</td></tr>
+                                <tr><td>Prime d'éloignement</td><td class="text-end">{{ etat.prime_eloignement|floatformat:0|intcomma }} GNF</td></tr>
+                                {% if etat.enseignant.est_taux_horaire %}
+                                <tr><td>Prime de professeur principal</td><td class="text-end">{{ etat.prime_professeur_principal|floatformat:0|intcomma }} GNF</td></tr>
+                                <tr><td>Prime d'heures de révision</td><td class="text-end">{{ etat.prime_revision|floatformat:0|intcomma }} GNF</td></tr>
+                                {% endif %}
+                                {% if etat.retenue_jours_chomes %}
+                                <tr><td>Retenue pour jours chômés</td><td class="text-end text-danger">-{{ etat.retenue_jours_chomes|floatformat:0|intcomma }} GNF</td></tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+
+                        <h6>Variables du mois</h6>
+                        <div class="row g-3 mb-3">
+                            {% for champ in form %}
+                            {% if champ.name in variables_mois %}
+                            <div class="col-md-4">
+                                <label class="form-label" for="{{ champ.id_for_label }}">{{ champ.label }}</label>
+                                {{ champ }}
+                                {% for error in champ.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                            </div>
+                            {% endif %}
+                            {% endfor %}
                         </div>
 
                         <div class="mb-3">
-                            <label class="form-label" for="{{ form.deductions.id_for_label }}">Retenues (GNF)</label>
+                            <label class="form-label" for="{{ form.deductions.id_for_label }}">{{ form.deductions.label }}</label>
                             {{ form.deductions }}
                             {% for error in form.deductions.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
                         </div>

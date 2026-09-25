@@ -178,6 +178,9 @@
             <a href="{% url 'salaires:avances_salaire' %}" class="btn btn-outline-warning me-2">
                 <i class="fas fa-hand-holding-usd"></i> Avances
             </a>
+            <a href="{% url 'salaires:parametres_paie' %}" class="btn btn-outline-info me-2">
+                <i class="fas fa-percentage"></i> Barème des primes
+            </a>
             <a href="{% url 'salaires:tableau_bord' %}" class="btn btn-primary me-2">
                 <i class="fas fa-tachometer-alt"></i> Tableau de Bord
             </a>
@@ -353,6 +356,22 @@
                     <div class="breakdown-item">
                         <span>Primes:</span>
                         <span class="text-success">+{{ etat.primes|intcomma }} GNF</span>
+                    </div>
+                    <div class="small text-muted ps-2">
+                        {% if etat.prime_fonction %}Fonction {{ etat.prime_fonction|floatformat:0|intcomma }} · {% endif %}
+                        {% if etat.prime_craie %}Craie {{ etat.prime_craie|floatformat:0|intcomma }} · {% endif %}
+                        {% if etat.prime_anciennete %}Ancienneté {{ etat.prime_anciennete|floatformat:0|intcomma }} · {% endif %}
+                        {% if etat.prime_eloignement %}Éloignement {{ etat.prime_eloignement|floatformat:0|intcomma }} · {% endif %}
+                        {% if etat.prime_performance %}Performance {{ etat.prime_performance|floatformat:0|intcomma }} · {% endif %}
+                        {% if etat.prime_exceptionnelle %}Exceptionnelle {{ etat.prime_exceptionnelle|floatformat:0|intcomma }} · {% endif %}
+                        {% if etat.prime_professeur_principal %}Prof. principal {{ etat.prime_professeur_principal|floatformat:0|intcomma }} · {% endif %}
+                        {% if etat.prime_revision %}Révision {{ etat.prime_revision|floatformat:0|intcomma }}{% endif %}
+                    </div>
+                    {% endif %}
+                    {% if etat.retenue_jours_chomes and etat.retenue_jours_chomes > 0 %}
+                    <div class="breakdown-item">
+                        <span>Jours chômés ({{ etat.jours_chomes }}):</span>
+                        <span class="text-danger">-{{ etat.retenue_jours_chomes|intcomma }} GNF</span>
                     </div>
                     {% endif %}
                     {% if etat.deductions and etat.deductions > 0 %}

@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+{% block title %}Barème des primes{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-7">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h1 class="h4 mb-0"><i class="fas fa-percentage text-primary me-2"></i>Barème des primes et retenues</h1>
+                <a href="{% url 'salaires:gestion_periodes' %}" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-arrow-left me-1"></i>Périodes
+                </a>
+            </div>
+
+            {% if ecoles %}
+            <form method="get" class="mb-3">
+                <label class="form-label" for="choix-ecole">École</label>
+                <select id="choix-ecole" name="ecole" class="form-select" onchange="this.form.submit()">
+                    <option value="">— Choisir une école —</option>
+                    {% for e in ecoles %}
+                    <option value="{{ e.pk }}" {% if ecole and e.pk == ecole.pk %}selected{% endif %}>{{ e.nom }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+            {% endif %}
+
+            {% if form %}
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <p class="text-muted">
+                        Ces montants valorisent les primes automatiques de <strong>{{ ecole.nom }}</strong>.
+                        Laissez 0 pour ne pas appliquer une rubrique. Les primes de fonction et de craie
+                        se renseignent sur la fiche de chaque membre du personnel.
+                    </p>
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        {% for champ in form %}
+                        <div class="mb-3">
+                            <label class="form-label" for="{{ champ.id_for_label }}">{{ champ.label }}</label>
+                            {{ champ }}
+                            {% if champ.help_text %}<div class="form-text">{{ champ.help_text }}</div>{% endif %}
+                            {% for error in champ.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                        </div>
+                        {% endfor %}
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i>Enregistrer le barème
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            {% elif not ecoles %}
+            <div class="alert alert-warning">Aucune école n'est associée à votre compte.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

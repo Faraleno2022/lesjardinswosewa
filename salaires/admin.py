@@ -3,7 +3,8 @@ from .models import (
     Enseignant, TypeEnseignant, StatutEnseignant,
     AvanceSalaire, StatutAvanceSalaire,
     AffectationClasse, PeriodeSalaire, EtatSalaire, 
-    DetailHeuresClasse, PresenceEnseignant, SaisieHeuresMensuelles
+    DetailHeuresClasse, PresenceEnseignant, SaisieHeuresMensuelles,
+    ParametresPaie,
 )
 
 
@@ -155,3 +156,13 @@ class AvanceSalaireAdmin(admin.ModelAdmin):
         if not change:
             obj.cree_par = request.user
         super().save_model(request, obj, form, change)
+
+
+@admin.register(ParametresPaie)
+class ParametresPaieAdmin(admin.ModelAdmin):
+    list_display = [
+        'ecole', 'prime_anciennete_par_an', 'prime_eloignement_par_km',
+        'retenue_par_jour_chome', 'prime_professeur_principal',
+        'prime_heure_revision',
+    ]
+    readonly_fields = ['date_modification', 'modifie_par']

@@ -57,8 +57,8 @@ class PersonnelPrimesTests(TestCase):
                 etat, _ = calculer_etat_salaire(travailleur, self.periode, self.user)
                 url = reverse('salaires:ajuster_etat_salaire', args=[etat.pk])
                 detail = self.client.get(reverse('salaires:detail_enseignant', args=[travailleur.pk]))
-                self.assertContains(detail, url + '#id_primes')
-                data = {'salaire_base': '1000000', 'primes': '150000',
+                self.assertContains(detail, url + '#id_prime_performance')
+                data = {'salaire_base': '1000000', 'prime_exceptionnelle': '150000',
                         'deductions': '25000', 'observations': 'Prime de rendement'}
                 self.assertEqual(self.client.post(url, data).status_code, 302)
                 etat.refresh_from_db()
@@ -66,7 +66,7 @@ class PersonnelPrimesTests(TestCase):
                 etat, _ = calculer_etat_salaire(travailleur, self.periode, self.user)
                 self.assertEqual(etat.primes, Decimal('150000'))
                 self.assertEqual(etat.salaire_net, Decimal('1125000'))
-                data['primes'] = '0'
+                data['prime_exceptionnelle'] = '0'
                 self.assertEqual(self.client.post(url, data).status_code, 302)
                 etat.refresh_from_db()
                 self.assertEqual(etat.salaire_net, Decimal('975000'))
@@ -75,15 +75,15 @@ class PersonnelPrimesTests(TestCase):
         travailleur = self.creer('CHAUFFEUR')
         etat, _ = calculer_etat_salaire(travailleur, self.periode, self.user)
         url = reverse('salaires:ajuster_etat_salaire', args=[etat.pk])
-        data = {'salaire_base': '1000000', 'primes': '-10', 'deductions': '0'}
+        data = {'salaire_base': '1000000', 'prime_exceptionnelle': '-10', 'deductions': '0'}
         response = self.client.post(url, data)
         self.assertEqual(response.status_code, 200)
-        self.assertIn('primes', response.context['form'].errors)
+        self.assertIn('prime_exceptionnelle', response.context['form'].errors)
         etat.refresh_from_db()
         self.assertEqual(etat.primes, 0)
         etat.valide = True
         etat.save()
-        data['primes'] = '150000'
+        data['prime_exceptionnelle'] = '150000'
         self.client.post(url, data)
         etat.refresh_from_db()
         self.assertEqual(etat.primes, 0)

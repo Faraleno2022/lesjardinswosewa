@@ -17,6 +17,8 @@ from .models import (
     DetailHeuresClasse,
     Enseignant,
     EtatSalaire,
+    JOURS_EMPLOI_DU_TEMPS,
+    ParametresPaie,
     PeriodeSalaire,
     SaisieHeuresMensuelles,
     SourceHeuresSalaire,
@@ -80,11 +82,32 @@ def nombre_jours_presence(enseignant, periode):
     )
 
 
-def heures_payables_et_source(enseignant, periode):
+def occurrences_jours_semaine(periode):
+    """Nombre de lundis, mardis... du mois, indexé par ``weekday()``."""
+    premier_jour, dernier_jour = bornes_periode(periode)
+    occurrences = [0] * 7
+    for jour in range(premier_jour.day, dernier_jour.day + 1):
+        occurrences[date(periode.annee, periode.mois, jour).weekday()] += 1
+    return occurrences
+
+
+def heures_emploi_du_temps(enseignant, periode):
+    """Heures à prester du mois selon l'emploi du temps hebdomadaire."""
+    occurrences = occurrences_jours_semaine(periode)
+    return arrondir_heures(sum(
+        (
+            (getattr(enseignant, champ) or Decimal('0')) * occurrences[jour]
+            for champ, _, jour in JOURS_EMPLOI_DU_TEMPS
+        ),
+        Decimal('0'),
+    ))
+
+
+def heures_payables_et_source(enseignant, periode, heures_absence=Decimal('0')):
     """Retourne les heures à payer et leur source explicite.
 
-    Les heures des pointages journaliers sont toujours prioritaires. La saisie
-    mensuelle globale ne sert que lorsqu'aucune heure n'a été pointée.
+    Ordre de priorité : pointages journaliers, saisie mensuelle globale, puis
+    emploi du temps hebdomadaire diminué des heures d'absence du mois.
     """
     heures_pointage = heures_reellement_travaillees(enseignant, periode)
     if heures_pointage > 0:
@@ -96,7 +119,57 @@ def heures_payables_et_source(enseignant, periode):
     ).first()
     if saisie is not None:
         return arrondir_heures(saisie.heures), SourceHeuresSalaire.SAISIE_MENSUELLE
+
+    if enseignant.heures_hebdomadaires > 0:
+        a_prester = heures_emploi_du_temps(enseignant, periode)
+        return (
+            max(Decimal('0'), a_prester - arrondir_heures(heures_absence)),
+            SourceHeuresSalaire.EMPLOI_DU_TEMPS,
+        )
     return heures_pointage, SourceHeuresSalaire.POINTAGE
+
+
+def annees_anciennete(enseignant, periode):
+    """Années de service comptées comme dans l'état Excel : année - embauche."""
+    return max(0, periode.annee - enseignant.date_embauche.year)
+
+
+def appliquer_primes_et_retenues(etat, parametres=None):
+    """Recalcule les rubriques automatiques d'un état sans toucher aux saisies.
+
+    La prime de fonction vient de la fiche du personnel ; la prime de craie
+    ajoute au montant fixe de la fiche l'effectif du mois × le taux par élève ;
+    ancienneté, éloignement, professeur principal, révision et jours chômés
+    sont valorisés avec le barème de l'école. Performance et prime
+    exceptionnelle restent des saisies du mois.
+    """
+    enseignant = etat.enseignant
+    if parametres is None:
+        parametres = ParametresPaie.pour_ecole(etat.periode.ecole)
+
+    etat.prime_fonction = arrondir_montant(enseignant.prime_fonction)
+    etat.prime_craie = arrondir_montant(
+        (enseignant.prime_craie or Decimal('0'))
+        + (etat.effectif_eleves or 0) * parametres.prime_craie_par_eleve
+    )
+    etat.prime_anciennete = arrondir_montant(
+        annees_anciennete(enseignant, etat.periode)
+        * parametres.prime_anciennete_par_an
+    )
+    etat.prime_eloignement = arrondir_montant(
+        (enseignant.distance_km or Decimal('0'))
+        * parametres.prime_eloignement_par_km
+    )
+    etat.prime_professeur_principal = arrondir_montant(
+        (etat.classes_professeur_principal or 0)
+        * parametres.prime_professeur_principal
+    )
+    etat.prime_revision = arrondir_montant(
+        (etat.heures_revision or Decimal('0')) * parametres.prime_heure_revision
+    )
+    etat.retenue_jours_chomes = arrondir_montant(
+        (etat.jours_chomes or 0) * parametres.retenue_par_jour_chome
+    )
 
 
 def affectations_de_la_periode(enseignant, periode):
@@ -253,12 +326,18 @@ def calculer_etat_salaire(enseignant, periode, utilisateur):
 
     etat.avances = total_avances_a_deduire(enseignant, periode)
     etat.nombre_jours_presence = nombre_jours_presence(enseignant, periode)
+    appliquer_primes_et_retenues(etat)
 
     if enseignant.est_taux_horaire:
         total_heures, source_heures = heures_payables_et_source(
-            enseignant, periode
+            enseignant, periode, etat.heures_absence
         )
         taux_horaire = enseignant.taux_horaire or Decimal('0')
+        etat.heures_a_prester = (
+            heures_emploi_du_temps(enseignant, periode)
+            if enseignant.heures_hebdomadaires > 0
+            else None
+        )
         etat.total_heures = total_heures
         etat.taux_horaire_applique = taux_horaire
         etat.source_heures = source_heures
@@ -270,6 +349,7 @@ def calculer_etat_salaire(enseignant, periode, utilisateur):
     else:
         etat.total_heures = None
         etat.taux_horaire_applique = None
+        etat.heures_a_prester = None
         etat.source_heures = SourceHeuresSalaire.SALAIRE_FIXE
         etat.salaire_base = salaire_fixe_proratise(enseignant, periode)
         etat.calcule_par = utilisateur
@@ -301,6 +381,53 @@ def preparer_etats_salaire_periode(periode, utilisateur):
         'enseignants': len(enseignants),
         'etats_calcules': calculs_effectues,
     }
+
+
+def etats_par_categorie(periode, categorie=None):
+    """États de la période regroupés comme dans le classeur de paie.
+
+    Retourne une liste de groupes ``{'categorie', 'libelle', 'etats',
+    'totaux'}`` dans l'ordre Direction, Primaire, Secondaire, Appui ; les
+    groupes vides sont omis.
+    """
+    from .models import CategoriePaie
+
+    etats = (
+        EtatSalaire.objects.filter(periode=periode)
+        .select_related('enseignant')
+        .order_by('enseignant__nom', 'enseignant__prenoms')
+    )
+    groupes = []
+    for code, libelle in CategoriePaie.choices:
+        if categorie and code != categorie:
+            continue
+        lignes = [e for e in etats if e.enseignant.categorie_paie == code]
+        if not lignes:
+            continue
+        groupes.append({
+            'categorie': code,
+            'libelle': libelle,
+            'etats': lignes,
+            'totaux': totaux_etats(lignes),
+        })
+    return groupes
+
+
+def totaux_etats(etats):
+    etats = list(etats)
+    zero = Decimal('0')
+    totaux = {
+        'effectif': len(etats),
+        'salaire_base': sum((e.salaire_base or zero for e in etats), zero),
+        'primes': sum((e.primes or zero for e in etats), zero),
+        'brut': sum((e.salaire_brut for e in etats), zero),
+        'retenues': sum((e.total_retenues for e in etats), zero),
+        'avances': sum((e.avances or zero for e in etats), zero),
+        'net': sum((e.salaire_net or zero for e in etats), zero),
+    }
+    for champ in EtatSalaire.CHAMPS_PRIMES:
+        totaux[champ] = sum((getattr(e, champ) or zero for e in etats), zero)
+    return totaux
 
 
 def recalculer_etat_salaire_pour_date(enseignant, date_pointage, utilisateur):

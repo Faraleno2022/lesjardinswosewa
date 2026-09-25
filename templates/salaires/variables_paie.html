@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Variables du mois{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div>
+            <h1 class="h4 mb-0"><i class="fas fa-table text-primary me-2"></i>Variables du mois — {{ periode.nom_periode }}</h1>
+            <p class="text-muted mb-0">
+                Jours chômés, effectif de la classe (prime de craie par élève), primes de performance et exceptionnelles ; pour le secondaire,
+                heures d'absence, heures de révision et classes tenues comme professeur principal.
+            </p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'salaires:parametres_paie' %}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-percentage me-1"></i>Barème
+            </a>
+            <a href="{% url 'salaires:documents_periode' periode.id %}" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-print me-1"></i>Documents de paie
+            </a>
+        </div>
+    </div>
+
+    {% if not lignes %}
+    <div class="alert alert-info">
+        Aucun état de salaire pour cette période. Lancez d'abord « Calculer Salaires » depuis
+        <a href="{% url 'salaires:gestion_periodes' %}">la gestion des périodes</a>.
+    </div>
+    {% else %}
+    <form method="post" novalidate>
+        {% csrf_token %}
+        {% if form.errors %}
+        <div class="alert alert-danger">Certaines valeurs sont invalides : corrigez les cases en rouge.</div>
+        {% endif %}
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered align-middle bg-white">
+                <thead class="table-light">
+                    <tr>
+                        <th>Personnel</th>
+                        <th>Jours chômés</th>
+                        <th>Effectif classe</th>
+                        <th>Prime de performance</th>
+                        <th>Prime exceptionnelle</th>
+                        <th>Heures d'absence</th>
+                        <th>Heures de révision</th>
+                        <th>Classes en prof. principal</th>
+                        <th class="text-end">Net actuel</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ligne in lignes %}
+                    <tr>
+                        <td>
+                            <strong>{{ ligne.etat.enseignant.nom_complet }}</strong>
+                            <div class="small text-muted">
+                                {{ ligne.etat.enseignant.libelle_fonction }}
+                                {% if ligne.etat.valide %}<span class="badge bg-success ms-1">Validé</span>{% endif %}
+                            </div>
+                        </td>
+                        {% for champ in ligne.champs %}
+                        <td style="min-width: 7rem">
+                            {{ champ }}
+                            {% for error in champ.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                        </td>
+                        {% endfor %}
+                        {% if not ligne.etat.enseignant.est_taux_horaire %}
+                        <td class="text-muted text-center" colspan="3">—</td>
+                        {% endif %}
+                        <td class="text-end">{{ ligne.etat.salaire_net|floatformat:0|intcomma }} GNF</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if not periode.cloturee %}
+        <div class="d-flex justify-content-end">
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save me-1"></i>Enregistrer et recalculer
+            </button>
+        </div>
+        {% endif %}
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

@@ -27,6 +27,8 @@ from .models import (
     SaisieHeuresMensuelles, SourceHeuresSalaire, StatutAvanceSalaire,
 )
 from .forms import (
+    CHAMPS_VARIABLES_MOIS,
+    CHAMPS_VARIABLES_SECONDAIRE,
     AffectationClasseForm,
     AnnulationAvanceSalaireForm,
     AvanceSalaireForm,
@@ -38,13 +40,17 @@ from .forms import (
 )
 from .services import (
     actualiser_avances_etat,
+    annees_anciennete,
+    appliquer_primes_et_retenues,
     calculer_etat_salaire,
     enseignants_eligibles,
+    heures_payables_et_source,
     heures_reellement_travaillees,
     nombre_jours_presence,
     preparer_etats_salaire_periode,
     synchroniser_details_heures,
 )
+from .lettres import montant_en_lettres
 from eleves.models import Ecole, Classe
 from utilisateurs.utils import user_is_admin, user_school
 from utilisateurs.permissions import can_add_teachers, has_permission
@@ -1051,9 +1057,12 @@ def export_etats_salaire_csv(request):
     response['Content-Disposition'] = 'attachment; filename="etats_salaire.csv"'
     writer = csv.writer(response)
     writer.writerow([
-        'Ecole', 'Periode', 'Enseignant', 'Type', 'Valide', 'Payé',
-        'Salaire Base', 'Primes', 'Retenues', 'Avances', 'Salaire Net',
-        'Total Heures', 'Date Calcul'
+        'Ecole', 'Periode', 'Enseignant', 'Matricule', 'Fonction', 'Type',
+        'Valide', 'Payé', 'Salaire Base', 'Prime Fonction', 'Prime Craie',
+        'Prime Ancienneté', 'Prime Eloignement', 'Prime Performance',
+        'Prime Exceptionnelle', 'Prime Prof. Principal', 'Prime Révision',
+        'Primes', 'Jours Chômés', 'Retenue Jours Chômés', 'Retenues',
+        'Avances', 'Salaire Net', 'Total Heures', 'Date Calcul'
     ])
 
     for e in etats:
@@ -1061,11 +1070,16 @@ def export_etats_salaire_csv(request):
             getattr(e.periode.ecole, 'nom', ''),
             f"{e.periode.mois:02d}/{e.periode.annee}",
             getattr(e.enseignant, 'nom_complet', str(e.enseignant)),
+            e.enseignant.matricule,
+            e.enseignant.libelle_fonction,
             getattr(e.enseignant, 'type_enseignant', ''),
             'Oui' if e.valide else 'Non',
             'Oui' if e.paye else 'Non',
             e.salaire_base,
+            *(getattr(e, champ) for champ in EtatSalaire.CHAMPS_PRIMES),
             e.primes,
+            e.jours_chomes,
+            e.retenue_jours_chomes,
             e.deductions,
             e.avances,
             e.salaire_net,
@@ -1440,18 +1454,39 @@ def ajuster_etat_salaire(request, etat_id):
                     messages.error(request, "Cet état ne peut plus être ajusté.")
                     return redirect('salaires:etats_salaire')
 
+                for champ in (*CHAMPS_VARIABLES_MOIS, *CHAMPS_VARIABLES_SECONDAIRE):
+                    if champ in form.cleaned_data:
+                        setattr(etat_verrouille, champ, form.cleaned_data[champ])
+                appliquer_primes_et_retenues(etat_verrouille)
+
                 if etat_verrouille.enseignant.est_taux_horaire:
+                    enseignant = etat_verrouille.enseignant
                     heures_pointage_actuelles = heures_reellement_travaillees(
-                        etat_verrouille.enseignant, etat_verrouille.periode
+                        enseignant, etat_verrouille.periode
+                    )
+                    utilise_emploi_du_temps = (
+                        enseignant.heures_hebdomadaires > 0
+                        and 'total_heures' not in form.changed_data
+                        and not SaisieHeuresMensuelles.objects.filter(
+                            enseignant=enseignant,
+                            periode=etat_verrouille.periode,
+                        ).exists()
                     )
                     if heures_pointage_actuelles > 0:
                         total_heures = heures_pointage_actuelles
                         source_heures = SourceHeuresSalaire.POINTAGE
+                    elif utilise_emploi_du_temps:
+                        # Les heures suivent l'emploi du temps et les absences.
+                        total_heures, source_heures = heures_payables_et_source(
+                            enseignant,
+                            etat_verrouille.periode,
+                            etat_verrouille.heures_absence,
+                        )
                     else:
                         total_heures = form.cleaned_data['total_heures']
                         source_heures = SourceHeuresSalaire.SAISIE_MENSUELLE
                         SaisieHeuresMensuelles.objects.update_or_create(
-                            enseignant=etat_verrouille.enseignant,
+                            enseignant=enseignant,
                             periode=etat_verrouille.periode,
                             defaults={
                                 'heures': total_heures,
@@ -1471,18 +1506,28 @@ def ajuster_etat_salaire(request, etat_id):
                     etat_verrouille.enseignant, etat_verrouille.periode
                 )
                 etat_verrouille.calcule_par = request.user
-                etat_verrouille.primes = form.cleaned_data['primes']
                 etat_verrouille.deductions = form.cleaned_data['deductions']
                 etat_verrouille.observations = form.cleaned_data['observations']
-                etat_verrouille.save()
-                if etat_verrouille.enseignant.est_taux_horaire:
-                    synchroniser_details_heures(etat_verrouille)
+                try:
+                    with transaction.atomic():
+                        etat_verrouille.save()
+                        if etat_verrouille.enseignant.est_taux_horaire:
+                            synchroniser_details_heures(etat_verrouille)
+                except ValidationError as exc:
+                    # Annule aussi la saisie mensuelle faite plus haut.
+                    transaction.set_rollback(True)
+                    for message in exc.messages:
+                        form.add_error(None, message)
+                    enregistre = False
+                else:
+                    enregistre = True
 
-            messages.success(
-                request,
-                f"Salaire de {etat.enseignant.nom_complet} mis à jour avant validation.",
-            )
-            return redirect('salaires:etats_salaire')
+            if enregistre:
+                messages.success(
+                    request,
+                    f"Salaire de {etat.enseignant.nom_complet} mis à jour avant validation.",
+                )
+                return redirect('salaires:etats_salaire')
     else:
         form = EtatSalaireAjustementForm(
             instance=etat,
@@ -1496,6 +1541,7 @@ def ajuster_etat_salaire(request, etat_id):
             'form': form,
             'etat': etat,
             'heures_pointage': heures_pointage,
+            'variables_mois': (*CHAMPS_VARIABLES_MOIS, *CHAMPS_VARIABLES_SECONDAIRE),
         },
     )
 
@@ -1527,11 +1573,7 @@ def valider_etat_salaire(request, etat_id):
         total_avances = sum(
             (avance.montant for avance in avances), Decimal('0')
         )
-        montant_disponible = (
-            (etat.salaire_base or Decimal('0'))
-            + (etat.primes or Decimal('0'))
-            - (etat.deductions or Decimal('0'))
-        )
+        montant_disponible = etat.montant_disponible
         if total_avances > montant_disponible:
             messages.error(
                 request,
@@ -1698,63 +1740,103 @@ def fiche_paie_pdf(request, etat_id):
     p.drawString(2*cm, y_pos, f"Email: {etat.enseignant.email or 'Non renseigné'}")
     y_pos -= 0.5*cm
     p.drawString(2*cm, y_pos, f"Type: {'Salaire fixe' if etat.enseignant.est_salaire_fixe else 'Taux horaire'}")
-    
+    enseignant = etat.enseignant
+    y_pos -= 0.5*cm
+    p.drawString(2*cm, y_pos, f"Matricule: {enseignant.matricule or 'Non renseigné'}")
+    p.drawString(11*cm, y_pos + 2.0*cm, f"Fonction: {enseignant.libelle_fonction}"[:48])
+    p.drawString(11*cm, y_pos + 1.5*cm, f"Date d'embauche: {enseignant.date_embauche:%d/%m/%Y}")
+    p.drawString(
+        11*cm, y_pos + 1.0*cm,
+        f"Ancienneté: {annees_anciennete(enseignant, etat.periode)} an(s)",
+    )
+    p.drawString(11*cm, y_pos + 0.5*cm, f"Jours travaillés: {etat.jours_travailles}")
+    libelle_jours = 'jour' if etat.nombre_jours_presence == 1 else 'jours'
+    p.drawString(
+        11*cm, y_pos,
+        f"Jours de présence: {etat.nombre_jours_presence} {libelle_jours}",
+    )
+
     # Détails du salaire
-    y_pos -= 1.5*cm
+    y_pos -= 1.2*cm
     p.setFont("Helvetica-Bold", 12)
     p.drawString(2*cm, y_pos, "DÉTAILS DU SALAIRE")
-    
-    # Tableau des montants
-    libelle_jours = (
-        'jour' if etat.nombre_jours_presence == 1 else 'jours'
-    )
-    data = [
-        ['Élément', 'Valeur'],
-        [
-            'Jours de présence',
-            f"{etat.nombre_jours_presence} {libelle_jours}",
-        ],
-        ['Salaire de base', f"{etat.salaire_base:,.0f}".replace(',', ' ')],
-    ]
-    
-    if etat.total_heures is not None:
-        data.append(['Heures travaillées', f"{etat.total_heures} h"])
-        data.append(['Taux horaire', f"{etat.taux_horaire_applique or 0:,.0f}".replace(',', ' ')])
-    
-    if etat.primes:
-        data.append(['Primes', f"{etat.primes:,.0f}".replace(',', ' ')])
-    
-    if etat.deductions:
-        data.append(['Déductions', f"-{etat.deductions:,.0f}".replace(',', ' ')])
 
-    if etat.avances:
-        data.append(['Avances sur salaire', f"-{etat.avances:,.0f}".replace(',', ' ')])
-    
-    data.append(['SALAIRE NET', f"{etat.salaire_net:,.0f}".replace(',', ' ')])
-    
+    # Rubriques du bulletin : base, primes, retenues puis solde cumulé.
+    def montant(valeur):
+        return f"{valeur:,.0f}".replace(',', ' ') if valeur else ''
+
+    libelle_base = 'Salaire de base'
+    if etat.total_heures is not None:
+        libelle_base = (
+            f"Heures prestées ({etat.total_heures:g} h × "
+            f"{montant(etat.taux_horaire_applique) or 0})"
+        )
+    rubriques = [(libelle_base, etat.salaire_base, None, None)]
+    for libelle, champ in (
+        ('Prime de fonction', 'prime_fonction'),
+        ('Prime de craie / révision', 'prime_craie'),
+        ("Prime d'ancienneté", 'prime_anciennete'),
+        ("Prime d'éloignement", 'prime_eloignement'),
+        ('Prime de performance', 'prime_performance'),
+        ('Prime exceptionnelle', 'prime_exceptionnelle'),
+        ('Prime de professeur principal', 'prime_professeur_principal'),
+        ("Prime d'heures de révision", 'prime_revision'),
+    ):
+        valeur = getattr(etat, champ)
+        if valeur or champ in ('prime_fonction', 'prime_anciennete'):
+            rubriques.append((libelle, None, valeur, None))
+    if etat.retenue_jours_chomes:
+        rubriques.append((
+            f"Retenue jours chômés ({etat.jours_chomes})",
+            None, None, etat.retenue_jours_chomes,
+        ))
+    if etat.deductions:
+        rubriques.append(('Autres retenues / sanctions', None, None, etat.deductions))
+    rubriques.append((
+        'Avance sur salaire et autre prélèvement', None, None, etat.avances,
+    ))
+
+    data = [['N°', 'Rubriques', 'Base', 'Primes', 'Retenue / acompte', 'Solde']]
+    solde = Decimal('0')
+    for numero, (libelle, base, prime, retenue) in enumerate(rubriques, start=1):
+        solde += (base or 0) + (prime or 0) - (retenue or 0)
+        data.append([
+            numero, libelle, montant(base), montant(prime), montant(retenue),
+            montant(solde) or '0',
+        ])
+    data.append([
+        '', 'TOTAL', montant(etat.salaire_base), montant(etat.primes),
+        montant(etat.total_retenues + (etat.avances or 0)),
+        montant(etat.salaire_net) or '0',
+    ])
+    data.append(['', 'SALAIRE BRUT', '', '', '', montant(etat.salaire_brut)])
+    data.append(['', 'NET À PAYER', '', '', '', montant(etat.salaire_net) or '0'])
+
     # Créer le tableau
-    y_pos -= 0.8*cm
-    table = Table(data, colWidths=[8*cm, 4*cm])
+    y_pos -= 0.4*cm
+    table = Table(data, colWidths=[0.9*cm, 6.0*cm, 2.4*cm, 2.2*cm, 3.4*cm, 2.3*cm])
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
         ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+        ('ALIGN', (2, 1), (-1, -1), 'RIGHT'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
         ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-        ('FONTSIZE', (0, 1), (-1, -1), 9),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, -1), (-1, -1), colors.lightgrey),
-        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ('FONTSIZE', (0, 1), (-1, -1), 8.5),
+        ('BACKGROUND', (0, -3), (-1, -1), colors.lightgrey),
+        ('FONTNAME', (0, -3), (-1, -1), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.black)
     ]))
-    
-    table.wrapOn(p, width, height)
-    table.drawOn(p, 2*cm, y_pos - len(data) * 0.6*cm)
-    
+
+    _, hauteur_table = table.wrapOn(p, width, height)
+    table.drawOn(p, 2*cm, y_pos - hauteur_table)
+    y_pos -= hauteur_table + 0.6*cm
+    p.setFont("Helvetica-Oblique", 9)
+    p.drawString(2*cm, y_pos, f"Net à payer : {montant_en_lettres(etat.salaire_net)}"[:110])
+
     # Statut
-    y_pos -= (len(data) + 2) * 0.6*cm
+    y_pos -= 0.9*cm
     p.setFont("Helvetica-Bold", 10)
     statut_text = "VALIDÉ" if etat.valide else "EN ATTENTE DE VALIDATION"
     if etat.paye:
