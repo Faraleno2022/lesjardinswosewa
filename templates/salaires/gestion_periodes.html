@@ -288,6 +288,18 @@
                        class="btn btn-info btn-action">
                         <i class="fas fa-list"></i> Voir États
                     </a>
+
+                    {% if not periode.cloturee %}
+                    <a href="{% url 'salaires:variables_paie_periode' periode.id %}"
+                       class="btn btn-outline-primary btn-action">
+                        <i class="fas fa-table"></i> Variables du mois
+                    </a>
+                    {% endif %}
+
+                    <a href="{% url 'salaires:documents_periode' periode.id %}"
+                       class="btn btn-outline-dark btn-action">
+                        <i class="fas fa-print"></i> Documents de paie
+                    </a>
                     
                     <button class="btn btn-outline-secondary btn-action" 
                             onclick="exporterPeriode({{ periode.id }})">

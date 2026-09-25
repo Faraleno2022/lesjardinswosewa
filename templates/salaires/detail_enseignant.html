@@ -239,6 +239,42 @@
                         {% endif %}
                     </span>
                 </div>
+
+                <div class="info-row">
+                    <span class="info-label">Matricule :</span>
+                    <span class="info-value">{{ enseignant.matricule|default:"Non renseigné" }}</span>
+                </div>
+
+                <div class="info-row">
+                    <span class="info-label">Fonction :</span>
+                    <span class="info-value">{{ enseignant.libelle_fonction }}</span>
+                </div>
+
+                {% if enseignant.prime_fonction or enseignant.prime_craie or enseignant.distance_km %}
+                <div class="info-row">
+                    <span class="info-label">Primes fixes :</span>
+                    <span class="info-value">
+                        Fonction {{ enseignant.prime_fonction|floatformat:0|intcomma }} ·
+                        Craie {{ enseignant.prime_craie|floatformat:0|intcomma }} GNF ·
+                        {{ enseignant.distance_km|floatformat:"-1" }} km
+                    </span>
+                </div>
+                {% endif %}
+
+                {% if enseignant.heures_hebdomadaires %}
+                <div class="info-row">
+                    <span class="info-label">Emploi du temps :</span>
+                    <span class="info-value">
+                        L {{ enseignant.heures_lundi|floatformat:"-1" }} ·
+                        M {{ enseignant.heures_mardi|floatformat:"-1" }} ·
+                        M {{ enseignant.heures_mercredi|floatformat:"-1" }} ·
+                        J {{ enseignant.heures_jeudi|floatformat:"-1" }} ·
+                        V {{ enseignant.heures_vendredi|floatformat:"-1" }} ·
+                        S {{ enseignant.heures_samedi|floatformat:"-1" }}
+                        ({{ enseignant.heures_hebdomadaires|floatformat:"-1" }} h / semaine)
+                    </span>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -367,7 +403,7 @@
                             <div class="text-success small">Primes : +{{ etat.primes|floatformat:0|intcomma }} GNF</div>
                             {% endif %}
                             {% if not etat.valide and not etat.paye and not etat.periode.cloturee %}
-                            <a href="{% url 'salaires:ajuster_etat_salaire' etat.id %}#id_primes" class="btn btn-sm btn-outline-success mt-2">Primes et retenues</a>
+                            <a href="{% url 'salaires:ajuster_etat_salaire' etat.id %}#id_prime_performance" class="btn btn-sm btn-outline-success mt-2">Primes et retenues</a>
                             {% endif %}
                         </div>
                     </div>

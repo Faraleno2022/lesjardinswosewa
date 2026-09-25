@@ -1,5 +1,6 @@
 from datetime import date, time
 from decimal import Decimal
+from io import BytesIO
 from unittest.mock import patch
 
 from django.conf import settings
@@ -7,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from pypdf import PdfReader
 
 from eleves.models import Classe, Ecole
 from synchronisation.engine import queryset_for_ecole, serialize_instance
@@ -133,7 +135,7 @@ class MoteurPaieTests(TestCase):
             enseignant=enseignant,
             periode=self.periode,
             salaire_base=Decimal('1000000'),
-            primes=Decimal('100000'),
+            prime_exceptionnelle=Decimal('100000'),
             deductions=Decimal('25000'),
             salaire_net=Decimal('0'),
             calcule_par=self.user,
@@ -614,7 +616,7 @@ class MoteurPaieTests(TestCase):
             reverse('salaires:ajuster_etat_salaire', args=[etat.id]),
             {
                 'salaire_base': '900000',
-                'primes': '100000',
+                'prime_exceptionnelle': '100000',
                 'deductions': '25000',
                 'observations': 'Ajustement contrôlé',
             },
@@ -638,7 +640,7 @@ class MoteurPaieTests(TestCase):
             {
                 'total_heures': '12.5',
                 'taux_horaire_applique': '15000',
-                'primes': '10000',
+                'prime_exceptionnelle': '10000',
                 'deductions': '5000',
                 'observations': 'Heures saisies faute de pointage',
             },
@@ -673,7 +675,7 @@ class MoteurPaieTests(TestCase):
             {
                 'total_heures': '100',
                 'taux_horaire_applique': '12000',
-                'primes': '0',
+                'prime_exceptionnelle': '0',
                 'deductions': '0',
                 'observations': '',
             },
@@ -700,15 +702,17 @@ class MoteurPaieTests(TestCase):
         )
         self.assertEqual(etat.nombre_jours_presence, 3)
 
-        with patch('reportlab.platypus.Table') as table_mock:
-            response = self.client.get(
-                reverse('salaires:fiche_paie_pdf', args=[etat.id])
-            )
+        response = self.client.get(
+            reverse('salaires:fiche_paie_pdf', args=[etat.id])
+        )
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/pdf')
-        donnees = table_mock.call_args.args[0]
-        self.assertIn(['Jours de présence', '3 jours'], donnees)
+        texte = ''.join(
+            page.extract_text()
+            for page in PdfReader(BytesIO(response.content)).pages
+        )
+        self.assertIn('Jours de présence: 3 jours', texte)
 
     def test_formulaire_presence_sans_heures_ne_plante_plus(self):
         enseignant = self.creer_secondaire()
@@ -811,11 +815,11 @@ class MoteurPaieTests(TestCase):
         form = EtatSalaireAjustementForm(
             data={
                 'salaire_base': '1000000',
-                'primes': '-1',
+                'prime_exceptionnelle': '-1',
                 'deductions': '0',
                 'observations': '',
             },
             instance=etat,
         )
         self.assertFalse(form.is_valid())
-        self.assertIn('primes', form.errors)
+        self.assertIn('prime_exceptionnelle', form.errors)

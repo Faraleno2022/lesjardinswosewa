@@ -55,6 +55,59 @@ class SourceHeuresSalaire(models.TextChoices):
     POINTAGE = 'POINTAGE', 'Pointages arrivée / départ'
     SAISIE_MENSUELLE = 'SAISIE_MENSUELLE', 'Saisie mensuelle globale'
     SALAIRE_FIXE = 'SALAIRE_FIXE', 'Salaire fixe négocié'
+    EMPLOI_DU_TEMPS = 'EMPLOI_DU_TEMPS', 'Emploi du temps hebdomadaire'
+
+
+class CategoriePaie(models.TextChoices):
+    """Regroupement du personnel dans les états et la masse salariale."""
+
+    DIRECTION = 'DIRECTION', 'Direction'
+    PRIMAIRE = 'PRIMAIRE', 'Maternelle et primaire'
+    SECONDAIRE = 'SECONDAIRE', 'Secondaire'
+    APPUI = 'APPUI', "Personnel d'appui"
+
+
+CATEGORIE_PAR_TYPE = {
+    TypeEnseignant.ADMINISTRATEUR: CategoriePaie.DIRECTION,
+    TypeEnseignant.GARDERIE: CategoriePaie.PRIMAIRE,
+    TypeEnseignant.MATERNELLE: CategoriePaie.PRIMAIRE,
+    TypeEnseignant.PRIMAIRE: CategoriePaie.PRIMAIRE,
+    TypeEnseignant.SECONDAIRE: CategoriePaie.SECONDAIRE,
+}
+
+# Jours de l'emploi du temps hebdomadaire : (champ, libellé court, weekday()).
+JOURS_EMPLOI_DU_TEMPS = (
+    ('heures_lundi', 'Lun', 0),
+    ('heures_mardi', 'Mar', 1),
+    ('heures_mercredi', 'Mer', 2),
+    ('heures_jeudi', 'Jeu', 3),
+    ('heures_vendredi', 'Ven', 4),
+    ('heures_samedi', 'Sam', 5),
+)
+
+
+def _champ_montant(verbose_name, help_text=''):
+    return models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0'),
+        verbose_name=verbose_name,
+        help_text=help_text,
+        validators=[MinValueValidator(Decimal('0'))],
+    )
+
+
+def _champ_heures_jour(verbose_name):
+    return models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal('0'),
+        verbose_name=verbose_name,
+        validators=[
+            MinValueValidator(Decimal('0')),
+            MaxValueValidator(Decimal('24')),
+        ],
+    )
 
 
 class StatutEnseignant(models.TextChoices):
@@ -77,6 +130,7 @@ class Enseignant(SyncTrackedModel):
     """Modèle représentant un enseignant"""
     
     # Informations personnelles
+    matricule = models.CharField(max_length=30, blank=True, verbose_name="Matricule")
     nom = models.CharField(max_length=100, verbose_name="Nom")
     prenoms = models.CharField(max_length=150, verbose_name="Prénoms")
     telephone = models.CharField(max_length=20, blank=True, verbose_name="Téléphone")
@@ -128,7 +182,37 @@ class Enseignant(SyncTrackedModel):
             MaxValueValidator(Decimal('200')),
         ],
     )
-    
+
+    # Primes permanentes reportées chaque mois sur l'état de salaire
+    fonction = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name="Charge ou fonction",
+        help_text="Ex. Directrice, Chargé de cours (CP1), Anglais",
+    )
+    prime_fonction = _champ_montant(
+        "Prime de fonction (GNF)", "Montant mensuel fixe"
+    )
+    prime_craie = _champ_montant(
+        "Prime de craie / révision (GNF)", "Montant mensuel fixe"
+    )
+    distance_km = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=Decimal('0'),
+        verbose_name="Distance domicile-école (km)",
+        help_text="Sert au calcul de la prime d'éloignement",
+        validators=[MinValueValidator(Decimal('0'))],
+    )
+
+    # Emploi du temps hebdomadaire (secondaire) : heures par jour de semaine
+    heures_lundi = _champ_heures_jour("Heures le lundi")
+    heures_mardi = _champ_heures_jour("Heures le mardi")
+    heures_mercredi = _champ_heures_jour("Heures le mercredi")
+    heures_jeudi = _champ_heures_jour("Heures le jeudi")
+    heures_vendredi = _champ_heures_jour("Heures le vendredi")
+    heures_samedi = _champ_heures_jour("Heures le samedi")
+
     # Dates
     date_embauche = models.DateField(verbose_name="Date d'embauche")
     date_creation = models.DateTimeField(auto_now_add=True)
@@ -166,7 +250,22 @@ class Enseignant(SyncTrackedModel):
             self.type_enseignant in TypeEnseignant.values
             and not self.est_taux_horaire
         )
-    
+
+    @property
+    def categorie_paie(self):
+        return CATEGORIE_PAR_TYPE.get(self.type_enseignant, CategoriePaie.APPUI)
+
+    @property
+    def libelle_fonction(self):
+        return self.fonction or self.get_type_enseignant_display()
+
+    @property
+    def heures_hebdomadaires(self):
+        return sum(
+            (getattr(self, champ) or Decimal('0') for champ, _, _ in JOURS_EMPLOI_DU_TEMPS),
+            Decimal('0'),
+        )
+
     def clean(self):
         super().clean()
         
@@ -346,6 +445,61 @@ class AffectationClasse(SyncTrackedModel):
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
+
+
+class ParametresPaie(SyncTrackedModel):
+    """Barèmes de primes et retenues propres à chaque école.
+
+    Tous les montants valent zéro tant que l'école ne les a pas renseignés,
+    pour ne jamais modifier une paie existante à son insu.
+    """
+
+    ecole = models.OneToOneField(
+        Ecole,
+        on_delete=models.CASCADE,
+        related_name='parametres_paie',
+        verbose_name="École",
+    )
+    prime_anciennete_par_an = _champ_montant(
+        "Prime d'ancienneté par année (GNF)",
+        "Multipliée par le nombre d'années depuis l'embauche",
+    )
+    prime_eloignement_par_km = _champ_montant(
+        "Prime d'éloignement par km (GNF)",
+        "Multipliée par la distance domicile-école de la fiche du personnel",
+    )
+    retenue_par_jour_chome = _champ_montant(
+        "Retenue par jour chômé (GNF)",
+        "Déduite du salaire pour chaque jour chômé saisi dans le mois",
+    )
+    prime_professeur_principal = _champ_montant(
+        "Prime de professeur principal (GNF)",
+        "Par classe tenue comme professeur principal (secondaire)",
+    )
+    prime_heure_revision = _champ_montant(
+        "Prime par heure de révision (GNF)",
+        "Multipliée par les heures de révision du mois (secondaire)",
+    )
+    date_modification = models.DateTimeField(auto_now=True)
+    modifie_par = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='parametres_paie_modifies',
+    )
+
+    class Meta:
+        verbose_name = "Paramètres de paie"
+        verbose_name_plural = "Paramètres de paie"
+
+    def __str__(self):
+        return f"Paramètres de paie - {self.ecole.nom}"
+
+    @classmethod
+    def pour_ecole(cls, ecole):
+        """Paramètres enregistrés, ou barème vide non sauvegardé."""
+        return cls.objects.filter(ecole=ecole).first() or cls(ecole=ecole)
 
 
 class PeriodeSalaire(SyncTrackedModel):
@@ -556,12 +710,65 @@ class EtatSalaire(SyncTrackedModel):
         validators=[MinValueValidator(Decimal('0'))],
     )
     primes = models.DecimalField(
-        max_digits=10, 
-        decimal_places=2, 
+        max_digits=10,
+        decimal_places=2,
         default=Decimal('0'),
         verbose_name="Primes",
+        help_text="Total recalculé à partir des primes détaillées",
         validators=[MinValueValidator(Decimal('0'))],
     )
+
+    # Primes détaillées : les quatre premières viennent de la fiche du
+    # personnel et du barème, les autres sont saisies pour le mois.
+    prime_fonction = _champ_montant("Prime de fonction")
+    prime_craie = _champ_montant("Prime de craie / révision")
+    prime_anciennete = _champ_montant("Prime d'ancienneté")
+    prime_eloignement = _champ_montant("Prime d'éloignement")
+    prime_performance = _champ_montant("Prime de performance")
+    prime_exceptionnelle = _champ_montant("Prime exceptionnelle")
+    prime_professeur_principal = _champ_montant("Prime de professeur principal")
+    prime_revision = _champ_montant("Prime d'heures de révision")
+
+    # Variables du mois
+    jours_chomes = models.PositiveSmallIntegerField(
+        default=0,
+        verbose_name="Jours chômés",
+        validators=[MaxValueValidator(31)],
+    )
+    retenue_jours_chomes = _champ_montant(
+        "Retenue pour jours chômés",
+        "Jours chômés multipliés par la retenue journalière du barème",
+    )
+    heures_a_prester = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Heures à prester",
+        help_text="Heures prévues par l'emploi du temps hebdomadaire sur le mois",
+        validators=[MinValueValidator(Decimal('0'))],
+    )
+    heures_absence = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=Decimal('0'),
+        verbose_name="Heures d'absence",
+        help_text="Retirées des heures à prester de l'emploi du temps",
+        validators=[MinValueValidator(Decimal('0'))],
+    )
+    heures_revision = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        default=Decimal('0'),
+        verbose_name="Heures de révision",
+        validators=[MinValueValidator(Decimal('0'))],
+    )
+    classes_professeur_principal = models.PositiveSmallIntegerField(
+        default=0,
+        verbose_name="Classes tenues comme professeur principal",
+        validators=[MaxValueValidator(20)],
+    )
+
     deductions = models.DecimalField(
         max_digits=10, 
         decimal_places=2, 
@@ -630,11 +837,57 @@ class EtatSalaire(SyncTrackedModel):
     def __str__(self):
         return f"{self.enseignant.nom_complet} - {self.periode.nom_periode}"
 
+    CHAMPS_PRIMES = (
+        'prime_fonction',
+        'prime_craie',
+        'prime_anciennete',
+        'prime_eloignement',
+        'prime_performance',
+        'prime_exceptionnelle',
+        'prime_professeur_principal',
+        'prime_revision',
+    )
+
+    @property
+    def total_primes_detaillees(self):
+        return sum(
+            (getattr(self, champ) or Decimal('0') for champ in self.CHAMPS_PRIMES),
+            Decimal('0'),
+        )
+
+    @property
+    def salaire_brut(self):
+        return (self.salaire_base or Decimal('0')) + (self.primes or Decimal('0'))
+
+    @property
+    def total_retenues(self):
+        return (self.deductions or Decimal('0')) + (
+            self.retenue_jours_chomes or Decimal('0')
+        )
+
+    @property
+    def montant_disponible(self):
+        """Montant sur lequel les avances peuvent encore être récupérées."""
+        return self.salaire_brut - self.total_retenues
+
+    @property
+    def jours_travailles(self):
+        """Jours ouvrables (lundi-vendredi) du mois moins les jours chômés."""
+        from calendar import monthrange
+        from datetime import date
+
+        nb_jours = monthrange(self.periode.annee, self.periode.mois)[1]
+        ouvrables = sum(
+            1 for jour in range(1, nb_jours + 1)
+            if date(self.periode.annee, self.periode.mois, jour).weekday() < 5
+        )
+        return max(0, ouvrables - (self.jours_chomes or 0))
+
     def clean(self):
         super().clean()
         salaire_base = self.salaire_base or Decimal('0')
-        primes = self.primes or Decimal('0')
-        deductions = self.deductions or Decimal('0')
+        primes = self.total_primes_detaillees
+        deductions = self.total_retenues
         avances = self.avances or Decimal('0')
         errors = {}
 
@@ -657,17 +910,18 @@ class EtatSalaire(SyncTrackedModel):
             raise ValidationError(errors)
     
     def save(self, *args, **kwargs):
-        # Calcul automatique du salaire net
+        # Le total des primes découle toujours du détail par rubrique.
+        self.primes = self.total_primes_detaillees
         salaire_base = self.salaire_base or Decimal('0')
-        primes = self.primes or Decimal('0')
-        deductions = self.deductions or Decimal('0')
         avances = self.avances or Decimal('0')
-        self.salaire_net = (salaire_base + primes - deductions - avances).quantize(
-            Decimal('0.01'), rounding=ROUND_HALF_UP
-        )
+        self.salaire_net = (
+            salaire_base + self.primes - self.total_retenues - avances
+        ).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         self.full_clean()
         if kwargs.get('update_fields') is not None:
-            kwargs['update_fields'] = set(kwargs['update_fields']) | {'salaire_net'}
+            kwargs['update_fields'] = set(kwargs['update_fields']) | {
+                'salaire_net', 'primes'
+            }
         super().save(*args, **kwargs)
     
     @property

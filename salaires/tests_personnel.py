@@ -70,7 +70,7 @@ class PersonnelEtPrimesTests(TestCase):
                 detail = self.client.get(reverse('salaires:detail_enseignant', args=[travailleur.pk]))
                 self.assertContains(detail, 'Primes et retenues')
                 response = self.client.post(reverse('salaires:ajuster_etat_salaire', args=[etat.pk]), {
-                    'salaire_base': '1000000', 'primes': '150000',
+                    'salaire_base': '1000000', 'prime_exceptionnelle': '150000',
                     'deductions': '25000', 'observations': 'Prime de rendement',
                 })
                 self.assertEqual(response.status_code, 302)

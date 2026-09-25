@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Documents de paie{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <div>
+            <h1 class="h4 mb-0"><i class="fas fa-print text-primary me-2"></i>Documents de paie — {{ periode.nom_periode }}</h1>
+            <p class="text-muted mb-0">{{ periode.ecole.nom }}</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'salaires:variables_paie_periode' periode.id %}" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-table me-1"></i>Variables du mois
+            </a>
+            <a href="{% url 'salaires:etats_salaire' %}?periode={{ periode.id }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-list me-1"></i>États de salaire
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>Masse salariale</strong>
+            <a href="{% url 'salaires:pdf_masse_salariale' periode.id %}" class="btn btn-sm btn-outline-danger">
+                <i class="fas fa-file-pdf me-1"></i>PDF
+            </a>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Catégorie</th>
+                        <th class="text-end">Effectif</th>
+                        <th class="text-end">Montant brut</th>
+                        <th class="text-end">Retenues</th>
+                        <th class="text-end">Acompte</th>
+                        <th class="text-end">Net à payer</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for groupe in groupes %}
+                    <tr>
+                        <td>{{ groupe.libelle }}</td>
+                        <td class="text-end">{{ groupe.totaux.effectif }}</td>
+                        <td class="text-end">{{ groupe.totaux.brut|floatformat:0|intcomma }}</td>
+                        <td class="text-end">{{ groupe.totaux.retenues|floatformat:0|intcomma }}</td>
+                        <td class="text-end">{{ groupe.totaux.avances|floatformat:0|intcomma }}</td>
+                        <td class="text-end">{{ groupe.totaux.net|floatformat:0|intcomma }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="text-center text-muted py-3">Aucun salaire calculé pour cette période.</td></tr>
+                    {% endfor %}
+                </tbody>
+                {% if groupes %}
+                <tfoot class="fw-bold">
+                    <tr>
+                        <td>TOTAL</td>
+                        <td class="text-end">{{ total.effectif }}</td>
+                        <td class="text-end">{{ total.brut|floatformat:0|intcomma }}</td>
+                        <td class="text-end">{{ total.retenues|floatformat:0|intcomma }}</td>
+                        <td class="text-end">{{ total.avances|floatformat:0|intcomma }}</td>
+                        <td class="text-end">{{ total.net|floatformat:0|intcomma }} GNF</td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
+        {% if groupes %}
+        <div class="card-footer small text-muted">
+            Arrêtée à la somme de : {{ total_en_lettres }} ({{ total.brut|floatformat:0|intcomma }} GNF).
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="row g-3">
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <h2 class="h6"><i class="fas fa-file-invoice-dollar me-1 text-primary"></i>États de salaire à payer</h2>
+                    <p class="small text-muted">Salaire de base, primes (fonction, craie, ancienneté, éloignement, performance, exceptionnelle), acompte et net. Le secondaire affiche les heures prestées et le taux.</p>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a class="btn btn-sm btn-primary" href="{% url 'salaires:pdf_etat_salaire' periode.id %}">Tout le personnel</a>
+                        {% for code, libelle in categories %}
+                        <a class="btn btn-sm btn-outline-primary" href="{% url 'salaires:pdf_etat_salaire' periode.id %}?categorie={{ code }}">{{ libelle }}</a>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <h2 class="h6"><i class="fas fa-signature me-1 text-primary"></i>Fiches d'émargement pour acquis</h2>
+                    <p class="small text-muted">À faire signer par chaque membre du personnel lors de la remise du salaire.</p>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a class="btn btn-sm btn-primary" href="{% url 'salaires:pdf_emargement' periode.id %}">Tout le personnel</a>
+                        {% for code, libelle in categories %}
+                        <a class="btn btn-sm btn-outline-primary" href="{% url 'salaires:pdf_emargement' periode.id %}?categorie={{ code }}">{{ libelle }}</a>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h2 class="h6"><i class="fas fa-receipt me-1 text-primary"></i>Bulletins de paie individuels</h2>
+                    <div class="d-flex flex-wrap gap-2">
+                        {% for groupe in groupes %}{% for etat in groupe.etats %}
+                        <a class="btn btn-sm btn-outline-secondary" href="{% url 'salaires:fiche_paie_pdf' etat.id %}">{{ etat.enseignant.nom_complet }}</a>
+                        {% endfor %}{% empty %}
+                        <span class="text-muted small">Aucun bulletin disponible.</span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

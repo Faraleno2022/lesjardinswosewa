@@ -513,6 +513,43 @@
                 </div>
             </div>
 
+            <!-- Rubriques de l'état de salaire -->
+            <div class="form-section">
+                <h6><i class="fas fa-file-invoice me-2 text-primary"></i>État de salaire et primes fixes</h6>
+                <p class="help-text">Ces montants sont reportés chaque mois sur l'état de salaire. L'ancienneté et l'éloignement sont valorisés avec le barème de l'école (Salaires › Barème des primes).</p>
+                <div class="row">
+                    {% for champ in form %}
+                    {% if champ.name in "matricule fonction prime_fonction prime_craie distance_km" %}
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="{{ champ.id_for_label }}" class="form-label">{{ champ.label }}</label>
+                            {{ champ }}
+                            {% if champ.errors %}
+                                <ul class="error-list">{% for error in champ.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+
+                <div id="emploi-du-temps-field" class="mt-2">
+                    <label class="form-label">Emploi du temps hebdomadaire (heures par jour, secondaire)</label>
+                    <p class="help-text">Sans pointage ni saisie mensuelle, les heures payées = ces heures × nombre de jours correspondants du mois − heures d'absence.</p>
+                    <div class="row g-2">
+                        {% for champ in form %}
+                        {% if champ.name|slice:":7" == "heures_" and champ.name != "heures_mensuelles" and champ.name != "heures_affectation" %}
+                        <div class="col-4 col-md-2">
+                            <label for="{{ champ.id_for_label }}" class="form-label small">{{ champ.label }}</label>
+                            {{ champ }}
+                            {% for error in champ.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
             <!-- Erreurs générales du formulaire -->
             {% if form.non_field_errors %}
                 <div class="alert alert-danger">
@@ -546,6 +583,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const salaireFixeField = document.getElementById('salaire-fixe-field');
     const tauxHoraireField = document.getElementById('taux-horaire-field');
     const heuresMensuellesField = document.getElementById('heures-mensuelles-field');
+    const emploiDuTempsField = document.getElementById('emploi-du-temps-field');
     const ecoleSelect = document.getElementById('{{ form.ecole.id_for_label }}');
     const classePrincipaleField = document.getElementById('classe-principale-field');
     const classesSecondaireField = document.getElementById('classes-secondaire-field');
@@ -556,6 +594,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     function toggleSalaryFields() {
         const selectedType = typeEnseignantSelect.value;
+        emploiDuTempsField.style.display = selectedType === 'SECONDAIRE' ? '' : 'none';
         
         if (selectedType === 'SECONDAIRE') {
             // Enseignant du secondaire : taux horaire requis, volume indicatif facultatif

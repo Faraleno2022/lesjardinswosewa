@@ -60,6 +60,7 @@ SYNC_MODEL_LABELS = [
     'bus.AbonnementCantine',
     'salaires.Enseignant',
     'salaires.AffectationClasse',
+    'salaires.ParametresPaie',
     'salaires.PeriodeSalaire',
     'salaires.EtatSalaire',
     'salaires.AvanceSalaire',
