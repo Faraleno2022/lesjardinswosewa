@@ -669,12 +669,15 @@ class PresenceForm(forms.ModelForm):
         return cleaned_data
 
 
-CHAMPS_VARIABLES_MOIS = ('jours_chomes', 'prime_performance', 'prime_exceptionnelle')
+CHAMPS_VARIABLES_MOIS = (
+    'jours_chomes', 'effectif_eleves', 'prime_performance', 'prime_exceptionnelle',
+)
 CHAMPS_VARIABLES_SECONDAIRE = (
     'heures_absence', 'heures_revision', 'classes_professeur_principal',
 )
 LIBELLES_VARIABLES = {
     'jours_chomes': 'Jours chômés',
+    'effectif_eleves': 'Effectif de la classe',
     'prime_performance': 'Prime de performance (GNF)',
     'prime_exceptionnelle': 'Prime exceptionnelle (GNF)',
     'heures_absence': "Heures d'absence",
@@ -692,7 +695,7 @@ def _widget_nombre(step='1', **attrs):
 class EtatSalaireAjustementForm(forms.ModelForm):
     """Modification contrôlée du calcul avant validation définitive.
 
-    Les primes de fonction, craie, ancienneté et éloignement proviennent de la
+    Les primes de fonction, craie (hors effectif), ancienneté et éloignement proviennent de la
     fiche du personnel et du barème : elles sont affichées mais recalculées.
     """
 
@@ -714,6 +717,7 @@ class EtatSalaireAjustementForm(forms.ModelForm):
                 'class': 'form-control', 'min': '0', 'step': '0.01'
             }),
             'jours_chomes': _widget_nombre(max='31'),
+            'effectif_eleves': _widget_nombre(max='500'),
             'prime_performance': _widget_nombre(),
             'prime_exceptionnelle': _widget_nombre(),
             'heures_absence': _widget_nombre('0.5'),
@@ -772,6 +776,7 @@ class EtatSalaireAjustementForm(forms.ModelForm):
         primes = (
             (enseignant.prime_fonction or 0)
             + (enseignant.prime_craie or 0)
+            + cleaned_data.get('effectif_eleves', 0) * parametres.prime_craie_par_eleve
             + annees_anciennete(enseignant, etat.periode)
             * parametres.prime_anciennete_par_an
             + (enseignant.distance_km or 0) * parametres.prime_eloignement_par_km
@@ -936,6 +941,7 @@ class ParametresPaieForm(forms.ModelForm):
     # Valeurs du classeur de paie de référence, proposées comme exemples.
     EXEMPLES = {
         'prime_anciennete_par_an': '10000',
+        'prime_craie_par_eleve': '500',
         'prime_eloignement_par_km': '2000',
         'retenue_par_jour_chome': '30000',
         'prime_professeur_principal': '50000',
@@ -946,6 +952,7 @@ class ParametresPaieForm(forms.ModelForm):
         model = ParametresPaie
         fields = [
             'prime_anciennete_par_an',
+            'prime_craie_par_eleve',
             'prime_eloignement_par_km',
             'retenue_par_jour_chome',
             'prime_professeur_principal',
@@ -973,13 +980,15 @@ class VariablesPaiePeriodeForm(forms.Form):
                 champs += list(CHAMPS_VARIABLES_SECONDAIRE)
             verrouille = etat.valide or etat.paye
             for champ in champs:
-                entier = champ in ('jours_chomes', 'classes_professeur_principal')
+                entier = champ in (
+                    'jours_chomes', 'effectif_eleves', 'classes_professeur_principal',
+                )
                 classe = forms.IntegerField if entier else forms.DecimalField
                 options = {} if entier else {'max_digits': 12, 'decimal_places': 2}
                 self.fields[self.nom_champ(etat, champ)] = classe(
                     required=False,
                     min_value=0,
-                    max_value=(31 if champ == 'jours_chomes' else None),
+                    max_value={'jours_chomes': 31, 'effectif_eleves': 500}.get(champ),
                     label=LIBELLES_VARIABLES[champ],
                     initial=getattr(etat, champ),
                     disabled=verrouille,

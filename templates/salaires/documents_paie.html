@@ -103,8 +103,17 @@
                 </div>
             </div>
         </div>
-        <div class="col-12">
-            <div class="card shadow-sm">
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <h2 class="h6"><i class="fas fa-hand-holding-usd me-1 text-primary"></i>État des acomptes</h2>
+                    <p class="small text-muted">Avances du mois par personne, bon par bon, avec le total à déduire du salaire.</p>
+                    <a class="btn btn-sm btn-primary" href="{% url 'salaires:pdf_acomptes' periode.id %}">Télécharger le PDF</a>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm">
                 <div class="card-body">
                     <h2 class="h6"><i class="fas fa-receipt me-1 text-primary"></i>Bulletins de paie individuels</h2>
                     <div class="d-flex flex-wrap gap-2">

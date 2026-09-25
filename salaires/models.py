@@ -464,6 +464,10 @@ class ParametresPaie(SyncTrackedModel):
         "Prime d'ancienneté par année (GNF)",
         "Multipliée par le nombre d'années depuis l'embauche",
     )
+    prime_craie_par_eleve = _champ_montant(
+        "Prime de craie par élève (GNF)",
+        "Multipliée par l'effectif de la classe tenue, saisi chaque mois",
+    )
     prime_eloignement_par_km = _champ_montant(
         "Prime d'éloignement par km (GNF)",
         "Multipliée par la distance domicile-école de la fiche du personnel",
@@ -762,6 +766,12 @@ class EtatSalaire(SyncTrackedModel):
         default=Decimal('0'),
         verbose_name="Heures de révision",
         validators=[MinValueValidator(Decimal('0'))],
+    )
+    effectif_eleves = models.PositiveSmallIntegerField(
+        default=0,
+        verbose_name="Effectif de la classe",
+        help_text="Élèves de la classe tenue : sert à la prime de craie par élève",
+        validators=[MaxValueValidator(500)],
     )
     classes_professeur_principal = models.PositiveSmallIntegerField(
         default=0,

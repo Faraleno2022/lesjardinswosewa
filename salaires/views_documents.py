@@ -168,3 +168,10 @@ def pdf_masse_salariale(request, periode_id):
 def pdf_emargement(request, periode_id):
     periode = get_object_or_404(PeriodeSalaire.objects.select_related('ecole'), pk=periode_id)
     return documents.pdf_emargement(periode, _categorie(request))
+
+
+@login_required
+@require_school_object(model=PeriodeSalaire, pk_kwarg='periode_id', field_path='ecole')
+def pdf_acomptes(request, periode_id):
+    periode = get_object_or_404(PeriodeSalaire.objects.select_related('ecole'), pk=periode_id)
+    return documents.pdf_acomptes(periode)

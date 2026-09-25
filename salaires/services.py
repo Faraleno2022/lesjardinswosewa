@@ -137,7 +137,8 @@ def annees_anciennete(enseignant, periode):
 def appliquer_primes_et_retenues(etat, parametres=None):
     """Recalcule les rubriques automatiques d'un état sans toucher aux saisies.
 
-    Les primes de fonction et de craie viennent de la fiche du personnel ;
+    La prime de fonction vient de la fiche du personnel ; la prime de craie
+    ajoute au montant fixe de la fiche l'effectif du mois × le taux par élève ;
     ancienneté, éloignement, professeur principal, révision et jours chômés
     sont valorisés avec le barème de l'école. Performance et prime
     exceptionnelle restent des saisies du mois.
@@ -147,7 +148,10 @@ def appliquer_primes_et_retenues(etat, parametres=None):
         parametres = ParametresPaie.pour_ecole(etat.periode.ecole)
 
     etat.prime_fonction = arrondir_montant(enseignant.prime_fonction)
-    etat.prime_craie = arrondir_montant(enseignant.prime_craie)
+    etat.prime_craie = arrondir_montant(
+        (enseignant.prime_craie or Decimal('0'))
+        + (etat.effectif_eleves or 0) * parametres.prime_craie_par_eleve
+    )
     etat.prime_anciennete = arrondir_montant(
         annees_anciennete(enseignant, etat.periode)
         * parametres.prime_anciennete_par_an

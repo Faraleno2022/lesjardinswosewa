@@ -4,7 +4,8 @@
   « Etat ») avec les six primes ;
 * état du secondaire (feuille « Etat Prof final ») avec les heures ;
 * masse salariale (feuille « Masse Salariale ») ;
-* fiche d'émargement pour acquis (feuilles « Acquis »).
+* fiche d'émargement pour acquis (feuilles « Acquis ») ;
+* état des acomptes avec le détail des bons (feuille « Acompte »).
 """
 
 from decimal import Decimal
@@ -27,7 +28,7 @@ from reportlab.platypus import (
 from ecole_moderne.branding import get_pdf_palette
 
 from .lettres import montant_en_lettres
-from .models import CategoriePaie
+from .models import AvanceSalaire, CategoriePaie, StatutAvanceSalaire
 from .services import etats_par_categorie, totaux_etats
 
 MOIS = (
@@ -386,6 +387,62 @@ def pdf_emargement(periode, categorie=None):
         lignes, [l * cm for l in largeurs], aligner_depuis=7,
         hauteur_ligne=0.9 * cm,
     ))
+    document.signatures(('La Fondation', 'Le Comptable'))
+    document.construire()
+    return response
+
+
+def pdf_acomptes(periode):
+    """État des acomptes du mois : chaque avance non annulée est un bon."""
+    avances = (
+        AvanceSalaire.objects.filter(periode=periode)
+        .exclude(statut=StatutAvanceSalaire.ANNULEE)
+        .select_related('enseignant')
+        .order_by('enseignant__nom', 'enseignant__prenoms', 'date_avance', 'date_creation')
+    )
+    bons_par_enseignant = {}
+    for avance in avances:
+        bons_par_enseignant.setdefault(avance.enseignant, []).append(avance)
+    nb_bons = max([5, *(len(bons) for bons in bons_par_enseignant.values())])
+
+    response = reponse_pdf(f"acomptes_{periode.mois:02d}_{periode.annee}.pdf")
+    document = DocumentPaie(response, periode, "ACOMPTES DU PERSONNEL", paysage=True)
+    lignes = [['N°', 'Prénoms et nom', 'Matri.', 'Site', 'Charge ou fonction',
+               *[f'Bon {i}' for i in range(1, nb_bons + 1)], 'Acompte payé',
+               'Observation']]
+    total = Decimal('0')
+    totaux_bons = [Decimal('0')] * nb_bons
+    for numero, (enseignant, bons) in enumerate(bons_par_enseignant.items(), start=1):
+        montants = [bon.montant for bon in bons] + [None] * (nb_bons - len(bons))
+        for index, montant in enumerate(montants):
+            totaux_bons[index] += montant or 0
+        sous_total = sum((bon.montant for bon in bons), Decimal('0'))
+        total += sous_total
+        lignes.append([
+            numero,
+            Paragraph(nom_affiche(enseignant), document.style_cellule),
+            enseignant.matricule,
+            Paragraph(CategoriePaie(enseignant.categorie_paie).label, document.style_cellule),
+            Paragraph(enseignant.libelle_fonction, document.style_cellule),
+            *[gnf(m) if m else '' for m in montants],
+            gnf(sous_total),
+            Paragraph(', '.join(b.reference for b in bons if b.reference), document.style_cellule),
+        ])
+    if len(lignes) == 1:
+        document.elements.append(Paragraph(
+            "Aucun acompte enregistré pour cette période.", document.style_texte,
+        ))
+    else:
+        lignes.append([
+            '', 'TOTAL', '', '', '', *[gnf(t) if t else '' for t in totaux_bons],
+            gnf(total), '',
+        ])
+        largeur_bon = min(2.0, 12.0 / nb_bons)
+        largeurs = [0.7, 4.2, 1.6, 2.2, 3.0] + [largeur_bon] * nb_bons + [2.2, 3.0]
+        document.elements.append(document.tableau(
+            lignes, [l * cm for l in largeurs], [len(lignes) - 1], aligner_depuis=5,
+        ))
+        document.arrete("le présent acompte", total)
     document.signatures(('La Fondation', 'Le Comptable'))
     document.construire()
     return response

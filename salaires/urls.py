@@ -62,6 +62,7 @@ urlpatterns = [
     path('periodes/<int:periode_id>/documents/etat.pdf', views_documents.pdf_etat_salaire, name='pdf_etat_salaire'),
     path('periodes/<int:periode_id>/documents/masse-salariale.pdf', views_documents.pdf_masse_salariale, name='pdf_masse_salariale'),
     path('periodes/<int:periode_id>/documents/emargement.pdf', views_documents.pdf_emargement, name='pdf_emargement'),
+    path('periodes/<int:periode_id>/documents/acomptes.pdf', views_documents.pdf_acomptes, name='pdf_acomptes'),
     path('bareme/', views_documents.parametres_paie, name='parametres_paie'),
 
     # Rapport paiements (totaux par mois/année)

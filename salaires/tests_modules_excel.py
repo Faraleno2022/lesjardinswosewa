@@ -53,6 +53,7 @@ class ModulesPaieExcelTests(TestCase):
         ParametresPaie.objects.create(
             ecole=self.ecole,
             prime_anciennete_par_an=Decimal('10000'),
+            prime_craie_par_eleve=Decimal('500'),
             prime_eloignement_par_km=Decimal('2000'),
             retenue_par_jour_chome=Decimal('30000'),
             prime_professeur_principal=Decimal('50000'),
@@ -104,6 +105,54 @@ class ModulesPaieExcelTests(TestCase):
         etat, _ = calculer_etat_salaire(dg, self.periode, self.user)
         self.assertEqual(etat.prime_performance, Decimal('50000'))
         self.assertEqual(etat.primes, Decimal('1060000'))
+
+    def test_prime_de_craie_selon_effectif_comme_la_feuille_etat(self):
+        """Ligne « Isabelle MAMY » : craie = 51 élèves × 500 GNF."""
+        monitrice = Enseignant.objects.create(
+            nom='MAMY', prenoms='Isabelle', matricule='0048415', ecole=self.ecole,
+            type_enseignant=TypeEnseignant.MATERNELLE,
+            fonction='Monitrice de Maternelle', salaire_fixe=Decimal('550000'),
+            prime_fonction=Decimal('200000'), distance_km=Decimal('2'),
+            date_embauche=date(2015, 9, 1), cree_par=self.user,
+        )
+        etat, _ = calculer_etat_salaire(monitrice, self.periode, self.user)
+        response = self.client.post(
+            reverse('salaires:variables_paie_periode', args=[self.periode.pk]),
+            {
+                f'jours_chomes_{etat.pk}': '0',
+                f'effectif_eleves_{etat.pk}': '51',
+                f'prime_performance_{etat.pk}': '120000',
+                f'prime_exceptionnelle_{etat.pk}': '46000',
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        etat.refresh_from_db()
+        self.assertEqual(etat.effectif_eleves, 51)
+        self.assertEqual(etat.prime_craie, Decimal('25500'))
+        self.assertEqual(etat.prime_anciennete, Decimal('110000'))  # 11 ans
+        self.assertEqual(etat.salaire_brut, Decimal('1055500'))
+
+    def test_etat_des_acomptes_detaille_les_bons(self):
+        dg = self.creer_dg()
+        calculer_etat_salaire(dg, self.periode, self.user)
+        for jour, montant in ((5, '1000000'), (12, '575000')):
+            AvanceSalaire.objects.create(
+                enseignant=dg, periode=self.periode, montant=Decimal(montant),
+                date_avance=date(2026, 5, jour), reference=f'B{jour}',
+                cree_par=self.user,
+            )
+        AvanceSalaire.objects.create(
+            enseignant=dg, periode=self.periode, montant=Decimal('9999'),
+            statut='ANNULEE', motif_annulation='Erreur', cree_par=self.user,
+        )
+        response = self.client.get(reverse('salaires:pdf_acomptes', args=[self.periode.pk]))
+        self.assertEqual(response.status_code, 200)
+        texte = texte_pdf(response)
+        self.assertIn('ACOMPTES DU PERSONNEL', texte)
+        self.assertIn('1 000 000', texte)
+        self.assertIn('575 000', texte)
+        self.assertIn('1 575 000', texte)
+        self.assertNotIn('9 999', texte)
 
     def test_jours_chomes_retenus_et_jours_travailles(self):
         dg = self.creer_dg()
@@ -176,6 +225,7 @@ class ModulesPaieExcelTests(TestCase):
     def test_page_bareme_enregistre_les_montants(self):
         response = self.client.post(reverse('salaires:parametres_paie'), {
             'prime_anciennete_par_an': '12000',
+            'prime_craie_par_eleve': '500',
             'prime_eloignement_par_km': '2000',
             'retenue_par_jour_chome': '0',
             'prime_professeur_principal': '50000',
