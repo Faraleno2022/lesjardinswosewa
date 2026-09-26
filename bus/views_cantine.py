@@ -16,6 +16,7 @@ import io
 from eleves.models import Eleve
 from .models import AbonnementCantine
 from .forms import AbonnementCantineForm
+from .historique import valeurs_renouvellement
 from utilisateurs.utils import user_is_admin, user_is_superadmin, filter_by_user_school
 from utilisateurs.permissions import can_delete_subscriptions
 from ecole_moderne.security_decorators import require_school_object
@@ -167,6 +168,7 @@ def liste_abonnements_cantine(request):
 def creer_abonnement_cantine(request):
     """Créer un nouvel abonnement cantine"""
     initial = {}
+    precedent = None
     eleve_id = request.GET.get('eleve')
     if eleve_id:
         eleves_autorises = Eleve.objects.filter(est_dans_corbeille=False)
@@ -181,6 +183,11 @@ def creer_abonnement_cantine(request):
             initial['classe'] = eleve.classe_id
             if eleve.responsable_principal:
                 initial['contact_parent'] = eleve.responsable_principal.telephone
+            # Élève déjà abonné : on reprend ses informations au lieu de les ressaisir.
+            renouvellement = valeurs_renouvellement(eleve, 'cantine')
+            if renouvellement:
+                precedent = renouvellement.pop('precedent')
+                initial.update(renouvellement)
 
     if request.method == 'POST':
         form = AbonnementCantineForm(request.POST, user=request.user)
@@ -194,6 +201,8 @@ def creer_abonnement_cantine(request):
     context = {
         'titre_page': 'Nouvel Abonnement Cantine',
         'form': form,
+        'est_creation': True,
+        'precedent': precedent,
     }
     return render(request, 'bus/cantine/form.html', context)
 
@@ -418,6 +427,29 @@ def get_eleve_info_json(request, eleve_id):
             'email_parent': eleve.responsable_principal.email if eleve.responsable_principal else '',
             'photo_url': photo_url,
         }
+        type_abonnement = request.GET.get('type')
+        if type_abonnement in ('bus', 'cantine'):
+            from django.urls import reverse
+            from .historique import TYPES_ABONNEMENT
+
+            renouvellement = valeurs_renouvellement(eleve, type_abonnement)
+            data['nombre_abonnements'] = TYPES_ABONNEMENT[type_abonnement].objects.filter(
+                eleve=eleve
+            ).count()
+            data['url_abonnements'] = reverse('bus:abonnements_eleve', args=[eleve.pk])
+            if renouvellement:
+                precedent = renouvellement.pop('precedent')
+                data['renouvellement'] = {
+                    champ: (
+                        valeur.isoformat() if hasattr(valeur, 'isoformat')
+                        else '' if valeur is None else str(valeur)
+                    )
+                    for champ, valeur in renouvellement.items()
+                }
+                data['precedent'] = {
+                    'date_debut': precedent.date_debut.strftime('%d/%m/%Y'),
+                    'date_expiration': precedent.date_expiration.strftime('%d/%m/%Y'),
+                }
         return JsonResponse(data)
     except Eleve.DoesNotExist:
         return JsonResponse({'error': 'Élève non trouvé'}, status=404)

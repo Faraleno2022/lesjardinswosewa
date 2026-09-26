@@ -269,7 +269,7 @@
   <tbody>
     {% for a in abonnements %}
     <tr class="{% if a.est_expire %}table-danger{% elif a.est_proche_expiration %}table-warning{% endif %}">
-      <td>{{ a.eleve.prenom }} {{ a.eleve.nom }} ({{ a.eleve.matricule }})</td>
+      <td><a href="{% url 'bus:abonnements_eleve' a.eleve_id %}" title="Tous les abonnements de l'élève">{{ a.eleve.prenom }} {{ a.eleve.nom }}</a> ({{ a.eleve.matricule }})</td>
       <td>{{ a.eleve.classe.nom }}</td>
       <td>{{ a.get_periodicite_display }}</td>
       <td>{{ a.montant|intcomma }} GNF</td>
@@ -283,6 +283,7 @@
         <div class="btn-group btn-group-sm">
           <a class="btn btn-outline-primary" href="{% url 'bus:modifier' a.id %}" title="Modifier"><i class="fas fa-edit"></i></a>
           <a class="btn btn-outline-secondary" href="{% url 'bus:recu_pdf' a.id %}" target="_blank" title="Reçu PDF"><i class="fas fa-file-pdf"></i></a>
+          <a class="btn btn-outline-success" href="{% url 'bus:nouveau' %}?eleve={{ a.eleve_id }}" title="Renouveler (informations reprises)"><i class="fas fa-redo"></i></a>
           <button type="button" class="btn btn-success" onclick="envoyerAbonnementWhatsApp({{ a.id }})" title="Envoyer par WhatsApp"><i class="fab fa-whatsapp"></i></button>
         </div>
       </td>

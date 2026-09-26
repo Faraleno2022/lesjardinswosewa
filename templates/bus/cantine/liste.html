@@ -89,7 +89,7 @@
                         {% for abo in abonnements %}
                         <tr {% if abo.est_expire %}class="table-danger"{% elif abo.jours_restants <= 3 %}class="table-warning"{% endif %}>
                             <td>
-                                <strong>{{ abo.eleve.nom }} {{ abo.eleve.prenom }}</strong><br>
+                                <a href="{% url 'bus:abonnements_eleve' abo.eleve_id %}" title="Tous les abonnements de l'élève"><strong>{{ abo.eleve.nom }} {{ abo.eleve.prenom }}</strong></a><br>
                                 <small class="text-muted">{{ abo.eleve.matricule|default:"-" }}</small>
                             </td>
                             <td>{{ abo.eleve.classe.nom|default:"-" }}</td>
@@ -145,7 +145,11 @@
                                        class="btn btn-primary" title="Modifier">
                                         <i class="fas fa-edit"></i>
                                     </a>
-                                    <a href="{% url 'bus:supprimer_abonnement_cantine' abo.id %}" 
+                                    <a href="{% url 'bus:creer_abonnement_cantine' %}?eleve={{ abo.eleve_id }}"
+                                       class="btn btn-success" title="Renouveler (informations reprises)">
+                                        <i class="fas fa-redo"></i>
+                                    </a>
+                                    <a href="{% url 'bus:supprimer_abonnement_cantine' abo.id %}"
                                        class="btn btn-danger" title="Supprimer">
                                         <i class="fas fa-trash"></i>
                                     </a>

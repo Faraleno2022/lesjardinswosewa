@@ -288,6 +288,9 @@
                     <a href="{% url 'paiements:ajouter_paiement_eleve' eleve.pk %}" class="btn btn-success">
                         <i class="fas fa-money-bill"></i> Enregistrer un paiement
                     </a>
+                    <a href="{% url 'bus:abonnements_eleve' eleve.pk %}" class="btn btn-outline-primary">
+                        <i class="fas fa-bus"></i> Abonnements bus / cantine
+                    </a>
                     <a href="{% url 'eleves:fiche_inscription_pdf' eleve.pk %}" class="btn btn-info" target="_blank">
                         <i class="fas fa-file-pdf"></i> Fiche d'inscription PDF
                     </a>

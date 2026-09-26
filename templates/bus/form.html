@@ -32,6 +32,7 @@
     <form method="post" id="busForm">
       {% csrf_token %}
       {{ form.non_field_errors }}
+      {% if est_creation %}{% include 'bus/_renouvellement.html' %}{% endif %}
 
       <!-- Élève -->
       <div class="form-section">
@@ -156,6 +157,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   const eleveInfoUrlModele = '{% url "bus:get_eleve_info_json" 0 %}';
+  const estCreation = {{ est_creation|yesno:'true,false' }};
   const classeSelect = document.getElementById('id_classe');
   const eleveSelect = document.getElementById('id_eleve');
   const eleveInfoSection = document.getElementById('eleveInfoSection');
@@ -192,13 +194,13 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  async function chargerEleve(eleveId) {
+  async function chargerEleve(eleveId, renouveler) {
     if (!eleveId) {
       eleveInfoSection.style.display = 'none';
       return;
     }
     try {
-      const url = eleveInfoUrlModele.replace('/0/', `/${eleveId}/`);
+      const url = eleveInfoUrlModele.replace('/0/', `/${eleveId}/`) + '?type=bus';
       const resp = await fetch(url.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
       const data = await resp.json();
       if (data && data.success) {
@@ -213,6 +215,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         eleveInfoSection.style.display = 'block';
         eleveError && (eleveError.style.display = 'none');
+        if (estCreation && renouveler && window.appliquerRenouvellement) {
+          window.appliquerRenouvellement(data);
+        }
       } else {
         eleveInfoSection.style.display = 'none';
       }
@@ -223,7 +228,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   classeSelect && classeSelect.addEventListener('change', filtrerElevesParClasse);
   eleveSelect && eleveSelect.addEventListener('change', function() {
-    chargerEleve(this.value);
+    chargerEleve(this.value, true);
   });
   filtrerElevesParClasse();
   if (eleveSelect && eleveSelect.value) chargerEleve(eleveSelect.value);
@@ -241,7 +246,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (!periodicite || !dateDebut) return;
     
-    const debut = new Date(dateDebut);
+    const debut = new Date(`${dateDebut}T12:00:00`);
     if (isNaN(debut.getTime())) return;
     
     let expiration = new Date(debut);
@@ -262,6 +267,8 @@ document.addEventListener('DOMContentLoaded', function() {
       default:
         return;
     }
+    // La date d'expiration est le dernier jour couvert (1er → 30 du mois).
+    expiration.setDate(expiration.getDate() - 1);
     
     // Format YYYY-MM-DD pour l'input date
     const year = expiration.getFullYear();

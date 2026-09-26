@@ -1,0 +1,32 @@
+<div id="renouvellementInfo" class="alert alert-info py-2 small {% if not precedent %}d-none{% endif %}">
+  {% if precedent %}
+  <i class="fas fa-sync-alt me-1"></i>Renouvellement : les informations du dernier abonnement
+  ({{ precedent.date_debut|date:"d/m/Y" }} → {{ precedent.date_expiration|date:"d/m/Y" }}) ont été reprises.
+  Vérifiez le montant et les dates avant d'enregistrer.
+  {% endif %}
+</div>
+<script>
+/* Reprend les informations du dernier abonnement de l'élève sélectionné
+   (montant, type de paiement, contact, itinéraire ou repas…) et place le
+   début du nouvel abonnement au lendemain de l'expiration précédente. */
+window.appliquerRenouvellement = function (data) {
+  const zone = document.getElementById('renouvellementInfo');
+  if (!zone) return;
+  if (!data || !data.renouvellement) {
+    zone.classList.add('d-none');
+    return;
+  }
+  Object.entries(data.renouvellement).forEach(([champ, valeur]) => {
+    const input = document.getElementById('id_' + champ);
+    if (input && valeur !== '') input.value = valeur;
+  });
+  const montant = document.getElementById('id_montant');
+  if (montant) montant.dispatchEvent(new Event('input'));
+  zone.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Élève déjà abonné ('
+    + data.nombre_abonnements + ' abonnement(s), dernier du ' + data.precedent.date_debut
+    + ' au ' + data.precedent.date_expiration + ') : ses informations ont été reprises. '
+    + 'Vérifiez le montant et les dates. '
+    + '<a href="' + data.url_abonnements + '" target="_blank">Voir ses abonnements</a>';
+  zone.classList.remove('d-none');
+};
+</script>

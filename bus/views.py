@@ -17,6 +17,7 @@ import csv
 from eleves.models import Eleve
 from .models import AbonnementBus
 from .forms import AbonnementBusForm
+from .historique import valeurs_renouvellement
 from utilisateurs.utils import user_is_admin, user_is_superadmin, filter_by_user_school
 from utilisateurs.permissions import can_delete_subscriptions
 from ecole_moderne.security_decorators import require_school_object
@@ -161,6 +162,7 @@ def liste_abonnements(request):
 @login_required
 def abonnement_create(request):
     initial = {}
+    precedent = None
     eleve_id = request.GET.get('eleve')
     if eleve_id:
         eleves_autorises = Eleve.objects.filter(est_dans_corbeille=False)
@@ -171,6 +173,11 @@ def abonnement_create(request):
         if eleve:
             initial['eleve'] = eleve
             initial['classe'] = eleve.classe_id
+            # Élève déjà abonné : on reprend ses informations au lieu de les ressaisir.
+            renouvellement = valeurs_renouvellement(eleve, 'bus')
+            if renouvellement:
+                precedent = renouvellement.pop('precedent')
+                initial.update(renouvellement)
     if request.method == 'POST':
         form = AbonnementBusForm(request.POST, user=request.user)
         if form.is_valid():
@@ -180,7 +187,10 @@ def abonnement_create(request):
     else:
         form = AbonnementBusForm(initial=initial, user=request.user)
 
-    return render(request, 'bus/form.html', {'form': form, 'titre_page': 'Nouvel abonnement Bus'})
+    return render(request, 'bus/form.html', {
+        'form': form, 'titre_page': 'Nouvel abonnement Bus', 'est_creation': True,
+        'precedent': precedent,
+    })
 
 
 @login_required

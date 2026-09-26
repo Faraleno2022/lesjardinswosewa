@@ -25,6 +25,7 @@
                 <div class="card-body">
                     <form method="post">
                         {% csrf_token %}
+                        {% if est_creation %}{% include 'bus/_renouvellement.html' %}{% endif %}
                         
                         <!-- Informations Élève -->
                         <div class="card mb-3">
@@ -249,6 +250,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const eleveInfoUrlModele = '{% url "bus:get_eleve_info_json" 0 %}';
+    const estCreation = {{ est_creation|yesno:'true,false' }};
     const classeSelect = document.getElementById('id_classe');
     const eleveSelect = document.getElementById('id_eleve');
     const contactParentInput = document.getElementById('id_contact_parent');
@@ -314,6 +316,8 @@ document.addEventListener('DOMContentLoaded', function() {
             default:
                 return;
         }
+        // La date d'expiration est le dernier jour couvert (1er → 30 du mois).
+        expiration.setDate(expiration.getDate() - 1);
 
         const annee = expiration.getFullYear();
         const mois = String(expiration.getMonth() + 1).padStart(2, '0');
@@ -324,6 +328,7 @@ document.addEventListener('DOMContentLoaded', function() {
     periodiciteSelect && periodiciteSelect.addEventListener('change', calculerDateExpiration);
     dateDebutInput && dateDebutInput.addEventListener('change', calculerDateExpiration);
     
+    let renouvelerALaSelection = false;
     if (eleveSelect) {
         // Charger les infos si un élève est déjà sélectionné (mode édition)
         if (eleveSelect.value) {
@@ -333,6 +338,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // Écouter les changements de sélection
         eleveSelect.addEventListener('change', function() {
             const eleveId = this.value;
+            renouvelerALaSelection = true;
             
             if (eleveId) {
                 loadEleveInfo(eleveId);
@@ -355,7 +361,7 @@ document.addEventListener('DOMContentLoaded', function() {
         infoNoPhoto.style.display = 'none';
         
         // Requête AJAX pour récupérer les informations
-        fetch(eleveInfoUrlModele.replace('/0/', `/${eleveId}/`))
+        fetch(eleveInfoUrlModele.replace('/0/', `/${eleveId}/`) + '?type=cantine')
             .then(response => {
                 if (!response.ok) {
                     throw new Error('Erreur lors du chargement des informations');
@@ -397,6 +403,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                     
                     eleveInfoDiv.style.display = 'block';
+                    if (estCreation && renouvelerALaSelection && window.appliquerRenouvellement) {
+                        window.appliquerRenouvellement(data);
+                    }
                 } else {
                     throw new Error(data.error || 'Erreur inconnue');
                 }
